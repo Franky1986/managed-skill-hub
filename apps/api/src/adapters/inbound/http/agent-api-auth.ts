@@ -2,13 +2,20 @@ import crypto from 'node:crypto';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { AgentAuthMode, AppConfig } from '../../../infrastructure/config';
 import { AgentAuthRequiredError } from '../../../domain/errors';
+import {
+  anonymousAgentPrincipal,
+  AuthenticatedPrincipal,
+  staticBearerPrincipal,
+} from '../../../application/security/authenticated-principal';
+import { AccessTokenVerifierPort, AgentOidcMetadata } from '../../../application/ports/outbound/access-token-verifier.port';
 
 export type AgentAuthArea = 'discovery' | 'public-read' | 'proposal';
 
 export interface AgentAuthContext {
   area: AgentAuthArea;
   actor: string;
-  scheme: 'none' | 'bearer';
+  scheme: 'none' | 'bearer' | 'oidc';
+  principal: AuthenticatedPrincipal;
 }
 
 interface AreaConfig {
@@ -18,32 +25,58 @@ interface AreaConfig {
 }
 
 export class AgentApiAuth {
-  constructor(private readonly config: AppConfig) {}
+  constructor(
+    private readonly config: AppConfig,
+    private readonly tokenVerifier?: AccessTokenVerifierPort
+  ) {}
 
   guard(area: AgentAuthArea) {
     return async (request: FastifyRequest, _reply: FastifyReply) => {
-      const context = this.authenticate(area, request);
+      const context = await this.authenticate(area, request);
       (request as FastifyRequest & { agentAuth?: AgentAuthContext }).agentAuth = context;
     };
   }
 
-  authenticate(area: AgentAuthArea, request: FastifyRequest): AgentAuthContext {
+  async authenticate(area: AgentAuthArea, request: FastifyRequest): Promise<AgentAuthContext> {
     const areaConfig = this.getAreaConfig(area);
     if (areaConfig.mode === 'none') {
-      return { area, actor: 'anonymous-agent', scheme: 'none' };
+      return {
+        area,
+        actor: 'anonymous-agent',
+        scheme: 'none',
+        principal: anonymousAgentPrincipal(),
+      };
+    }
+
+    if (areaConfig.mode === 'oidc') {
+      const token = readBearerToken(request.headers.authorization);
+      if (!token || !this.tokenVerifier) {
+        throw this.authRequired(area, 'oidc');
+      }
+      try {
+        const principal = await this.tokenVerifier.verifyAccessToken(token, area);
+        return {
+          area,
+          actor: principal.principalId,
+          scheme: 'oidc',
+          principal,
+        };
+      } catch {
+        throw this.authRequired(area, 'oidc');
+      }
     }
 
     const token = readBearerToken(request.headers.authorization);
     if (!token || !areaConfig.token || !constantTimeEquals(token, areaConfig.token)) {
-      throw new AgentAuthRequiredError(
-        area,
-        'bearer',
-        this.config.publicApiBaseUrl ? this.config.publicApiBaseUrl + '/discover' : '/discover',
-        this.metadata().credentialSetupScriptUrl
-      );
+      throw this.authRequired(area, 'bearer');
     }
 
-    return { area, actor: areaConfig.actor, scheme: 'bearer' };
+    return {
+      area,
+      actor: areaConfig.actor,
+      scheme: 'bearer',
+      principal: staticBearerPrincipal(areaConfig.actor),
+    };
   }
 
   metadata() {
@@ -55,14 +88,14 @@ export class AgentApiAuth {
       proposalAuthRequired: this.proposalMode() !== 'none',
       discoveryAuthRequired: this.discoveryMode() !== 'none',
       authSchemes: this.authSchemes(),
-      credentialSetupScriptUrl: this.anyAgentAuthEnabled()
+      credentialSetupScriptUrl: this.anyBearerAuthEnabled()
         ? (this.config.publicApiBaseUrl ?? 'http://localhost:3040') + '/agent-credentials/setup.sh'
         : undefined,
     };
   }
 
-  private authSchemes(): Array<{ id: string; type: 'bearer'; appliesTo: AgentAuthArea[] }> {
-    const schemes: Array<{ id: string; type: 'bearer'; appliesTo: AgentAuthArea[] }> = [];
+  private authSchemes(): AgentAuthScheme[] {
+    const schemes: AgentAuthScheme[] = [];
     if (this.publicReadMode() === 'bearer') {
       schemes.push({ id: 'public-read-bearer', type: 'bearer', appliesTo: ['public-read'] });
     }
@@ -72,13 +105,20 @@ export class AgentApiAuth {
     if (this.discoveryMode() === 'bearer') {
       schemes.push({ id: 'discovery-bearer', type: 'bearer', appliesTo: ['discovery'] });
     }
+    const oidcAreas: AgentAuthArea[] = [];
+    if (this.discoveryMode() === 'oidc') oidcAreas.push('discovery');
+    if (this.publicReadMode() === 'oidc') oidcAreas.push('public-read');
+    if (this.proposalMode() === 'oidc') oidcAreas.push('proposal');
+    if (oidcAreas.length > 0) {
+      schemes.push(this.oidcScheme(oidcAreas, this.tokenVerifier?.metadata() ?? null));
+    }
     return schemes;
   }
 
-  private anyAgentAuthEnabled(): boolean {
-    return this.publicReadMode() !== 'none'
-      || this.proposalMode() !== 'none'
-      || this.discoveryMode() !== 'none';
+  private anyBearerAuthEnabled(): boolean {
+    return this.publicReadMode() === 'bearer'
+      || this.proposalMode() === 'bearer'
+      || this.discoveryMode() === 'bearer';
   }
 
   private discoveryMode(): AgentAuthMode {
@@ -115,7 +155,54 @@ export class AgentApiAuth {
         };
     }
   }
+
+  private authRequired(area: AgentAuthArea, scheme: 'bearer' | 'oidc'): AgentAuthRequiredError {
+    return new AgentAuthRequiredError(
+      area,
+      scheme,
+      this.config.publicApiBaseUrl ? this.config.publicApiBaseUrl + '/discover' : '/discover',
+      scheme === 'bearer' ? this.metadata().credentialSetupScriptUrl : undefined
+    );
+  }
+
+  private oidcScheme(areas: AgentAuthArea[], metadata: AgentOidcMetadata | null): OidcAgentAuthScheme {
+    const issuer = metadata?.issuer ?? this.config.oidcAgentIssuer ?? '';
+    const scopes = new Set(this.config.oidcAgentBaseScopes ?? []);
+    if (areas.includes('discovery') && this.config.oidcDiscoveryScope) scopes.add(this.config.oidcDiscoveryScope);
+    if (areas.includes('public-read') && this.config.oidcPublicReadScope) scopes.add(this.config.oidcPublicReadScope);
+    if (areas.includes('proposal') && this.config.oidcProposalScope) scopes.add(this.config.oidcProposalScope);
+    return {
+      id: 'agent-oidc-device',
+      type: 'oauth2',
+      flow: 'device_code',
+      issuer,
+      openIdConfigurationUrl: metadata?.openIdConfigurationUrl
+        ?? `${issuer.replace(/\/+$/, '')}/.well-known/openid-configuration`,
+      authorizationEndpoint: metadata?.authorizationEndpoint,
+      deviceAuthorizationEndpoint: metadata?.deviceAuthorizationEndpoint,
+      tokenEndpoint: metadata?.tokenEndpoint,
+      clientId: metadata?.clientId ?? this.config.oidcAgentClientId ?? '',
+      scopes: [...scopes],
+      appliesTo: areas,
+    };
+  }
 }
+
+type BearerAgentAuthScheme = { id: string; type: 'bearer'; appliesTo: AgentAuthArea[] };
+type OidcAgentAuthScheme = {
+  id: string;
+  type: 'oauth2';
+  flow: 'device_code';
+  issuer: string;
+  openIdConfigurationUrl: string;
+  authorizationEndpoint?: string;
+  deviceAuthorizationEndpoint?: string;
+  tokenEndpoint?: string;
+  clientId: string;
+  scopes: string[];
+  appliesTo: AgentAuthArea[];
+};
+type AgentAuthScheme = BearerAgentAuthScheme | OidcAgentAuthScheme;
 
 export function getAgentAuthContext(request: FastifyRequest): AgentAuthContext | null {
   return (request as FastifyRequest & { agentAuth?: AgentAuthContext }).agentAuth ?? null;

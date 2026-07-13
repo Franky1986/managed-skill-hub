@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Container } from '../../../infrastructure/container';
-import { SimpleAdminAuth, adminGuard } from './simple-admin-auth';
+import { AdminAuth, adminGuard } from './admin-auth';
 import { sendApiError, sendMappedApiError } from './error-response';
 import { resolveArtifactMimeType } from '../../../domain/files/artifact-mime';
 
@@ -9,9 +9,9 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 export function registerJudgementRoutes(
   app: FastifyInstance,
   container: Container,
-  auth: SimpleAdminAuth
+  auth: AdminAuth
 ): void {
-  const guard = { preHandler: adminGuard(auth) };
+  const guard = { preHandler: adminGuard(auth, 'reviewer') };
 
   app.post('/admin/proposals/:proposalId/judge', guard, async (request, reply) => {
     try {

@@ -253,6 +253,11 @@ describe('SimpleAdminAuth', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.payload)).toEqual({ username: 'admin' });
+    expect(JSON.parse(response.payload)).toMatchObject({
+      username: 'admin',
+      displayName: 'admin',
+      mode: 'simple',
+      roles: expect.arrayContaining(['admin', 'reviewer', 'publisher']),
+    });
   });
 });

@@ -1,20 +1,23 @@
 import { FastifyInstance } from 'fastify';
 import { Container } from '../../../infrastructure/container';
-import { SimpleAdminAuth, adminGuard } from './simple-admin-auth';
+import { AdminAuth, adminActor, adminGuard } from './admin-auth';
 import { mapSkillToAdminDetail } from '../../../application/usecases/skill/mappers/skill.mapper';
 import { ProposalAdminUpdateRequestDto } from '../../../application/dtos/proposal.dto';
 import { sendApiError, sendMappedApiError } from './error-response';
 import { sendArtifactResponse } from './artifact-response';
 
-export function registerAdminProposalRoutes(app: FastifyInstance, container: Container, auth: SimpleAdminAuth): void {
-  const guard = { preHandler: adminGuard(auth) };
+export function registerAdminProposalRoutes(app: FastifyInstance, container: Container, auth: AdminAuth): void {
+  const reviewGuard = { preHandler: adminGuard(auth, 'reviewer') };
+  const detailGuard = { preHandler: adminGuard(auth, ['reviewer', 'publisher']) };
+  const publishGuard = { preHandler: adminGuard(auth, 'publisher') };
+  const adminOnlyGuard = { preHandler: adminGuard(auth) };
 
-  app.get('/admin/proposals', guard, async (request, reply) => {
+  app.get('/admin/proposals', reviewGuard, async (request, reply) => {
     const { skillId, status } = request.query as { skillId?: string; status?: string };
     return reply.send(await container.proposalRead.listSummaries(skillId, status));
   });
 
-  app.get('/admin/proposals/:proposalId', guard, async (request, reply) => {
+  app.get('/admin/proposals/:proposalId', detailGuard, async (request, reply) => {
     const { proposalId } = request.params as { proposalId: string };
     const proposal = await container.proposalRead.getDetail(proposalId);
     if (!proposal) {
@@ -27,7 +30,7 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
     return reply.send(proposal);
   });
 
-  app.get('/admin/proposals/:proposalId/files/:fileId', guard, async (request, reply) => {
+  app.get('/admin/proposals/:proposalId/files/:fileId', detailGuard, async (request, reply) => {
     try {
       const { proposalId, fileId } = request.params as { proposalId: string; fileId: string };
       const file = await container.proposalRead.getFile(proposalId, fileId);
@@ -37,7 +40,7 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
     }
   });
 
-  app.get('/admin/proposals/:proposalId/files/:fileId/extracted-content', guard, async (request, reply) => {
+  app.get('/admin/proposals/:proposalId/files/:fileId/extracted-content', detailGuard, async (request, reply) => {
     try {
       const { proposalId, fileId } = request.params as { proposalId: string; fileId: string };
       const extracted = await container.proposalRead.getExtractedContent(proposalId, fileId);
@@ -47,7 +50,7 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
     }
   });
 
-  app.get('/admin/proposals/:proposalId/files/:fileId/probe', guard, async (request, reply) => {
+  app.get('/admin/proposals/:proposalId/files/:fileId/probe', detailGuard, async (request, reply) => {
     try {
       const { proposalId, fileId } = request.params as { proposalId: string; fileId: string };
       const response = await container.probeProposalFileContent.execute(proposalId, fileId);
@@ -58,14 +61,13 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
   });
 
 
-  app.post('/admin/proposals/:proposalId/files/:fileId/re-extract', guard, async (request, reply) => {
+  app.post('/admin/proposals/:proposalId/files/:fileId/re-extract', reviewGuard, async (request, reply) => {
     try {
       const { proposalId, fileId } = request.params as { proposalId: string; fileId: string };
-      const session = await auth.validate(request);
       const extracted = await container.reextractProposalFile.execute(
         proposalId,
         fileId,
-        session?.username ?? 'admin'
+        adminActor(request)
       );
       return reply.send(extracted);
     } catch (error) {
@@ -73,26 +75,24 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
     }
   });
 
-  app.post('/admin/proposals/:proposalId/convert', guard, async (request, reply) => {
+  app.post('/admin/proposals/:proposalId/convert', publishGuard, async (request, reply) => {
     try {
       const { proposalId } = request.params as { proposalId: string };
       const body = (request.body as { comment?: string } | undefined) ?? {};
-      const session = await auth.validate(request);
-      const skill = await container.reviewProposal.convertProposal(proposalId, session?.username ?? 'admin', body.comment);
+      const skill = await container.reviewProposal.convertProposal(proposalId, adminActor(request), body.comment);
       return reply.send(mapSkillToAdminDetail(skill));
     } catch (error) {
       return sendMappedApiError(reply, request, error, { admin: true });
     }
   });
 
-  app.post('/admin/proposals/:proposalId/reject', guard, async (request, reply) => {
+  app.post('/admin/proposals/:proposalId/reject', reviewGuard, async (request, reply) => {
     try {
       const { proposalId } = request.params as { proposalId: string };
       const body = (request.body as { reason?: string; comment?: string } | undefined) ?? {};
-      const session = await auth.validate(request);
       const proposal = await container.reviewProposal.rejectProposal(
         proposalId,
-        session?.username ?? 'admin',
+        adminActor(request),
         body.reason,
         body.comment
       );
@@ -110,18 +110,17 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
     }
   });
 
-  app.delete('/admin/proposals/:proposalId', guard, async (request, reply) => {
+  app.delete('/admin/proposals/:proposalId', adminOnlyGuard, async (request, reply) => {
     try {
       const { proposalId } = request.params as { proposalId: string };
-      const session = await auth.validate(request);
-      await container.reviewProposal.deleteOpenProposal(proposalId, session?.username ?? 'admin');
+      await container.reviewProposal.deleteOpenProposal(proposalId, adminActor(request));
       return reply.code(204).send();
     } catch (error) {
       return sendMappedApiError(reply, request, error, { admin: true });
     }
   });
 
-  app.patch('/admin/proposals/:proposalId', guard, async (request, reply) => {
+  app.patch('/admin/proposals/:proposalId', adminOnlyGuard, async (request, reply) => {
     try {
       const { proposalId } = request.params as { proposalId: string };
       const body = (request.body as ProposalAdminUpdateRequestDto | undefined) ?? {};
@@ -133,10 +132,9 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
         });
       }
 
-      const session = await auth.validate(request);
       const proposal = await container.reviewProposal.updateProposalMetadata(
         proposalId,
-        session?.username ?? 'admin',
+        adminActor(request),
         body
       );
       const detail = await container.proposalRead.getDetail(proposal.id);

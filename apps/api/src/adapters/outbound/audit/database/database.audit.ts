@@ -11,6 +11,9 @@ interface AuditRow {
   proposal_id: string | null;
   action: string;
   actor: string;
+  actor_principal_id: string | null;
+  actor_display_name: string | null;
+  actor_client_id: string | null;
   before_json: string | null;
   after_json: string | null;
   created_at: string;
@@ -26,8 +29,10 @@ export class DatabaseAuditLog implements AuditLogPort {
     try {
       await this.contentDb.execute(`
         INSERT INTO content_audit_entries (
-          id, skill_id, skill_version, proposal_id, action, actor, before_json, after_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, skill_id, skill_version, proposal_id, action, actor,
+          actor_principal_id, actor_display_name, actor_client_id,
+          before_json, after_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ${insertDoNothingClause(this.contentDb.dialect, 'id')}
       `, [
         entry.id,
@@ -36,6 +41,9 @@ export class DatabaseAuditLog implements AuditLogPort {
         entry.proposalId,
         entry.action,
         entry.actor,
+        entry.actorPrincipalId,
+        entry.actorDisplayName,
+        entry.actorClientId,
         entry.before ? JSON.stringify(entry.before) : null,
         entry.after ? JSON.stringify(entry.after) : null,
         entry.createdAt.toISOString()
@@ -93,6 +101,9 @@ function mapAuditRow(row: AuditRow): AuditEntry {
     proposalId: row.proposal_id,
     action: row.action,
     actor: row.actor,
+    actorPrincipalId: row.actor_principal_id ?? null,
+    actorDisplayName: row.actor_display_name ?? null,
+    actorClientId: row.actor_client_id ?? null,
     before: row.before_json ? parseJson(row.before_json) as Record<string, unknown> : null,
     after: row.after_json ? parseJson(row.after_json) as Record<string, unknown> : null,
     createdAt: new Date(row.created_at),

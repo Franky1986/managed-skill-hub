@@ -200,9 +200,10 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
     const upsertProposal = db.prepare(`
       INSERT OR REPLACE INTO skill_catalog_proposals (
         id, skill_id, title, description, category, tags, capabilities, entrypoint,
-        status, submitted_by, created_at, rejection_reason, latest_judgement_risk, review_labels,
+        status, submitted_by, submitted_by_principal_id, submitted_via_client_id,
+        created_at, rejection_reason, latest_judgement_risk, review_labels,
         latest_judgement_id, latest_judged_at, content_digest
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const deleteFiles = db.prepare('DELETE FROM skill_catalog_proposal_files WHERE proposal_id = ?');
     const insertFile = db.prepare(`
@@ -230,6 +231,8 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
         proposal.entrypoint,
         proposal.status,
         proposal.submittedBy,
+        proposal.submittedByPrincipalId,
+        proposal.submittedViaClientId,
         proposal.createdAt.toISOString(),
         proposal.rejectionReason,
         review.latestJudgementRisk,
@@ -331,8 +334,10 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
     try {
       db.prepare(
         `INSERT OR REPLACE INTO skill_catalog_audit_entries (
-          id, skill_id, skill_version, proposal_id, action, actor, before_json, after_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          id, skill_id, skill_version, proposal_id, action, actor,
+          actor_principal_id, actor_display_name, actor_client_id,
+          before_json, after_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         entry.id,
         entry.skillId,
@@ -340,6 +345,9 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
         entry.proposalId,
         entry.action,
         entry.actor,
+        entry.actorPrincipalId,
+        entry.actorDisplayName,
+        entry.actorClientId,
         entry.before ? JSON.stringify(entry.before) : null,
         entry.after ? JSON.stringify(entry.after) : null,
         entry.createdAt.toISOString()
@@ -895,6 +903,9 @@ interface CatalogAuditEntryRow {
   proposal_id: string | null;
   action: string;
   actor: string;
+  actor_principal_id: string | null;
+  actor_display_name: string | null;
+  actor_client_id: string | null;
   before_json: string | null;
   after_json: string | null;
   created_at: string;
@@ -911,6 +922,8 @@ interface CatalogProposalRow {
   entrypoint: string | null;
   status: string;
   submitted_by: string;
+  submitted_by_principal_id: string | null;
+  submitted_via_client_id: string | null;
   created_at: string;
   rejection_reason: string | null;
   latest_judgement_risk: string | null;
@@ -994,6 +1007,9 @@ function mapCatalogAuditEntryRow(row: CatalogAuditEntryRow): CatalogAuditEntryRe
     proposalId: row.proposal_id,
     action: row.action,
     actor: row.actor,
+    actorPrincipalId: row.actor_principal_id ?? null,
+    actorDisplayName: row.actor_display_name ?? null,
+    actorClientId: row.actor_client_id ?? null,
     before: row.before_json ? (JSON.parse(row.before_json) as Record<string, unknown>) : null,
     after: row.after_json ? (JSON.parse(row.after_json) as Record<string, unknown>) : null,
     createdAt: new Date(row.created_at),
@@ -1012,6 +1028,8 @@ function mapCatalogProposalRow(row: CatalogProposalRow): CatalogProposalRecord {
     entrypoint: row.entrypoint,
     status: row.status as ProposalStatus,
     submittedBy: row.submitted_by,
+    submittedByPrincipalId: row.submitted_by_principal_id,
+    submittedViaClientId: row.submitted_via_client_id,
     createdAt: new Date(row.created_at),
     rejectionReason: row.rejection_reason,
     latestJudgementRisk: resolveLatestProposalJudgementRisk(

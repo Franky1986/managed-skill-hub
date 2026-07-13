@@ -59,12 +59,24 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import type { SkillJudgerPort } from '../application/ports/outbound/judger.port';
 import { resolveRepoRoot } from './config';
+import { PrincipalRepositoryPort } from '../application/ports/outbound/principal-repository.port';
+import { AdminSessionPort } from '../application/ports/outbound/admin-session.port';
+import { OidcLoginTransactionPort } from '../application/ports/outbound/oidc-login-transaction.port';
+import { SqliteIdentityPersistence } from '../adapters/outbound/identity/sqlite-identity.persistence';
+import { MysqlIdentityPersistence } from '../adapters/outbound/identity/mysql-identity.persistence';
+import { AuthorizationPolicy } from '../application/security/authorization-policy';
+import { PrincipalProjectionService } from '../application/security/principal-projection.service';
 
 export interface Container {
   config: AppConfig;
   skillRepository: SkillRepositoryPort;
   fileStorage: SkillFileStoragePort;
   auditLog: AuditLogPort;
+  principalRepository: PrincipalRepositoryPort;
+  adminSessions: AdminSessionPort;
+  oidcLoginTransactions: OidcLoginTransactionPort;
+  authorizationPolicy: AuthorizationPolicy;
+  principalProjection: PrincipalProjectionService;
   createSkill: SkillCommandPort;
   updateSkill: SkillCommandPort;
   reviewSkill: SkillCommandPort;
@@ -102,6 +114,17 @@ export async function buildContainer(config: AppConfig): Promise<Container> {
     config.dataDir,
     path.join(config.dataDir, 'index', 'search.db'),
     mysqlClient
+  );
+  const identityPersistence = buildIdentityPersistence(
+    config.catalogProvider,
+    path.join(config.dataDir, 'index', 'search.db'),
+    mysqlClient
+  );
+  const authorizationPolicy = new AuthorizationPolicy(config);
+  const principalProjection = new PrincipalProjectionService(
+    identityPersistence,
+    authorizationPolicy,
+    config
   );
   const search = buildSearchAdapter(config.searchProvider, path.join(config.dataDir, 'index', 'search.db'), mysqlClient);
   const contentDb = buildContentDb(config, mysqlClient);
@@ -152,6 +175,11 @@ export async function buildContainer(config: AppConfig): Promise<Container> {
     skillRepository: repo,
     fileStorage: storage,
     auditLog: audit,
+    principalRepository: identityPersistence,
+    adminSessions: identityPersistence,
+    oidcLoginTransactions: identityPersistence,
+    authorizationPolicy,
+    principalProjection,
     createSkill,
     updateSkill: new UpdateSkillUseCase(repo, storage, audit, catalog),
     reviewSkill,
@@ -193,9 +221,26 @@ export async function buildContainer(config: AppConfig): Promise<Container> {
     exportObservability: new ExportObservabilityUseCase(observability),
     async shutdown(): Promise<void> {
       contentDb?.close();
+      if (identityPersistence instanceof SqliteIdentityPersistence) {
+        identityPersistence.close();
+      }
       await mysqlClient?.close();
     },
   };
+}
+
+function buildIdentityPersistence(
+  provider: CatalogProvider,
+  catalogPath: string,
+  mysqlClient: MysqlClient | null
+): SqliteIdentityPersistence | MysqlIdentityPersistence {
+  if (provider === 'sqlite') {
+    return new SqliteIdentityPersistence(catalogPath);
+  }
+  if (!mysqlClient) {
+    throw new ConfigurationError('MYSQL client configuration is required for mysql identity persistence.');
+  }
+  return new MysqlIdentityPersistence(mysqlClient);
 }
 
 

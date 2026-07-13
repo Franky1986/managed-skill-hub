@@ -23,9 +23,11 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.1.2",
     "fastify": "^5.10.0",
+    "jose": "^6.2.3",
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.22.6",
+    "openid-client": "^6.8.4",
     "tsx": "^4.16.2",
     "uuid": "^11.1.0",
     "zod": "^3.24.2"

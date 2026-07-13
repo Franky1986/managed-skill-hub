@@ -21,6 +21,49 @@ import { Skill } from '../../../domain/skill/Skill';
 import { JudgementRisk } from '../../../domain/judgement/Judgement';
 
 describe('SubmitProposalUseCase', () => {
+  it('uses stable OIDC principal ownership across agent sessions and rejects another human', async () => {
+    const repo = new InMemorySkillRepository();
+    const audit = new InMemoryAuditLog();
+    const useCase = new SubmitProposalUseCase(
+      repo,
+      new InMemoryStorage(),
+      audit,
+      { judge: vi.fn() } as unknown as SkillJudgerPort,
+      new StubScanner()
+    );
+    const owner = {
+      label: 'Original Name',
+      principalId: 'principal-owner',
+      clientId: 'agent-session-1',
+    };
+    const proposal = await useCase.submitProposal({
+      title: 'Stable owner',
+      description: 'Ownership follows the internal principal.',
+      category: 'security',
+    }, owner);
+
+    expect(proposal).toMatchObject({
+      submittedBy: 'Original Name',
+      submittedByPrincipalId: 'principal-owner',
+      submittedViaClientId: 'agent-session-1',
+    });
+    await expect(useCase.updateProposalMetadata(proposal.id, { title: 'Updated' }, {
+      label: 'Renamed Human',
+      principalId: 'principal-owner',
+      clientId: 'agent-session-2',
+    })).resolves.toMatchObject({ title: 'Updated' });
+    await expect(useCase.updateProposalMetadata(proposal.id, { title: 'Forbidden' }, {
+      label: 'Original Name',
+      principalId: 'principal-other',
+      clientId: 'agent-session-3',
+    })).rejects.toBeInstanceOf(ForbiddenError);
+    expect(audit.entries[0]).toMatchObject({
+      actorPrincipalId: 'principal-owner',
+      actorDisplayName: 'Original Name',
+      actorClientId: 'agent-session-1',
+    });
+  });
+
   it('creates proposals in in_upload without running judgements yet', async () => {
     const repo = new InMemorySkillRepository();
     const storage = new InMemoryStorage();

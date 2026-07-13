@@ -344,7 +344,7 @@ describe('ProposalReadUseCase', () => {
     });
   });
 
-  it('returns contentDigest and duplicate proposal id in public status when catalog detects a duplicate', async () => {
+  it('does not expose private duplicate proposal IDs or submitter identity in public status', async () => {
     const proposal = createProposal();
     const duplicate: CatalogProposalRecord = {
       id: 'prop-duplicate',
@@ -404,7 +404,8 @@ describe('ProposalReadUseCase', () => {
     const status = await useCase.getPublicStatus(proposal.id);
 
     expect(status?.contentDigest).toBe('same-digest');
-    expect(status?.duplicateOfProposalId).toBe('prop-duplicate');
+    expect(status).not.toHaveProperty('duplicateOfProposalId');
+    expect(status).not.toHaveProperty('submittedBy');
     expect(status?.duplicateOfSkillId).toBeNull();
   });
 
@@ -448,7 +449,7 @@ describe('ProposalReadUseCase', () => {
 
     const status = await useCase.getPublicStatus(proposal.id);
 
-    expect(status?.duplicateOfProposalId).toBeNull();
+    expect(status).not.toHaveProperty('duplicateOfProposalId');
     expect(status?.duplicateOfSkillId).toBe('existing-skill');
   });
 });

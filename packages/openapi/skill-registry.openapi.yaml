@@ -28,7 +28,13 @@ paths:
       summary: Registry discovery endpoint
       description: >-
         Returns registry identity, canonical API base URL, entrypoints, and runtime auth requirements. May require
-        discoveryBearer when DISCOVERY_AUTH_MODE=bearer.
+        discoveryBearer when DISCOVERY_AUTH_MODE=bearer or an Authentik access token with the advertised discovery
+        scope when DISCOVERY_AUTH_MODE=oidc.
+      security:
+        - {}
+        - discoveryBearer: []
+        - agentOidc:
+            - managedskillhub:discovery
       responses:
         '200':
           description: Registry metadata
@@ -46,7 +52,12 @@ paths:
       summary: Get proposal workflow instructions for agents
       description: >-
         Returns proposal workflow and runtime proposal auth guidance. May require discoveryBearer when
-        DISCOVERY_AUTH_MODE=bearer.
+        DISCOVERY_AUTH_MODE=bearer or agentOidc when DISCOVERY_AUTH_MODE=oidc.
+      security:
+        - {}
+        - discoveryBearer: []
+        - agentOidc:
+            - managedskillhub:discovery
       responses:
         '200':
           description: Recommended proposal workflow for agents
@@ -671,10 +682,15 @@ paths:
         - Proposals
       summary: Pre-submission duplicate and similarity check
       description: |
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
         Checks whether an identical or similar proposal/skill already exists before creating a proposal.
         Agents should call this endpoint before submitting. Submission is not blocked by matches;
         the response only provides transparency about existing content and skill id collisions.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       requestBody:
         required: true
         content:
@@ -700,7 +716,12 @@ paths:
       tags:
         - Proposals
       summary: Submit a new proposal
-      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       requestBody:
         required: true
         content:
@@ -724,7 +745,12 @@ paths:
       tags:
         - Proposals
       summary: Show whether new proposals are waiting for admin review
-      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       responses:
         '200':
           description: Aggregated proposal notice
@@ -742,7 +768,14 @@ paths:
       tags:
         - Proposals
       summary: Public proposal status lookup
-      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      description: >-
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or any allowed agentOidc proposal principal when
+        PROPOSAL_AUTH_MODE=oidc. Knowing the UUID is insufficient without the configured authentication.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       parameters:
         - name: proposalId
           in: path
@@ -769,9 +802,14 @@ paths:
         - Proposals
       summary: Update metadata for an open proposal upload
       description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Only proposals still in `in_upload` can be
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Only proposals still in `in_upload` can be
         updated through this public submitter path. Agents should use this after submitter-side post-checks when title,
         description, category, tags, capabilities, or entrypoint need correction before finalization.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       parameters:
         - name: proposalId
           in: path
@@ -807,8 +845,13 @@ paths:
         - Proposals
       summary: Abort and delete an open proposal upload
       description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Only proposals still in `in_upload` can be deleted
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Only proposals still in `in_upload` can be deleted
         through this submitter path. After finalize-upload, public proposal deletion is blocked.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       parameters:
         - name: proposalId
           in: path
@@ -835,10 +878,15 @@ paths:
         - Proposals
       summary: Attach a file to a proposal
       description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Attach one proposal artifact. When the file belongs
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Attach one proposal artifact. When the file belongs
         in a subfolder, send multipart field `path` with the relative in-package path such as `scripts/build.py`.
         While the proposal is still `in_upload`, sending the same relative path again replaces that file so agents can
         apply post-check corrections without creating another proposal.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       parameters:
         - name: proposalId
           in: path
@@ -885,10 +933,15 @@ paths:
         - Proposals
       summary: Validate an open proposal upload without finalizing
       description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Checks the currently uploaded package while the
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Checks the currently uploaded package while the
         proposal is still `in_upload`, returns all package-reference findings, and does not finalize the upload, run
         extraction, run judgement, or change proposal status. Agents should call this before finalize-upload and apply
         corrections through PATCH /proposals/{proposalId} or POST /proposals/{proposalId}/files upserts.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       parameters:
         - name: proposalId
           in: path
@@ -918,7 +971,12 @@ paths:
       tags:
         - Proposals
       summary: Finalize an open proposal upload and start judgement
-      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc.
+      security:
+        - {}
+        - proposalBearer: []
+        - agentOidc:
+            - managedskillhub:proposals
       parameters:
         - name: proposalId
           in: path
@@ -1062,12 +1120,64 @@ paths:
                 $ref: '#/components/schemas/JudgementListResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+  /admin/auth/methods:
+    get:
+      operationId: getAdminAuthMethods
+      tags:
+        - Admin Auth
+      summary: Get the active administrator login method
+      responses:
+        '200':
+          description: Active non-secret administrator login metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuthMethodsResponse'
+  /admin/auth/oidc/start:
+    get:
+      operationId: startAdminOidcLogin
+      tags:
+        - Admin Auth
+      summary: Start server-side Authentik Authorization Code login
+      parameters:
+        - name: returnTo
+          in: query
+          schema:
+            type: string
+          description: Allowlisted relative route under /admin.
+      responses:
+        '302':
+          description: Redirect to the configured Authentik authorization endpoint
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/auth/oidc/callback:
+    get:
+      operationId: completeAdminOidcLogin
+      tags:
+        - Admin Auth
+      summary: Validate the Authentik callback and establish a local session
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Local opaque session established and redirected to the stored administrator route
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
   /admin/login:
     post:
       operationId: adminLogin
       tags:
         - Admin Auth
-      summary: Admin login
+      summary: Admin login in ADMIN_AUTH_MODE=simple only
       requestBody:
         required: true
         content:
@@ -2239,6 +2349,18 @@ components:
       type: http
       scheme: bearer
       description: Runtime-configurable bearer token for discovery/contract endpoints when DISCOVERY_AUTH_MODE=bearer.
+    agentOidc:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.example.invalid/application/o/managedskillhub-agent-device/.well-known/openid-configuration
+      description: >-
+        Runtime Authentik access token. The concrete issuer, client ID, scopes, Device Authorization endpoint, token
+        endpoint, and OpenID configuration URL must be read from /discover; this static URL is intentionally only a
+        contract placeholder.
+      x-device-authorization:
+        flow: device_code
+        runtimeMetadataPath: /discover
+        verificationLinkField: verification_uri_complete
+        deviceCodeIsSecret: true
   responses:
     NotFoundError:
       description: Resource not found
@@ -2430,6 +2552,32 @@ components:
           type: string
           enum:
             - bearer
+            - oauth2
+        flow:
+          type: string
+          enum:
+            - device_code
+        issuer:
+          type: string
+          format: uri
+        openIdConfigurationUrl:
+          type: string
+          format: uri
+        authorizationEndpoint:
+          type: string
+          format: uri
+        deviceAuthorizationEndpoint:
+          type: string
+          format: uri
+        tokenEndpoint:
+          type: string
+          format: uri
+        clientId:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
         appliesTo:
           type: array
           items:
@@ -3718,12 +3866,10 @@ components:
         - title
         - status
         - createdAt
-        - submittedBy
         - latestJudgementRisk
         - rejectionReason
         - convertedSkillId
         - contentDigest
-        - duplicateOfProposalId
         - duplicateOfSkillId
         - uploadFinalized
         - finalizeRequired
@@ -3753,8 +3899,6 @@ components:
         createdAt:
           type: string
           format: date-time
-        submittedBy:
-          type: string
         latestJudgementRisk:
           type: string
           enum:
@@ -3776,12 +3920,6 @@ components:
           description: >-
             Content-derived digest of proposal metadata and attached file checksums. Used for duplicate detection across
             proposals and published skills.
-        duplicateOfProposalId:
-          type: string
-          nullable: true
-          description: >-
-            ID of another proposal with identical content, if any. Submission is not blocked; admins decide which
-            proposal to convert.
         duplicateOfSkillId:
           type: string
           nullable: true
@@ -4352,9 +4490,49 @@ components:
       type: object
       required:
         - username
+        - roles
+        - mode
+        - expiresAt
       properties:
         username:
           type: string
+        displayName:
+          type:
+            - string
+            - 'null'
+        roles:
+          type: array
+          items:
+            type: string
+            enum:
+              - submitter
+              - reader
+              - reviewer
+              - publisher
+              - admin
+        mode:
+          type: string
+          enum:
+            - simple
+            - oidc
+        expiresAt:
+          type: string
+          format: date-time
+    AdminAuthMethodsResponse:
+      type: object
+      required:
+        - mode
+        - loginStartUrl
+      properties:
+        mode:
+          type: string
+          enum:
+            - simple
+            - oidc
+        loginStartUrl:
+          type:
+            - string
+            - 'null'
     AdminCreateSkillRequest:
       type: object
       required:

@@ -1,15 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import { useLanguage } from '../../i18n';
+import { adminApi, type AdminAuthMethodsResponse } from '../../api/admin';
 
 export function AdminLoginPage() {
     const { t } = useLanguage();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [methods, setMethods] = useState<AdminAuthMethodsResponse | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const login = useAuthStore((s) => s.login);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        let active = true;
+        adminApi.getAuthMethods()
+            .then((response) => {
+                if (active) setMethods(response.data);
+            })
+            .catch(() => {
+                if (active) setError(t('adminLogin.methodsFailed'));
+            })
+            .finally(() => {
+                if (active) setIsLoading(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [t]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -21,11 +41,28 @@ export function AdminLoginPage() {
         }
     }
 
+    function startOidcLogin() {
+        if (!methods?.loginStartUrl) return;
+        const target = new URL(methods.loginStartUrl, window.location.origin);
+        target.searchParams.set('returnTo', '/frontend/admin');
+        window.location.assign(target.toString());
+    }
+
     return (
         <div className="mx-auto max-w-md rounded border bg-white p-6">
             <h1 className="mb-4 text-xl font-semibold">{t('adminLogin.title')}</h1>
             {error && <p className="mb-4 text-red-600">{error}</p>}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {isLoading && <p>{t('app.loading.admin')}</p>}
+            {!isLoading && methods?.mode === 'oidc' && (
+                <button
+                    type="button"
+                    onClick={startOidcLogin}
+                    className="w-full rounded bg-blue-600 py-2 text-white"
+                >
+                    {t('adminLogin.authentik')}
+                </button>
+            )}
+            {!isLoading && methods?.mode === 'simple' && <form onSubmit={handleSubmit} className="space-y-4">
                 <input
                     type="text"
                     placeholder={t('adminLogin.username')}
@@ -41,7 +78,7 @@ export function AdminLoginPage() {
                     className="w-full rounded border px-3 py-2"
                 />
                 <button type="submit" className="w-full rounded bg-blue-600 py-2 text-white">{t('adminLogin.submit')}</button>
-            </form>
+            </form>}
         </div>
     );
 }

@@ -21,6 +21,14 @@ export interface ProposalMetadataUpdate {
   entrypoint?: string | null;
 }
 
+export interface VerifiedProposalActor {
+  label: string;
+  principalId: string;
+  clientId: string | null;
+}
+
+export type ProposalActor = string | VerifiedProposalActor;
+
 export interface FinalizeProposalUploadResult {
   proposal: Proposal;
   autoPublish: AutoPublishEvaluation;
@@ -59,12 +67,12 @@ export interface ProposalUploadFinding {
 }
 
 export interface ProposalCommandPort {
-  submitProposal(draft: SubmitProposalDraft, actor: string): Promise<Proposal>;
-  updateProposalMetadata(proposalId: string, update: ProposalMetadataUpdate, actor: string): Promise<Proposal>;
-  attachFile(proposalId: string, file: { path: string; content: Buffer; mimeType: string }, actor: string): Promise<Proposal>;
-  validateUpload(proposalId: string, actor: string): Promise<ValidateProposalUploadResult>;
-  finalizeUpload(proposalId: string, actor: string): Promise<FinalizeProposalUploadResult>;
-  deleteProposal(proposalId: string, actor: string): Promise<void>;
+  submitProposal(draft: SubmitProposalDraft, actor: ProposalActor): Promise<Proposal>;
+  updateProposalMetadata(proposalId: string, update: ProposalMetadataUpdate, actor: ProposalActor): Promise<Proposal>;
+  attachFile(proposalId: string, file: { path: string; content: Buffer; mimeType: string }, actor: ProposalActor): Promise<Proposal>;
+  validateUpload(proposalId: string, actor: ProposalActor): Promise<ValidateProposalUploadResult>;
+  finalizeUpload(proposalId: string, actor: ProposalActor): Promise<FinalizeProposalUploadResult>;
+  deleteProposal(proposalId: string, actor: ProposalActor): Promise<void>;
   rejectProposal?(proposalId: string, actor: string, reason?: string | null, comment?: string | null): Promise<Proposal>;
   convertProposal?(proposalId: string, actor: string, comment?: string | null): Promise<Skill>;
 }

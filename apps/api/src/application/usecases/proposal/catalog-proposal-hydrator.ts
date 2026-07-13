@@ -58,6 +58,8 @@ export async function buildProposalAggregateFromCatalog(
     ),
     status: proposal.status,
     submittedBy: proposal.submittedBy,
+    submittedByPrincipalId: proposal.submittedByPrincipalId,
+    submittedViaClientId: proposal.submittedViaClientId,
     createdAt: proposal.createdAt,
     rejectionReason: proposal.rejectionReason,
     contentDigest: proposal.contentDigest,

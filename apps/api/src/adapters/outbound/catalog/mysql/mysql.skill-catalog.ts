@@ -261,9 +261,10 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
         `
           INSERT INTO skill_catalog_proposals (
             id, skill_id, title, description, category, tags, capabilities, entrypoint, status,
-            submitted_by, created_at, rejection_reason, latest_judgement_risk, review_labels,
+            submitted_by, submitted_by_principal_id, submitted_via_client_id,
+            created_at, rejection_reason, latest_judgement_risk, review_labels,
             latest_judgement_id, latest_judged_at, content_digest
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
             skill_id = VALUES(skill_id),
             title = VALUES(title),
@@ -274,6 +275,8 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
             entrypoint = VALUES(entrypoint),
             status = VALUES(status),
             submitted_by = VALUES(submitted_by),
+            submitted_by_principal_id = VALUES(submitted_by_principal_id),
+            submitted_via_client_id = VALUES(submitted_via_client_id),
             created_at = VALUES(created_at),
             rejection_reason = VALUES(rejection_reason),
             latest_judgement_risk = VALUES(latest_judgement_risk),
@@ -293,6 +296,8 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
           proposal.entrypoint,
           proposal.status,
           proposal.submittedBy,
+          proposal.submittedByPrincipalId,
+          proposal.submittedViaClientId,
           toMysqlDateTime(proposal.createdAt),
           proposal.rejectionReason,
           review.latestJudgementRisk,
@@ -407,14 +412,19 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
   async upsertAuditEntry(entry: AuditEntry): Promise<void> {
     await this.execute(`
       INSERT INTO skill_catalog_audit_entries (
-        id, skill_id, skill_version, proposal_id, action, actor, before_json, after_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, skill_id, skill_version, proposal_id, action, actor,
+        actor_principal_id, actor_display_name, actor_client_id,
+        before_json, after_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         skill_id = VALUES(skill_id),
         skill_version = VALUES(skill_version),
         proposal_id = VALUES(proposal_id),
         action = VALUES(action),
         actor = VALUES(actor),
+        actor_principal_id = VALUES(actor_principal_id),
+        actor_display_name = VALUES(actor_display_name),
+        actor_client_id = VALUES(actor_client_id),
         before_json = VALUES(before_json),
         after_json = VALUES(after_json),
         created_at = VALUES(created_at)
@@ -425,6 +435,9 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
       entry.proposalId,
       entry.action,
       entry.actor,
+      entry.actorPrincipalId,
+      entry.actorDisplayName,
+      entry.actorClientId,
       entry.before ? JSON.stringify(entry.before) : null,
       entry.after ? JSON.stringify(entry.after) : null,
       toMysqlDateTime(entry.createdAt),
@@ -970,6 +983,9 @@ interface CatalogAuditEntryRow {
   proposal_id: string | null;
   action: string;
   actor: string;
+  actor_principal_id: string | null;
+  actor_display_name: string | null;
+  actor_client_id: string | null;
   before_json: string | null;
   after_json: string | null;
   created_at: string;
@@ -986,6 +1002,8 @@ interface CatalogProposalRow {
   entrypoint: string | null;
   status: string;
   submitted_by: string;
+  submitted_by_principal_id: string | null;
+  submitted_via_client_id: string | null;
   created_at: string;
   rejection_reason: string | null;
   latest_judgement_risk: string | null;
@@ -1083,6 +1101,9 @@ function mapCatalogAuditEntryRow(row: CatalogAuditEntryRow): CatalogAuditEntryRe
     proposalId: row.proposal_id,
     action: row.action,
     actor: row.actor,
+    actorPrincipalId: row.actor_principal_id ?? null,
+    actorDisplayName: row.actor_display_name ?? null,
+    actorClientId: row.actor_client_id ?? null,
     before: row.before_json ? parseJsonObject<CatalogAuditEntryRecord['before']>(row.before_json) : null,
     after: row.after_json ? parseJsonObject<CatalogAuditEntryRecord['after']>(row.after_json) : null,
     createdAt: requireMysqlDateTime(row.created_at, 'skill_catalog_audit_entries.created_at'),
@@ -1101,6 +1122,8 @@ function mapCatalogProposalRow(row: CatalogProposalRow): CatalogProposalRecord {
     entrypoint: row.entrypoint,
     status: row.status as CatalogProposalRecord['status'],
     submittedBy: row.submitted_by,
+    submittedByPrincipalId: row.submitted_by_principal_id,
+    submittedViaClientId: row.submitted_via_client_id,
     createdAt: requireMysqlDateTime(row.created_at, 'skill_catalog_proposals.created_at'),
     rejectionReason: row.rejection_reason,
     latestJudgementRisk: resolveLatestProposalJudgementRisk(

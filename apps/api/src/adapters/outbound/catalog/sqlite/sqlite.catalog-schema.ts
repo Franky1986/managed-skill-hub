@@ -83,6 +83,8 @@ export function ensureSqliteCatalogSchema(db: Database.Database): void {
       entrypoint TEXT,
       status TEXT NOT NULL,
       submitted_by TEXT NOT NULL,
+      submitted_by_principal_id TEXT,
+      submitted_via_client_id TEXT,
       created_at TEXT NOT NULL,
       rejection_reason TEXT,
       latest_judgement_risk TEXT,
@@ -117,17 +119,85 @@ export function ensureSqliteCatalogSchema(db: Database.Database): void {
       proposal_id TEXT,
       action TEXT NOT NULL,
       actor TEXT NOT NULL,
+      actor_principal_id TEXT,
+      actor_display_name TEXT,
+      actor_client_id TEXT,
       before_json TEXT,
       after_json TEXT,
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_skill_catalog_audit_entries_skill
       ON skill_catalog_audit_entries (skill_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS identity_principals (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      display_name TEXT,
+      email TEXT,
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      disabled_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_identity_principals_last_seen
+      ON identity_principals (last_seen_at, id);
+
+    CREATE TABLE IF NOT EXISTS identity_external_subjects (
+      issuer TEXT NOT NULL,
+      external_subject TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      provider_client_id TEXT NOT NULL,
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      PRIMARY KEY (issuer, external_subject)
+    );
+    CREATE INDEX IF NOT EXISTS idx_identity_external_principal
+      ON identity_external_subjects (principal_id);
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      session_id_hash TEXT PRIMARY KEY,
+      principal_id TEXT NOT NULL,
+      roles_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      revoked_reason TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry
+      ON admin_sessions (expires_at, session_id_hash);
+
+    CREATE TABLE IF NOT EXISTS oidc_login_transactions (
+      state_hash TEXT PRIMARY KEY,
+      nonce TEXT NOT NULL,
+      pkce_verifier TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      return_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_oidc_login_transactions_expiry
+      ON oidc_login_transactions (expires_at, state_hash);
   `);
 
   ensureJudgementColumns(db);
+  ensureAuditColumns(db);
   ensureProposalColumns(db);
   ensureVersionColumns(db);
+}
+
+function ensureAuditColumns(db: Database.Database): void {
+  const columns = db.prepare('PRAGMA table_info(skill_catalog_audit_entries)').all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('actor_principal_id')) {
+    db.exec('ALTER TABLE skill_catalog_audit_entries ADD COLUMN actor_principal_id TEXT;');
+  }
+  if (!names.has('actor_display_name')) {
+    db.exec('ALTER TABLE skill_catalog_audit_entries ADD COLUMN actor_display_name TEXT;');
+  }
+  if (!names.has('actor_client_id')) {
+    db.exec('ALTER TABLE skill_catalog_audit_entries ADD COLUMN actor_client_id TEXT;');
+  }
 }
 
 function ensureVersionColumns(db: Database.Database): void {
@@ -189,6 +259,12 @@ function ensureProposalColumns(db: Database.Database): void {
   if (!names.has('content_digest')) {
     db.exec(`ALTER TABLE skill_catalog_proposals ADD COLUMN content_digest TEXT;`);
   }
+  if (!names.has('submitted_by_principal_id')) {
+    db.exec(`ALTER TABLE skill_catalog_proposals ADD COLUMN submitted_by_principal_id TEXT;`);
+  }
+  if (!names.has('submitted_via_client_id')) {
+    db.exec(`ALTER TABLE skill_catalog_proposals ADD COLUMN submitted_via_client_id TEXT;`);
+  }
 }
 
 function ensureJudgementColumns(db: Database.Database): void {
@@ -198,4 +274,3 @@ function ensureJudgementColumns(db: Database.Database): void {
     db.exec(`ALTER TABLE skill_catalog_judgements ADD COLUMN skill_purpose_summary TEXT;`);
   }
 }
-

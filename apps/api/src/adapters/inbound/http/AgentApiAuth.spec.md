@@ -14,15 +14,18 @@ changing domain or use-case logic.
 ## Non-Scope
 
 - Admin session authentication
-- Full RBAC or multi-tenant token management
-- OAuth/OIDC validation inside the application
-- Per-user proposal accounts
+- Provider-specific role interpretation in controllers
+- OAuth/OIDC protocol implementation in domain or use-case code
 
 ## Behavior
 
-- Supported modes are `none` and `bearer`.
+- Supported selectors are `none`, `bearer`, and `oidc`.
 - `none` never blocks a request and sets an anonymous agent context.
 - `bearer` requires `Authorization: Bearer <token>`.
+- The request context includes a provider-neutral principal. `none` creates an
+  anonymous principal and static `bearer` creates a technical legacy principal.
+- An OIDC-selected area fails closed until its access-token verifier succeeds;
+  it is never interpreted as a static bearer mode.
 - Token comparison uses constant-time comparison.
 - Missing, malformed, or invalid bearer tokens produce normalized `401` errors
   with `details.authRequired`, `details.authArea`, `details.authScheme`,

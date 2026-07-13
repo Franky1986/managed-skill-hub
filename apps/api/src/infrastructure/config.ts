@@ -6,7 +6,9 @@ export type JudgerProvider = string;
 export type CatalogProvider = 'sqlite' | 'mysql';
 export type SearchProvider = 'sqlite' | 'mysql';
 export type ContentStorageProvider = 'filesystem' | 'database';
-export type AgentAuthMode = 'none' | 'bearer';
+export type AgentAuthMode = 'none' | 'bearer' | 'oidc';
+export type AdminAuthMode = 'simple' | 'oidc';
+export type OidcAccessPolicy = 'all_authenticated_users' | 'required_groups';
 type MySqlSslMode = 'preferred' | 'required' | 'disabled' | 'verify_ca' | 'verify_identity';
 
 export interface AppConfig {
@@ -17,9 +19,11 @@ export interface AppConfig {
   publicApiBaseUrl: string;
   corsAllowedOrigins: string[];
   adminCsrfOriginCheck: boolean;
+  adminUiBasePath: string;
   apiHost: string;
   apiPort: number;
   apiTrustedProxies: string[];
+  adminAuthMode: AdminAuthMode;
   adminUser: string;
   adminPassword: string | null;
   adminPasswordHash: string;
@@ -61,6 +65,32 @@ export interface AppConfig {
   discoveryAuthMode: AgentAuthMode;
   discoveryBearerToken: string | null;
   discoveryBearerActor: string;
+  oidcAgentIssuer: string | null;
+  oidcAgentClientId: string | null;
+  oidcAgentBaseScopes: string[];
+  oidcDiscoveryScope: string | null;
+  oidcPublicReadScope: string | null;
+  oidcProposalScope: string | null;
+  oidcAdminIssuer: string | null;
+  oidcAdminClientId: string | null;
+  oidcAdminClientSecret: string | null;
+  oidcAdminRedirectUri: string | null;
+  oidcAdminScopes: string[];
+  oidcProposalAccess: OidcAccessPolicy;
+  oidcProposalGroups: string[];
+  oidcPublicReadAccess: OidcAccessPolicy;
+  oidcPublicReadGroups: string[];
+  oidcAdminSubjects: string[];
+  oidcAdminGroups: string[];
+  oidcReviewerGroups: string[];
+  oidcPublisherGroups: string[];
+  oidcLoginTransactionTtlSeconds: number;
+  oidcClockToleranceSeconds: number;
+  oidcJwksCacheTtlSeconds: number;
+  oidcHttpTimeoutMs: number;
+  oidcMaxTokenBytes: number;
+  oidcMaxGroups: number;
+  oidcHumanClaim: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -123,9 +153,11 @@ export function loadConfig(): AppConfig {
       true,
       'ADMIN_CSRF_ORIGIN_CHECK'
     ),
+    adminUiBasePath: parseAdminUiBasePath(process.env.ADMIN_UI_BASE_PATH),
     apiHost: process.env.API_HOST ?? '127.0.0.1',
     apiPort: Number(process.env.API_PORT ?? 3040),
     apiTrustedProxies: parseCsvList(process.env.API_TRUSTED_PROXIES, []),
+    adminAuthMode: parseAdminAuthMode(process.env.ADMIN_AUTH_MODE),
     adminUser: process.env.ADMIN_USER ?? 'admin',
     adminPassword: valueOrNull(process.env.ADMIN_PASSWORD),
     adminPasswordHash: process.env.ADMIN_PASSWORD_HASH ?? '',
@@ -209,8 +241,47 @@ export function loadConfig(): AppConfig {
       'DISCOVERY_BEARER_TOKEN'
     ),
     discoveryBearerActor: valueOrDefault(process.env.DISCOVERY_BEARER_ACTOR, 'agent-discovery-token'),
+    oidcAgentIssuer: valueOrNull(process.env.OIDC_AGENT_ISSUER),
+    oidcAgentClientId: valueOrNull(process.env.OIDC_AGENT_CLIENT_ID),
+    oidcAgentBaseScopes: parseCsvList(process.env.OIDC_AGENT_BASE_SCOPES, ['openid', 'profile', 'email']),
+    oidcDiscoveryScope: valueOrNull(process.env.OIDC_DISCOVERY_SCOPE),
+    oidcPublicReadScope: valueOrNull(process.env.OIDC_PUBLIC_READ_SCOPE),
+    oidcProposalScope: valueOrNull(process.env.OIDC_PROPOSAL_SCOPE),
+    oidcAdminIssuer: valueOrNull(process.env.OIDC_ADMIN_ISSUER),
+    oidcAdminClientId: valueOrNull(process.env.OIDC_ADMIN_CLIENT_ID),
+    oidcAdminClientSecret: valueOrNull(process.env.OIDC_ADMIN_CLIENT_SECRET),
+    oidcAdminRedirectUri: valueOrNull(process.env.OIDC_ADMIN_REDIRECT_URI),
+    oidcAdminScopes: parseCsvList(process.env.OIDC_ADMIN_SCOPES, ['openid', 'profile', 'email']),
+    oidcProposalAccess: parseOidcAccessPolicy(process.env.OIDC_PROPOSAL_ACCESS, 'OIDC_PROPOSAL_ACCESS'),
+    oidcProposalGroups: parseCsvList(process.env.OIDC_PROPOSAL_GROUPS, ['managedskillhub-submitters']),
+    oidcPublicReadAccess: parseOidcAccessPolicy(process.env.OIDC_PUBLIC_READ_ACCESS, 'OIDC_PUBLIC_READ_ACCESS'),
+    oidcPublicReadGroups: parseCsvList(process.env.OIDC_PUBLIC_READ_GROUPS, ['managedskillhub-readers']),
+    oidcAdminSubjects: parseCsvList(process.env.OIDC_ADMIN_SUBJECTS, []),
+    oidcAdminGroups: parseCsvList(process.env.OIDC_ADMIN_GROUPS, ['managedskillhub-admins']),
+    oidcReviewerGroups: parseCsvList(process.env.OIDC_REVIEWER_GROUPS, ['managedskillhub-reviewers']),
+    oidcPublisherGroups: parseCsvList(process.env.OIDC_PUBLISHER_GROUPS, ['managedskillhub-publishers']),
+    oidcLoginTransactionTtlSeconds: parsePositiveInteger(
+      process.env.OIDC_LOGIN_TRANSACTION_TTL_SECONDS,
+      600,
+      'OIDC_LOGIN_TRANSACTION_TTL_SECONDS'
+    ),
+    oidcClockToleranceSeconds: parsePositiveInteger(
+      process.env.OIDC_CLOCK_TOLERANCE_SECONDS,
+      30,
+      'OIDC_CLOCK_TOLERANCE_SECONDS'
+    ),
+    oidcJwksCacheTtlSeconds: parsePositiveInteger(
+      process.env.OIDC_JWKS_CACHE_TTL_SECONDS,
+      3600,
+      'OIDC_JWKS_CACHE_TTL_SECONDS'
+    ),
+    oidcHttpTimeoutMs: parsePositiveInteger(process.env.OIDC_HTTP_TIMEOUT_MS, 5000, 'OIDC_HTTP_TIMEOUT_MS'),
+    oidcMaxTokenBytes: parsePositiveInteger(process.env.OIDC_MAX_TOKEN_BYTES, 16_384, 'OIDC_MAX_TOKEN_BYTES'),
+    oidcMaxGroups: parsePositiveInteger(process.env.OIDC_MAX_GROUPS, 100, 'OIDC_MAX_GROUPS'),
+    oidcHumanClaim: valueOrDefault(process.env.OIDC_HUMAN_CLAIM, 'managedskillhub_human'),
   };
 
+  validateOidcConfiguration(config);
   validateProductionSecurityConfig(config);
   return config;
 }
@@ -319,10 +390,37 @@ export function parseAgentAuthMode(value: string | undefined, name: string): Age
   if (!trimmed) {
     return 'none';
   }
-  if (trimmed === 'none' || trimmed === 'bearer') {
+  if (trimmed === 'none' || trimmed === 'bearer' || trimmed === 'oidc') {
     return trimmed;
   }
-  throw new ConfigurationError(`${name} must be none or bearer. Received: ${trimmed}.`);
+  throw new ConfigurationError(`${name} must be none, bearer, or oidc. Received: ${trimmed}.`);
+}
+
+export function parseAdminAuthMode(value: string | undefined): AdminAuthMode {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return 'simple';
+  }
+  if (trimmed === 'simple' || trimmed === 'oidc') {
+    return trimmed;
+  }
+  throw new ConfigurationError(`ADMIN_AUTH_MODE must be simple or oidc. Received: ${trimmed}.`);
+}
+
+export function parseOidcAccessPolicy(
+  value: string | undefined,
+  name: string
+): OidcAccessPolicy {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return 'all_authenticated_users';
+  }
+  if (trimmed === 'all_authenticated_users' || trimmed === 'required_groups') {
+    return trimmed;
+  }
+  throw new ConfigurationError(
+    `${name} must be all_authenticated_users or required_groups. Received: ${trimmed}.`
+  );
 }
 
 function parseBearerToken(
@@ -358,13 +456,13 @@ function validateProductionSecurityConfig(config: AppConfig): void {
     );
   }
 
-  if (config.adminPassword) {
+  if (config.adminAuthMode === 'simple' && config.adminPassword) {
     throw new ConfigurationError(
       'ADMIN_PASSWORD is not allowed when NODE_ENV=production. Use ADMIN_PASSWORD_HASH instead.'
     );
   }
 
-  if (!config.adminPasswordHash) {
+  if (config.adminAuthMode === 'simple' && !config.adminPasswordHash) {
     throw new ConfigurationError(
       'ADMIN_PASSWORD_HASH is required when NODE_ENV=production.'
     );
@@ -378,9 +476,123 @@ function validateProductionSecurityConfig(config: AppConfig): void {
 
   if (config.proposalAuthMode === 'none' && !config.allowOpenProposalsInProduction) {
     throw new ConfigurationError(
-      'PROPOSAL_AUTH_MODE=bearer is required when NODE_ENV=production. Set ALLOW_OPEN_PROPOSALS_IN_PRODUCTION=true only for explicitly open internal deployments.'
+      'PROPOSAL_AUTH_MODE=bearer or oidc is required when NODE_ENV=production. Set ALLOW_OPEN_PROPOSALS_IN_PRODUCTION=true only for explicitly open internal deployments.'
     );
   }
+
+  if (config.adminAuthMode === 'oidc' && isExampleSecret(config.oidcAdminClientSecret)) {
+    throw new ConfigurationError(
+      'OIDC_ADMIN_CLIENT_SECRET must not use an example or default value when NODE_ENV=production.'
+    );
+  }
+}
+
+function validateOidcConfiguration(config: AppConfig): void {
+  const oidcAreas: Array<{ mode: AgentAuthMode; name: string; scope: string | null }> = [
+    { mode: config.discoveryAuthMode, name: 'DISCOVERY_AUTH_MODE', scope: config.oidcDiscoveryScope },
+    { mode: config.publicReadAuthMode, name: 'PUBLIC_READ_AUTH_MODE', scope: config.oidcPublicReadScope },
+    { mode: config.proposalAuthMode, name: 'PROPOSAL_AUTH_MODE', scope: config.oidcProposalScope },
+  ];
+  const enabledAgentAreas = oidcAreas.filter((area) => area.mode === 'oidc');
+
+  if (enabledAgentAreas.length > 0) {
+    requireOidcValue(config.oidcAgentIssuer, 'OIDC_AGENT_ISSUER', enabledAgentAreas[0].name);
+    requireOidcValue(config.oidcAgentClientId, 'OIDC_AGENT_CLIENT_ID', enabledAgentAreas[0].name);
+    validateTrustedOidcUrl(config.oidcAgentIssuer!, 'OIDC_AGENT_ISSUER');
+    if (!config.oidcAgentBaseScopes.includes('openid')) {
+      throw new ConfigurationError('OIDC_AGENT_BASE_SCOPES must include openid when an agent area uses oidc.');
+    }
+    for (const area of enabledAgentAreas) {
+      requireOidcValue(area.scope, oidcScopeName(area.name), area.name);
+    }
+  }
+
+  if (config.oidcProposalAccess === 'required_groups' && config.oidcProposalGroups.length === 0) {
+    throw new ConfigurationError('OIDC_PROPOSAL_GROUPS is required when OIDC_PROPOSAL_ACCESS=required_groups.');
+  }
+  if (config.oidcPublicReadAccess === 'required_groups' && config.oidcPublicReadGroups.length === 0) {
+    throw new ConfigurationError(
+      'OIDC_PUBLIC_READ_GROUPS is required when OIDC_PUBLIC_READ_ACCESS=required_groups.'
+    );
+  }
+
+  if (config.adminAuthMode === 'oidc') {
+    requireOidcValue(config.oidcAdminIssuer, 'OIDC_ADMIN_ISSUER', 'ADMIN_AUTH_MODE');
+    requireOidcValue(config.oidcAdminClientId, 'OIDC_ADMIN_CLIENT_ID', 'ADMIN_AUTH_MODE');
+    requireOidcValue(config.oidcAdminClientSecret, 'OIDC_ADMIN_CLIENT_SECRET', 'ADMIN_AUTH_MODE');
+    requireOidcValue(config.oidcAdminRedirectUri, 'OIDC_ADMIN_REDIRECT_URI', 'ADMIN_AUTH_MODE');
+    validateTrustedOidcUrl(config.oidcAdminIssuer!, 'OIDC_ADMIN_ISSUER');
+    validateTrustedOidcUrl(config.oidcAdminRedirectUri!, 'OIDC_ADMIN_REDIRECT_URI');
+    if (!config.oidcAdminScopes.includes('openid')) {
+      throw new ConfigurationError('OIDC_ADMIN_SCOPES must include openid when ADMIN_AUTH_MODE=oidc.');
+    }
+    if (config.oidcAdminSubjects.length === 0 && config.oidcAdminGroups.length === 0) {
+      throw new ConfigurationError(
+        'ADMIN_AUTH_MODE=oidc requires OIDC_ADMIN_SUBJECTS or OIDC_ADMIN_GROUPS.'
+      );
+    }
+    if (hasExplicitSimpleAdminCredentials()) {
+      throw new ConfigurationError(
+        'ADMIN_USER, ADMIN_PASSWORD, and ADMIN_PASSWORD_HASH must be absent when ADMIN_AUTH_MODE=oidc; implicit simple-admin fallback is not allowed.'
+      );
+    }
+  }
+}
+
+function requireOidcValue(value: string | null, name: string, selector: string): void {
+  if (!value) {
+    throw new ConfigurationError(`${name} is required when ${selector}=oidc.`);
+  }
+}
+
+function oidcScopeName(authModeName: string): string {
+  switch (authModeName) {
+    case 'DISCOVERY_AUTH_MODE':
+      return 'OIDC_DISCOVERY_SCOPE';
+    case 'PUBLIC_READ_AUTH_MODE':
+      return 'OIDC_PUBLIC_READ_SCOPE';
+    default:
+      return 'OIDC_PROPOSAL_SCOPE';
+  }
+}
+
+function validateTrustedOidcUrl(value: string, name: string): void {
+  if (Buffer.byteLength(value, 'utf8') > 1024) {
+    throw new ConfigurationError(`${name} must not exceed 1024 UTF-8 bytes.`);
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new ConfigurationError(`${name} must be an absolute HTTPS URL.`);
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new ConfigurationError(`${name} must not contain credentials, a query string, or a fragment.`);
+  }
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost(parsed.hostname))) {
+    throw new ConfigurationError(`${name} must use HTTPS outside explicit localhost development.`);
+  }
+}
+
+function isLocalhost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function hasExplicitSimpleAdminCredentials(): boolean {
+  return ['ADMIN_USER', 'ADMIN_PASSWORD', 'ADMIN_PASSWORD_HASH'].some((name) => {
+    const value = process.env[name];
+    return value !== undefined && value.trim().length > 0;
+  });
+}
+
+function isExampleSecret(value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.toLowerCase();
+  return normalized.includes('replace-with')
+    || normalized.includes('change-me')
+    || normalized.includes('example');
 }
 
 function parseMySqlSslMode(value: string | undefined): MySqlSslMode {
@@ -474,6 +686,21 @@ function parseBoolean(value: string | undefined, fallback: boolean, name: string
     default:
       throw new ConfigurationError(`${name} must be true or false.`);
   }
+}
+
+function parseAdminUiBasePath(value: string | undefined): string {
+  const path = valueOrDefault(value, '/frontend/admin');
+  if (
+    !path.startsWith('/')
+    || path.startsWith('//')
+    || path.includes('\\')
+    || path.includes('?')
+    || path.includes('#')
+    || /[\u0000-\u001f\u007f]/.test(path)
+  ) {
+    throw new ConfigurationError('ADMIN_UI_BASE_PATH must be a relative absolute-path without query or fragment.');
+  }
+  return path.replace(/\/+$/, '') || '/';
 }
 
 function parseCsvList(value: string | undefined, fallback: string[]): string[] {

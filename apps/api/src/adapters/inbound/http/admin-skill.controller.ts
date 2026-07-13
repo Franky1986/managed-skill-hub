@@ -1,20 +1,23 @@
 import { FastifyInstance } from 'fastify';
 import { Container } from '../../../infrastructure/container';
-import { SimpleAdminAuth, adminGuard } from './simple-admin-auth';
+import { AdminAuth, adminActor, adminGuard } from './admin-auth';
 import { sendApiError, sendMappedApiError } from './error-response';
 import { ValidationError } from '../../../domain/errors';
 import { sendArtifactResponse } from './artifact-response';
 
-export function registerAdminSkillRoutes(app: FastifyInstance, container: Container, auth: SimpleAdminAuth): void {
+export function registerAdminSkillRoutes(app: FastifyInstance, container: Container, auth: AdminAuth): void {
   const guard = { preHandler: adminGuard(auth) };
+  const staffReadGuard = { preHandler: adminGuard(auth, ['reviewer', 'publisher']) };
+  const reviewGuard = { preHandler: adminGuard(auth, 'reviewer') };
+  const publishGuard = { preHandler: adminGuard(auth, 'publisher') };
   const maxFileSize = 5 * 1024 * 1024;
 
-  app.get('/admin/skills', guard, async (_request, reply) => {
+  app.get('/admin/skills', staffReadGuard, async (_request, reply) => {
     const result = await container.adminSkillRead.listSkillSummaries();
     return reply.send(result);
   });
 
-  app.get('/admin/skills/:skillId', guard, async (request, reply) => {
+  app.get('/admin/skills/:skillId', staffReadGuard, async (request, reply) => {
     try {
       const { skillId } = request.params as { skillId: string };
       const skill = await container.adminSkillRead.getSkillDetail(skillId);
@@ -24,7 +27,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
     }
   });
 
-  app.get('/admin/skills/:skillId/files', guard, async (request, reply) => {
+  app.get('/admin/skills/:skillId/files', staffReadGuard, async (request, reply) => {
     try {
       const { skillId } = request.params as { skillId: string };
       const { version } = request.query as { version?: string };
@@ -35,7 +38,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
     }
   });
 
-  app.get('/admin/skills/:skillId/files/:fileId', guard, async (request, reply) => {
+  app.get('/admin/skills/:skillId/files/:fileId', staffReadGuard, async (request, reply) => {
     try {
       const { skillId, fileId } = request.params as { skillId: string; fileId: string };
       const { version } = request.query as { version?: string };
@@ -51,13 +54,12 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
       const { skillId, fileId } = request.params as { skillId: string; fileId: string };
       const { version } = request.query as { version?: string };
       const body = request.body as { path?: string };
-      const session = await auth.validate(request);
       const skill = await container.updateSkill.moveFile(
         skillId,
         version ?? '1.0.0',
         fileId,
         { path: body.path ?? '' },
-        session?.username ?? 'admin'
+        adminActor(request)
       );
       const latest = skill.getAllVersions()[skill.getAllVersions().length - 1];
       return reply.send({ id: skill.id.toString(), version: latest?.version ?? version ?? '1.0.0' });
@@ -70,12 +72,11 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
     try {
       const { skillId, fileId } = request.params as { skillId: string; fileId: string };
       const { version } = request.query as { version?: string };
-      const session = await auth.validate(request);
       const skill = await container.updateSkill.deleteFile(
         skillId,
         version ?? '1.0.0',
         fileId,
-        session?.username ?? 'admin'
+        adminActor(request)
       );
       const latest = skill.getAllVersions()[skill.getAllVersions().length - 1];
       return reply.send({ id: skill.id.toString(), version: latest?.version ?? version ?? '1.0.0' });
@@ -92,7 +93,6 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
       if (typeof body?.content !== 'string') {
         throw new ValidationError('Text file content must be provided as a string');
       }
-      const session = await auth.validate(request);
       const skill = await container.updateSkill.uploadFile(
         skillId,
         version ?? '1.0.0',
@@ -103,7 +103,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
             ? body.mimeType.trim()
             : 'text/plain',
         },
-        session?.username ?? 'admin'
+        adminActor(request)
       );
       const latest = skill.getAllVersions()[skill.getAllVersions().length - 1];
       return reply.send({ id: skill.id.toString(), version: latest?.version ?? version ?? '1.0.0' });
@@ -112,7 +112,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
     }
   });
 
-  app.get('/admin/skills/:skillId/files/:fileId/extracted-content', guard, async (request, reply) => {
+  app.get('/admin/skills/:skillId/files/:fileId/extracted-content', staffReadGuard, async (request, reply) => {
     try {
       const { skillId, fileId } = request.params as { skillId: string; fileId: string };
       const { version } = request.query as { version?: string };
@@ -123,7 +123,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
     }
   });
 
-  app.get('/admin/skills/:skillId/files/:fileId/probe', guard, async (request, reply) => {
+  app.get('/admin/skills/:skillId/files/:fileId/probe', staffReadGuard, async (request, reply) => {
     try {
       const { skillId, fileId } = request.params as { skillId: string; fileId: string };
       const { version } = request.query as { version?: string };
@@ -142,11 +142,10 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
     try {
       const { skillId, fileId } = request.params as { skillId: string; fileId: string };
       const { version } = request.query as { version?: string };
-      const session = await auth.validate(request);
       const extracted = await container.reextractSkillFile.execute(
         skillId,
         fileId,
-        session?.username ?? 'admin',
+        adminActor(request),
         { version }
       );
       return reply.send(extracted);
@@ -166,16 +165,14 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
   });
 
   app.post('/admin/search/reindex', guard, async (request, reply) => {
-    const session = await auth.validate(request);
-    const result = await container.reindexSkillSearch.execute(session?.username ?? 'admin');
+    const result = await container.reindexSkillSearch.execute(adminActor(request));
     return reply.send(result);
   });
 
   app.post('/admin/projections/rebuild', guard, async (request, reply) => {
     try {
       const { clearProjections } = request.query as { clearProjections?: string };
-      const session = await auth.validate(request);
-      const result = await container.rebuildProjections.execute(session?.username ?? 'admin', {
+      const result = await container.rebuildProjections.execute(adminActor(request), {
         clearProjections: parseBoolean(clearProjections),
       });
       return reply.send(result);
@@ -194,7 +191,6 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
       capabilities?: string[];
       entrypoint: string;
     };
-    const session = await auth.validate(request);
     const skill = await container.createSkill.createSkill(
       {
         id: body.id,
@@ -206,7 +202,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
         entrypoint: body.entrypoint,
         files: [],
       },
-      session?.username ?? 'admin'
+      adminActor(request)
     );
     return reply.code(201).send({ id: skill.id.toString(), version: '1.0.0' });
   });
@@ -215,7 +211,6 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
     try {
       const { skillId } = request.params as { skillId: string };
       const { version } = request.query as { version?: string };
-      const session = await auth.validate(request);
       const data = await request.file({ limits: { fileSize: maxFileSize } });
       if (!data) {
         return sendApiError(reply, request, {
@@ -235,7 +230,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
           content: await data.toBuffer(),
           mimeType: data.mimetype,
         },
-        session?.username ?? 'admin'
+        adminActor(request)
       );
       const latest = skill.getAllVersions()[skill.getAllVersions().length - 1];
       return reply.send({ id: skill.id.toString(), version: latest?.version ?? version ?? '1.0.0' });
@@ -253,7 +248,6 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
       tags?: string[];
       capabilities?: string[];
     };
-    const session = await auth.validate(request);
     const skill = await container.updateSkill.updateSkill(
       skillId,
       {
@@ -263,7 +257,7 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
         tags: body.tags,
         capabilities: body.capabilities,
       },
-      session?.username ?? 'admin'
+      adminActor(request)
     );
     const latest = skill.getAllVersions()[skill.getAllVersions().length - 1];
     return reply.send({ id: skill.id.toString(), version: latest?.version ?? '1.0.0' });
@@ -272,62 +266,57 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
   app.post('/admin/skills/:skillId/submit-review', guard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
-    const session = await auth.validate(request);
     const skill = await container.reviewSkill.submitForReview(
       skillId,
       version ?? '1.0.0',
-      session?.username ?? 'admin'
+      adminActor(request)
     );
     return reply.send({ id: skill.id.toString() });
   });
 
-  app.post('/admin/skills/:skillId/approve', guard, async (request, reply) => {
+  app.post('/admin/skills/:skillId/approve', reviewGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
-    const session = await auth.validate(request);
     const skill = await container.reviewSkill.approve(
       skillId,
       version ?? '1.0.0',
-      session?.username ?? 'admin'
+      adminActor(request)
     );
     return reply.send({ id: skill.id.toString() });
   });
 
-  app.post('/admin/skills/:skillId/publish', guard, async (request, reply) => {
+  app.post('/admin/skills/:skillId/publish', publishGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
-    const session = await auth.validate(request);
     const skill = await container.reviewSkill.publish(
       skillId,
       version ?? '1.0.0',
-      session?.username ?? 'admin'
+      adminActor(request)
     );
     return reply.send({ id: skill.id.toString() });
   });
 
-  app.post('/admin/skills/:skillId/reject', guard, async (request, reply) => {
+  app.post('/admin/skills/:skillId/reject', reviewGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
     const body = (request.body as { reason?: string } | undefined) ?? {};
-    const session = await auth.validate(request);
     const skill = await container.reviewSkill.reject(
       skillId,
       version ?? '1.0.0',
-      session?.username ?? 'admin',
+      adminActor(request),
       body.reason ?? ''
     );
     return reply.send({ id: skill.id.toString() });
   });
 
-  app.post('/admin/skills/:skillId/deprecate', guard, async (request, reply) => {
+  app.post('/admin/skills/:skillId/deprecate', publishGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
     const body = (request.body as { reason?: string } | undefined) ?? {};
-    const session = await auth.validate(request);
     const skill = await container.reviewSkill.deprecate(
       skillId,
       version ?? '1.0.0',
-      session?.username ?? 'admin',
+      adminActor(request),
       body.reason
     );
     return reply.send({ id: skill.id.toString() });

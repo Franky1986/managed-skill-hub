@@ -14,7 +14,7 @@ export class ForbiddenError extends DomainError {}
 export class AgentAuthRequiredError extends UnauthorizedError {
   constructor(
     public readonly authArea: 'discovery' | 'public-read' | 'proposal',
-    public readonly authScheme: 'bearer',
+    public readonly authScheme: 'bearer' | 'oidc',
     public readonly discoverUrl: string,
     public readonly credentialSetupScriptUrl: string | undefined
   ) {

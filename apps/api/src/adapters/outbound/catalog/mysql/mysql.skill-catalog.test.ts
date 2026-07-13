@@ -67,6 +67,8 @@ interface ProposalRow {
   entrypoint: string | null;
   status: string;
   submitted_by: string;
+  submitted_by_principal_id: string | null;
+  submitted_via_client_id: string | null;
   created_at: string;
   rejection_reason: string | null;
   latest_judgement_risk: string | null;
@@ -109,6 +111,9 @@ interface AuditRow {
   proposal_id: string | null;
   action: string;
   actor: string;
+  actor_principal_id: string | null;
+  actor_display_name: string | null;
+  actor_client_id: string | null;
   before_json: string | null;
   after_json: string | null;
   created_at: string;
@@ -278,7 +283,8 @@ class FakeMysqlClient {
     if (normalized.includes('insert into skill_catalog_proposals')) {
       const [
         id, skillId, title, description, category, tags, capabilities, entrypoint, status, submittedBy,
-        createdAt, rejectionReason, latestRisk, reviewLabels, latestJudgementId, latestJudgedAt, contentDigest,
+        submittedByPrincipalId, submittedViaClientId, createdAt, rejectionReason, latestRisk, reviewLabels,
+        latestJudgementId, latestJudgedAt, contentDigest,
       ] = params as (string | null)[];
       this.proposals.set(String(id), {
         id: String(id),
@@ -291,6 +297,8 @@ class FakeMysqlClient {
         entrypoint: entrypoint ? String(entrypoint) : null,
         status: String(status),
         submitted_by: String(submittedBy),
+        submitted_by_principal_id: submittedByPrincipalId ? String(submittedByPrincipalId) : null,
+        submitted_via_client_id: submittedViaClientId ? String(submittedViaClientId) : null,
         created_at: String(createdAt),
         rejection_reason: rejectionReason ? String(rejectionReason) : null,
         latest_judgement_risk: latestRisk ? String(latestRisk) : null,
@@ -339,7 +347,10 @@ class FakeMysqlClient {
     }
 
     if (normalized.includes('insert into skill_catalog_audit_entries')) {
-      const [id, skillId, skillVersion, proposalId, action, actor, beforeJson, afterJson, createdAt] = params;
+      const [
+        id, skillId, skillVersion, proposalId, action, actor,
+        actorPrincipalId, actorDisplayName, actorClientId, beforeJson, afterJson, createdAt,
+      ] = params;
       this.auditEntries.set(String(id), {
         id: String(id),
         skill_id: typeof skillId === 'string' ? skillId : null,
@@ -347,6 +358,9 @@ class FakeMysqlClient {
         proposal_id: typeof proposalId === 'string' ? proposalId : null,
         action: String(action),
         actor: String(actor),
+        actor_principal_id: typeof actorPrincipalId === 'string' ? actorPrincipalId : null,
+        actor_display_name: typeof actorDisplayName === 'string' ? actorDisplayName : null,
+        actor_client_id: typeof actorClientId === 'string' ? actorClientId : null,
         before_json: typeof beforeJson === 'string' ? beforeJson : null,
         after_json: typeof afterJson === 'string' ? afterJson : null,
         created_at: String(createdAt),

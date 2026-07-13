@@ -6,6 +6,9 @@ export class AuditEntry {
     readonly proposalId: string | null,
     readonly action: string,
     readonly actor: string,
+    readonly actorPrincipalId: string | null,
+    readonly actorDisplayName: string | null,
+    readonly actorClientId: string | null,
     readonly before: Record<string, unknown> | null,
     readonly after: Record<string, unknown> | null,
     readonly createdAt: Date
@@ -18,6 +21,9 @@ export class AuditEntry {
     proposalId?: string | null;
     action: string;
     actor: string;
+    actorPrincipalId?: string | null;
+    actorDisplayName?: string | null;
+    actorClientId?: string | null;
     before?: Record<string, unknown> | null;
     after?: Record<string, unknown> | null;
     createdAt?: Date;
@@ -29,6 +35,9 @@ export class AuditEntry {
       props.proposalId ?? null,
       props.action,
       props.actor,
+      props.actorPrincipalId ?? null,
+      props.actorDisplayName ?? null,
+      props.actorClientId ?? null,
       props.before ?? null,
       props.after ?? null,
       props.createdAt ?? new Date()

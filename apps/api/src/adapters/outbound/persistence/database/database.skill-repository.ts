@@ -75,6 +75,8 @@ interface SerializedProposal {
   entrypoint: string | null;
   status: ProposalStatus;
   submittedBy: string;
+  submittedByPrincipalId?: string | null;
+  submittedViaClientId?: string | null;
   createdAt: string;
   rejectionReason: string | null;
   contentDigest: string | null;
@@ -323,6 +325,8 @@ function serializeProposal(proposal: Proposal): SerializedProposal {
     entrypoint: proposal.entrypoint,
     status: proposal.status,
     submittedBy: proposal.submittedBy,
+    submittedByPrincipalId: proposal.submittedByPrincipalId,
+    submittedViaClientId: proposal.submittedViaClientId,
     createdAt: proposal.createdAt.toISOString(),
     rejectionReason: proposal.rejectionReason,
     contentDigest: proposal.contentDigest,
@@ -359,6 +363,8 @@ function deserializeProposal(payload: SerializedProposal): Proposal {
     entrypoint: payload.entrypoint,
     status: payload.status,
     submittedBy: payload.submittedBy,
+    submittedByPrincipalId: payload.submittedByPrincipalId ?? null,
+    submittedViaClientId: payload.submittedViaClientId ?? null,
     createdAt: new Date(payload.createdAt),
     rejectionReason: payload.rejectionReason,
     contentDigest: payload.contentDigest,

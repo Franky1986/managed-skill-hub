@@ -1,5 +1,8 @@
 # Spec: SimpleAdminAuth (HTTP Adapter)
 
+This adapter is active only when `ADMIN_AUTH_MODE=simple`. OIDC mode does not
+register the password login endpoint and uses `AdminOidcAuth.spec.md` instead.
+
 ## Purpose
 
 Protects admin endpoints in the MVP through simple login with username/password

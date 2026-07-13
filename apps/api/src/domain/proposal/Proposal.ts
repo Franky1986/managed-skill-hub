@@ -45,7 +45,9 @@ export class Proposal {
     readonly submittedBy: string,
     readonly createdAt: Date,
     readonly rejectionReason: string | null,
-    readonly contentDigest: string | null
+    readonly contentDigest: string | null,
+    readonly submittedByPrincipalId: string | null,
+    readonly submittedViaClientId: string | null
   ) {}
 
   static create(props: {
@@ -58,6 +60,8 @@ export class Proposal {
     capabilities?: string[];
     entrypoint?: string | null;
     submittedBy: string;
+    submittedByPrincipalId?: string | null;
+    submittedViaClientId?: string | null;
     createdAt?: Date;
   }): Proposal {
     if (!props.title || props.title.trim().length === 0) {
@@ -84,7 +88,9 @@ export class Proposal {
       props.submittedBy,
       props.createdAt ?? new Date(),
       null,
-      null
+      null,
+      props.submittedByPrincipalId ?? null,
+      props.submittedViaClientId ?? null
     );
   }
 
@@ -104,6 +110,8 @@ export class Proposal {
     createdAt: Date;
     rejectionReason?: string | null;
     contentDigest?: string | null;
+    submittedByPrincipalId?: string | null;
+    submittedViaClientId?: string | null;
   }): Proposal {
     if (!props.title || props.title.trim().length === 0) {
       throw new ValidationError('Proposal title is required');
@@ -130,7 +138,9 @@ export class Proposal {
       props.submittedBy,
       props.createdAt,
       props.rejectionReason?.trim() ?? null,
-      props.contentDigest ?? null
+      props.contentDigest ?? null,
+      props.submittedByPrincipalId ?? null,
+      props.submittedViaClientId ?? null
     );
   }
 
@@ -167,7 +177,9 @@ export class Proposal {
       this.submittedBy,
       this.createdAt,
       this.rejectionReason,
-      digest
+      digest,
+      this.submittedByPrincipalId,
+      this.submittedViaClientId
     );
   }
 
@@ -230,7 +242,9 @@ export class Proposal {
         capabilities: nextCapabilities,
         entrypoint: nextEntrypoint,
         files: this.files,
-      })
+      }),
+      this.submittedByPrincipalId,
+      this.submittedViaClientId
     );
   }
 
@@ -250,7 +264,9 @@ export class Proposal {
       this.submittedBy,
       this.createdAt,
       this.rejectionReason,
-      this.contentDigest
+      this.contentDigest,
+      this.submittedByPrincipalId,
+      this.submittedViaClientId
     );
   }
 
@@ -273,7 +289,9 @@ export class Proposal {
       this.submittedBy,
       this.createdAt,
       this.rejectionReason,
-      this.contentDigest
+      this.contentDigest,
+      this.submittedByPrincipalId,
+      this.submittedViaClientId
     );
   }
 
@@ -296,7 +314,9 @@ export class Proposal {
       this.submittedBy,
       this.createdAt,
       null,
-      this.contentDigest
+      this.contentDigest,
+      this.submittedByPrincipalId,
+      this.submittedViaClientId
     );
   }
 
@@ -319,7 +339,9 @@ export class Proposal {
       this.submittedBy,
       this.createdAt,
       reason?.trim() ?? null,
-      this.contentDigest
+      this.contentDigest,
+      this.submittedByPrincipalId,
+      this.submittedViaClientId
     );
   }
 
@@ -342,7 +364,9 @@ export class Proposal {
       this.submittedBy,
       this.createdAt,
       this.rejectionReason,
-      this.contentDigest
+      this.contentDigest,
+      this.submittedByPrincipalId,
+      this.submittedViaClientId
     );
   }
 

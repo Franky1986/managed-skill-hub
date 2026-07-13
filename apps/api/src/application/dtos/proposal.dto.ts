@@ -98,12 +98,10 @@ export interface ProposalPublicStatusDto {
   title: string;
   status: ProposalStatus;
   createdAt: Date;
-  submittedBy: string;
   latestJudgementRisk: JudgementOverallRisk | null;
   rejectionReason: string | null;
   convertedSkillId: string | null;
   contentDigest: string | null;
-  duplicateOfProposalId: string | null;
   duplicateOfSkillId: string | null;
   uploadFinalized: boolean;
   finalizeRequired: boolean;

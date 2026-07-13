@@ -69,6 +69,9 @@ export function ensureSqliteContentSchema(db: Database.Database): void {
       proposal_id TEXT,
       action TEXT NOT NULL,
       actor TEXT NOT NULL,
+      actor_principal_id TEXT,
+      actor_display_name TEXT,
+      actor_client_id TEXT,
       before_json TEXT,
       after_json TEXT,
       created_at TEXT NOT NULL
@@ -78,4 +81,19 @@ export function ensureSqliteContentSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_content_audit_entries_proposal
       ON content_audit_entries (proposal_id, created_at);
   `);
+  ensureAuditColumns(db);
+}
+
+function ensureAuditColumns(db: Database.Database): void {
+  const columns = db.prepare('PRAGMA table_info(content_audit_entries)').all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('actor_principal_id')) {
+    db.exec('ALTER TABLE content_audit_entries ADD COLUMN actor_principal_id TEXT;');
+  }
+  if (!names.has('actor_display_name')) {
+    db.exec('ALTER TABLE content_audit_entries ADD COLUMN actor_display_name TEXT;');
+  }
+  if (!names.has('actor_client_id')) {
+    db.exec('ALTER TABLE content_audit_entries ADD COLUMN actor_client_id TEXT;');
+  }
 }

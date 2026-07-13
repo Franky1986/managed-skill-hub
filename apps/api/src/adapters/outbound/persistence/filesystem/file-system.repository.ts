@@ -47,6 +47,8 @@ interface ProposalYaml {
   entrypoint?: string;
   status: string;
   submittedBy: string;
+  submittedByPrincipalId?: string | null;
+  submittedViaClientId?: string | null;
   createdAt: string;
   rejectionReason?: string | null;
   contentDigest?: string | null;
@@ -185,6 +187,8 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
       entrypoint: proposal.entrypoint ?? undefined,
       status: proposal.status,
       submittedBy: proposal.submittedBy,
+      submittedByPrincipalId: proposal.submittedByPrincipalId,
+      submittedViaClientId: proposal.submittedViaClientId,
       createdAt: proposal.createdAt.toISOString(),
       rejectionReason: proposal.rejectionReason,
       contentDigest: proposal.contentDigest,
@@ -241,6 +245,8 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
         ),
         status: doc.status as Proposal['status'],
         submittedBy: doc.submittedBy,
+        submittedByPrincipalId: doc.submittedByPrincipalId ?? null,
+        submittedViaClientId: doc.submittedViaClientId ?? null,
         createdAt: new Date(doc.createdAt),
         rejectionReason: doc.rejectionReason ?? null,
         contentDigest: doc.contentDigest ?? null,

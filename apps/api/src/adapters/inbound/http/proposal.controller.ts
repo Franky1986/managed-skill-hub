@@ -3,6 +3,7 @@ import { Container } from '../../../infrastructure/container';
 import { sendApiError, sendMappedApiError } from './error-response';
 import { AgentApiAuth, getAgentAuthContext } from './agent-api-auth';
 import { resolveArtifactMimeType } from '../../../domain/files/artifact-mime';
+import { ProposalActor } from '../../../application/ports/inbound/proposal-command.port';
 
 export type ProposalRateLimiter = ReturnType<typeof createProposalRateLimiter>;
 
@@ -333,6 +334,9 @@ function proposalRateLimitKey(request: FastifyRequest): string {
   if (auth?.scheme === 'bearer') {
     return `actor:${auth.actor}`;
   }
+  if (auth?.scheme === 'oidc') {
+    return `principal:${auth.principal.principalId}:client:${auth.principal.clientId ?? 'unknown'}`;
+  }
   return `ip:${request.ip}`;
 }
 
@@ -358,10 +362,17 @@ function readMultipartFieldValue(value: unknown): string | null {
   return null;
 }
 
-function resolveProposalActor(request: import('fastify').FastifyRequest): string {
+function resolveProposalActor(request: import('fastify').FastifyRequest): ProposalActor {
   const context = getAgentAuthContext(request);
   if (context?.scheme === 'bearer') {
     return context.actor;
+  }
+  if (context?.scheme === 'oidc') {
+    return {
+      label: context.principal.displayName ?? 'Authenticated user',
+      principalId: context.principal.principalId,
+      clientId: context.principal.clientId,
+    };
   }
   return (request.headers['x-actor'] as string) ?? 'agent';
 }

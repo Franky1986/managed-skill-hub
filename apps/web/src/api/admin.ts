@@ -78,9 +78,23 @@ export interface ObservabilitySnapshot {
 
 export interface AdminSessionResponse {
     username: string;
+    displayName: string | null;
+    roles: AdminRole[];
+    mode: AdminAuthMode;
+    expiresAt: string;
+}
+
+export type AdminRole = 'submitter' | 'reader' | 'reviewer' | 'publisher' | 'admin';
+export type AdminAuthMode = 'simple' | 'oidc';
+
+export interface AdminAuthMethodsResponse {
+    mode: AdminAuthMode;
+    loginStartUrl: string | null;
 }
 
 export const adminApi = {
+    getAuthMethods: () =>
+        apiClient.get<AdminAuthMethodsResponse>('/admin/auth/methods'),
     getSession: () =>
         apiClient.get<AdminSessionResponse>("/admin/session"),
     login: (username: string, password: string) =>

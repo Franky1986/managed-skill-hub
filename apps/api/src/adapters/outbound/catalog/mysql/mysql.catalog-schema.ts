@@ -90,6 +90,8 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
       entrypoint VARCHAR(1024) NULL,
       status VARCHAR(32) NOT NULL,
       submitted_by VARCHAR(255) NOT NULL,
+      submitted_by_principal_id CHAR(36) NULL,
+      submitted_via_client_id VARCHAR(512) NULL,
       created_at DATETIME NOT NULL,
       rejection_reason TEXT NULL,
       latest_judgement_risk VARCHAR(32) NULL,
@@ -122,11 +124,62 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
       proposal_id VARCHAR(64) NULL,
       action VARCHAR(255) NOT NULL,
       actor VARCHAR(255) NOT NULL,
+      actor_principal_id CHAR(36) NULL,
+      actor_display_name VARCHAR(512) NULL,
+      actor_client_id VARCHAR(512) NULL,
       before_json JSON NULL,
       after_json JSON NULL,
       created_at DATETIME NOT NULL,
       KEY idx_skill_catalog_audit_skill (skill_id, created_at),
       KEY idx_skill_catalog_audit_proposal (proposal_id, created_at)
+    ) ENGINE = InnoDB;
+    CREATE TABLE IF NOT EXISTS identity_principals (
+      id CHAR(36) PRIMARY KEY,
+      kind VARCHAR(32) NOT NULL,
+      display_name VARCHAR(512) NULL,
+      email VARCHAR(512) NULL,
+      first_seen_at DATETIME(3) NOT NULL,
+      last_seen_at DATETIME(3) NOT NULL,
+      disabled_at DATETIME(3) NULL,
+      KEY idx_identity_principals_last_seen (last_seen_at, id)
+    ) ENGINE = InnoDB;
+    CREATE TABLE IF NOT EXISTS identity_external_subjects (
+      issuer VARCHAR(1024) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      external_subject VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
+      principal_id CHAR(36) NOT NULL,
+      provider_client_id VARCHAR(512) NOT NULL,
+      first_seen_at DATETIME(3) NOT NULL,
+      last_seen_at DATETIME(3) NOT NULL,
+      UNIQUE KEY uq_identity_external_subject (issuer, external_subject),
+      KEY idx_identity_external_principal (principal_id),
+      CONSTRAINT fk_identity_external_principal
+        FOREIGN KEY (principal_id) REFERENCES identity_principals (id)
+        ON DELETE RESTRICT
+    ) ENGINE = InnoDB;
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      session_id_hash CHAR(64) PRIMARY KEY,
+      principal_id CHAR(36) NOT NULL,
+      roles_json JSON NOT NULL,
+      created_at DATETIME(3) NOT NULL,
+      last_seen_at DATETIME(3) NOT NULL,
+      expires_at DATETIME(3) NOT NULL,
+      revoked_at DATETIME(3) NULL,
+      revoked_reason VARCHAR(512) NULL,
+      KEY idx_admin_sessions_expiry (expires_at, session_id_hash),
+      CONSTRAINT fk_admin_session_principal
+        FOREIGN KEY (principal_id) REFERENCES identity_principals (id)
+        ON DELETE RESTRICT
+    ) ENGINE = InnoDB;
+    CREATE TABLE IF NOT EXISTS oidc_login_transactions (
+      state_hash CHAR(64) PRIMARY KEY,
+      nonce VARCHAR(512) NOT NULL,
+      pkce_verifier VARCHAR(512) NOT NULL,
+      redirect_uri VARCHAR(2048) NOT NULL,
+      return_path VARCHAR(1024) NOT NULL,
+      created_at DATETIME(3) NOT NULL,
+      expires_at DATETIME(3) NOT NULL,
+      consumed_at DATETIME(3) NULL,
+      KEY idx_oidc_login_transactions_expiry (expires_at, state_hash)
     ) ENGINE = InnoDB;
   `;
   const statements = schemaSql
@@ -136,5 +189,37 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
 
   for (const statement of statements) {
     await client.execute(`${statement};`);
+  }
+
+  await ensureMysqlColumn(
+    client,
+    'skill_catalog_proposals',
+    'submitted_by_principal_id',
+    'CHAR(36) NULL AFTER submitted_by'
+  );
+  await ensureMysqlColumn(
+    client,
+    'skill_catalog_proposals',
+    'submitted_via_client_id',
+    'VARCHAR(512) NULL AFTER submitted_by_principal_id'
+  );
+  await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_principal_id', 'CHAR(36) NULL AFTER actor');
+  await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_display_name', 'VARCHAR(512) NULL AFTER actor_principal_id');
+  await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_client_id', 'VARCHAR(512) NULL AFTER actor_display_name');
+}
+
+async function ensureMysqlColumn(
+  client: MysqlClient,
+  table: string,
+  column: string,
+  definition: string
+): Promise<void> {
+  const rows = await client.query<{ count: number | string }>(`
+    SELECT COUNT(*) AS count
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+  `, [table, column]);
+  if (Number(rows[0]?.count ?? 0) === 0) {
+    await client.execute(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
   }
 }

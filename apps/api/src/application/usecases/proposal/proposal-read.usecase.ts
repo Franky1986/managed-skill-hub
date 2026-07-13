@@ -91,13 +91,10 @@ export class ProposalReadUseCase {
     const adminReviewDone = proposal.status === 'approved' || proposal.status === 'rejected' || proposal.status === 'converted' || convertedSkillId !== null;
     const uploadFinalized = proposal.status !== ProposalStatus.IN_UPLOAD;
 
-    let duplicateOfProposalId: string | null = null;
     let duplicateOfSkillId: string | null = null;
     if (this.catalog && proposal.contentDigest) {
       const duplicateProposal = await this.catalog.findProposalByContentDigest(proposal.contentDigest, proposalId);
-      if (duplicateProposal) {
-        duplicateOfProposalId = duplicateProposal.id;
-      } else {
+      if (!duplicateProposal) {
         const duplicateSkill = await this.catalog.findPublishedSkillByContentDigest(proposal.contentDigest);
         if (duplicateSkill) {
           duplicateOfSkillId = duplicateSkill.skillId;
@@ -111,12 +108,10 @@ export class ProposalReadUseCase {
       title: proposal.title,
       status: proposal.status as ProposalStatus,
       createdAt: proposal.createdAt,
-      submittedBy: proposal.submittedBy,
       latestJudgementRisk: proposal.latestJudgementRisk,
       rejectionReason: proposal.rejectionReason,
       convertedSkillId,
       contentDigest: proposal.contentDigest,
-      duplicateOfProposalId,
       duplicateOfSkillId,
       uploadFinalized,
       finalizeRequired: !uploadFinalized,

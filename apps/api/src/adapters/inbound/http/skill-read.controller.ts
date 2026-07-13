@@ -201,6 +201,9 @@ function buildDiscoveryResponse(request: import('fastify').FastifyRequest, conta
   ].join(' ');
 
   const authMetadata = agentAuth.metadata();
+  const publicReadOidc = authMetadata.authSchemes.some(
+    (scheme) => scheme.type === 'oauth2' && scheme.appliesTo.includes('public-read')
+  );
   return {
     name: 'managed-skill-hub',
     registryId: authMetadata.registryId,
@@ -252,7 +255,9 @@ function buildDiscoveryResponse(request: import('fastify').FastifyRequest, conta
       conversationLanguage:
         'When communicating with the user, use the language the user is currently using unless the user explicitly asks for another language.',
       readPath: authMetadata.readAuthRequired
-        ? 'Read endpoints require Authorization: Bearer <read token>. Use /skills, /skills/search, /categories and /tags to discover published skills, then /skills/:id/files to inspect artifacts.'
+        ? publicReadOidc
+          ? 'Read endpoints require an Authentik access token with the advertised public-read scope. Complete Device Authorization through the trusted metadata, then use the access token as Authorization: Bearer <token>.'
+          : 'Read endpoints require Authorization: Bearer <read token>. Use /skills, /skills/search, /categories and /tags to discover published skills, then /skills/:id/files to inspect artifacts.'
         : 'All read endpoints are open. Use /skills, /skills/search, /categories and /tags to discover published skills, then /skills/:id/files to inspect artifacts.',
       auth: authMetadata,
       proposalPath:
@@ -521,10 +526,36 @@ function shellQuote(value: string): string {
 }
 function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth) {
   const authMetadata = agentAuth.metadata();
-  const agentAuthRequired = Boolean(authMetadata.credentialSetupScriptUrl);
+  const oidcScheme = authMetadata.authSchemes.find(
+    (scheme) => scheme.type === 'oauth2' && (
+      scheme.appliesTo.includes('proposal')
+      || scheme.appliesTo.includes('public-read')
+      || scheme.appliesTo.includes('discovery')
+    )
+  );
+  const agentAuthRequired = authMetadata.proposalAuthRequired
+    || authMetadata.readAuthRequired
+    || authMetadata.discoveryAuthRequired;
   const stepOffset = agentAuthRequired ? 1 : 0;
   const authSetupStep = agentAuthRequired
-    ? [
+    ? oidcScheme?.type === 'oauth2'
+      ? [
+        {
+          step: 1,
+          title: 'Authorize the agent through the human login link',
+          purpose: 'A human delegates proposal access without sharing credentials or tokens in chat.',
+          checks: [
+            'Read /discover and use only the advertised issuer, deviceAuthorizationEndpoint, tokenEndpoint, clientId and scopes.',
+            'Complete package preflight before authentication where possible.',
+            'POST the explicit clientId and scopes to deviceAuthorizationEndpoint.',
+            'Show verification_uri_complete as a clickable link to the human. Never show or paste device_code, access_token, ID token, refresh token or credentials in chat.',
+            'Keep device_code only in agent process memory and poll tokenEndpoint according to interval, authorization_pending, slow_down and expires_in.',
+            'Use the returned access_token only as Authorization: Bearer <token> for advertised areas. Never use the ID token for API authorization.',
+            'Start a new Device Authorization transaction when the code or access token expires.',
+          ],
+        },
+      ]
+      : [
       {
         step: 1,
         title: 'Handle registry authentication outside chat',

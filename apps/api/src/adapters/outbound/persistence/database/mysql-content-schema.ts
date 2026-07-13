@@ -67,6 +67,9 @@ export async function ensureMysqlContentSchema(client: MysqlClient): Promise<voi
       proposal_id VARCHAR(64) NULL,
       action VARCHAR(255) NOT NULL,
       actor VARCHAR(255) NOT NULL,
+      actor_principal_id CHAR(36) NULL,
+      actor_display_name VARCHAR(512) NULL,
+      actor_client_id VARCHAR(512) NULL,
       before_json JSON NULL,
       after_json JSON NULL,
       created_at VARCHAR(32) NOT NULL,
@@ -77,5 +80,18 @@ export async function ensureMysqlContentSchema(client: MysqlClient): Promise<voi
   const statements = schemaSql.split(';').map((statement) => statement.trim()).filter(Boolean);
   for (const statement of statements) {
     await client.execute(statement + ';');
+  }
+  await ensureMysqlColumn(client, 'actor_principal_id', 'CHAR(36) NULL AFTER actor');
+  await ensureMysqlColumn(client, 'actor_display_name', 'VARCHAR(512) NULL AFTER actor_principal_id');
+  await ensureMysqlColumn(client, 'actor_client_id', 'VARCHAR(512) NULL AFTER actor_display_name');
+}
+
+async function ensureMysqlColumn(client: MysqlClient, column: string, definition: string): Promise<void> {
+  const rows = await client.query<{ count: number | string }>(`
+    SELECT COUNT(*) AS count FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'content_audit_entries' AND column_name = ?
+  `, [column]);
+  if (Number(rows[0]?.count ?? 0) === 0) {
+    await client.execute(`ALTER TABLE content_audit_entries ADD COLUMN \`${column}\` ${definition}`);
   }
 }

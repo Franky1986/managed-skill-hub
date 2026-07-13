@@ -81,6 +81,9 @@ export interface CatalogAuditEntryRecord {
   proposalId: string | null;
   action: string;
   actor: string;
+  actorPrincipalId: string | null;
+  actorDisplayName: string | null;
+  actorClientId: string | null;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
   createdAt: Date;
@@ -97,6 +100,8 @@ export interface CatalogProposalRecord {
   entrypoint: string | null;
   status: ProposalStatus;
   submittedBy: string;
+  submittedByPrincipalId: string | null;
+  submittedViaClientId: string | null;
   createdAt: Date;
   rejectionReason: string | null;
   latestJudgementRisk: JudgementOverallRisk | null;

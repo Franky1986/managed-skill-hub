@@ -3,6 +3,7 @@ import {
   FinalizeProposalUploadResult,
   ProposalCommandPort,
   ProposalMetadataUpdate,
+  ProposalActor,
   ProposalUploadFinding,
   SubmitProposalDraft,
   ValidateProposalUploadResult,
@@ -52,7 +53,8 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     private readonly autoPublish?: AutoPublishProposalUseCase
   ) {}
 
-  async submitProposal(draft: SubmitProposalDraft, actor: string): Promise<Proposal> {
+  async submitProposal(draft: SubmitProposalDraft, actor: ProposalActor): Promise<Proposal> {
+    const actorContext = normalizeProposalActor(actor);
     const normalizedSkillId = draft.skillId ? draft.skillId.trim().toLowerCase() : null;
     if (normalizedSkillId) {
       try {
@@ -70,7 +72,9 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       tags: draft.tags,
       capabilities: draft.capabilities,
       entrypoint: draft.entrypoint ?? null,
-      submittedBy: actor,
+      submittedBy: actorContext.label,
+      submittedByPrincipalId: actorContext.principalId,
+      submittedViaClientId: actorContext.clientId,
     });
 
     await this.repo.saveProposal(proposal);
@@ -79,7 +83,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       AuditEntry.create({
         proposalId: proposal.id,
         action: 'submit_proposal',
-        actor,
+        ...auditActor(actorContext),
         after: { id: proposal.id, title: proposal.title, status: proposal.status },
       })
     );
@@ -87,12 +91,13 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     return proposal;
   }
 
-  async updateProposalMetadata(proposalId: string, update: ProposalMetadataUpdate, actor: string): Promise<Proposal> {
+  async updateProposalMetadata(proposalId: string, update: ProposalMetadataUpdate, actor: ProposalActor): Promise<Proposal> {
+    const actorContext = normalizeProposalActor(actor);
     const proposal = await this.loadProposal(proposalId);
     if (!proposal) {
       throw new ValidationError(`Proposal ${proposalId} not found`);
     }
-    this.assertProposalOwner(proposal, actor);
+    this.assertProposalOwner(proposal, actorContext);
     if (proposal.status !== 'in_upload') {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
@@ -106,7 +111,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       AuditEntry.create({
         proposalId: proposal.id,
         action: 'update_proposal_metadata',
-        actor,
+        ...auditActor(actorContext),
         before: {
           title: proposal.title,
           description: proposal.description,
@@ -129,12 +134,13 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     return updated;
   }
 
-  async attachFile(proposalId: string, file: { path: string; content: Buffer; mimeType: string }, actor: string): Promise<Proposal> {
+  async attachFile(proposalId: string, file: { path: string; content: Buffer; mimeType: string }, actor: ProposalActor): Promise<Proposal> {
+    const actorContext = normalizeProposalActor(actor);
     const proposal = await this.loadProposal(proposalId);
     if (!proposal) {
       throw new ValidationError(`Proposal ${proposalId} not found`);
     }
-    this.assertProposalOwner(proposal, actor);
+    this.assertProposalOwner(proposal, actorContext);
     if (proposal.status !== 'in_upload') {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
@@ -171,7 +177,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       AuditEntry.create({
         proposalId: proposal.id,
         action: replacesExistingFile ? 'replace_proposal_file' : 'attach_proposal_file',
-        actor,
+        ...auditActor(actorContext),
         after: { proposalId, file: stored.path, sizeBytes: stored.sizeBytes, status: updated.status, replaced: replacesExistingFile },
       })
     );
@@ -179,12 +185,13 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     return updated;
   }
 
-  async finalizeUpload(proposalId: string, actor: string): Promise<FinalizeProposalUploadResult> {
+  async finalizeUpload(proposalId: string, actor: ProposalActor): Promise<FinalizeProposalUploadResult> {
+    const actorContext = normalizeProposalActor(actor);
     const proposal = await this.loadProposal(proposalId);
     if (!proposal) {
       throw new ValidationError(`Proposal ${proposalId} not found`);
     }
-    this.assertProposalOwner(proposal, actor);
+    this.assertProposalOwner(proposal, actorContext);
     if (proposal.status !== 'in_upload') {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
@@ -205,15 +212,15 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       AuditEntry.create({
         proposalId,
         action: 'finalize_proposal_upload',
-        actor,
+        ...auditActor(actorContext),
         before: { status: proposal.status, fileCount: proposal.files.length },
         after: { status: updated.status, fileCount: updated.files.length },
       })
     );
 
-    const extractedByPath = await this.extractProposalArtifacts(updated, actor);
-    updated = await this.judgeProposalText(updated, actor);
-    updated = await this.judgeProposalFiles(updated, actor, extractedByPath);
+    const extractedByPath = await this.extractProposalArtifacts(updated, actorContext);
+    updated = await this.judgeProposalText(updated, actorContext);
+    updated = await this.judgeProposalFiles(updated, actorContext, extractedByPath);
     const autoPublish = this.autoPublish
       ? await this.autoPublish.execute(updated.id)
       : {
@@ -234,12 +241,13 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     };
   }
 
-  async validateUpload(proposalId: string, actor: string): Promise<ValidateProposalUploadResult> {
+  async validateUpload(proposalId: string, actor: ProposalActor): Promise<ValidateProposalUploadResult> {
+    const actorContext = normalizeProposalActor(actor);
     const proposal = await this.loadProposal(proposalId);
     if (!proposal) {
       throw new ValidationError(`Proposal ${proposalId} not found`);
     }
-    this.assertProposalOwner(proposal, actor);
+    this.assertProposalOwner(proposal, actorContext);
     if (proposal.status !== 'in_upload') {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
@@ -270,12 +278,13 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     };
   }
 
-  async deleteProposal(proposalId: string, actor: string) {
+  async deleteProposal(proposalId: string, actor: ProposalActor) {
+    const actorContext = normalizeProposalActor(actor);
     const proposal = await this.loadProposal(proposalId);
     if (!proposal) {
       throw new ValidationError(`Proposal ${proposalId} not found`);
     }
-    this.assertProposalOwner(proposal, actor);
+    this.assertProposalOwner(proposal, actorContext);
     if (proposal.status !== 'in_upload') {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
@@ -284,7 +293,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       AuditEntry.create({
         proposalId,
         action: 'delete_proposal',
-        actor,
+        ...auditActor(actorContext),
         before: { status: proposal.status },
       })
     );
@@ -306,13 +315,22 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     return null;
   }
 
-  private assertProposalOwner(proposal: Proposal, actor: string): void {
-    if (proposal.submittedBy !== actor) {
+  private assertProposalOwner(
+    proposal: Proposal,
+    actor: ReturnType<typeof normalizeProposalActor>
+  ): void {
+    const ownerMatches = proposal.submittedByPrincipalId
+      ? actor.principalId === proposal.submittedByPrincipalId
+      : proposal.submittedBy === actor.label;
+    if (!ownerMatches) {
       throw new ForbiddenError(`Proposal ${proposal.id} can only be changed by its submitting actor.`);
     }
   }
 
-  private async judgeProposalText(proposal: Proposal, actor: string): Promise<Proposal> {
+  private async judgeProposalText(
+    proposal: Proposal,
+    actor: ReturnType<typeof normalizeProposalActor>
+  ): Promise<Proposal> {
     let updated = proposal;
     try {
       const proposalJudgement = await this.judger.judge({
@@ -329,7 +347,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
         AuditEntry.create({
           proposalId: proposal.id,
           action: 'proposal_judgement_failed',
-          actor,
+          ...auditActor(actor),
           after: { error: (error as Error).message },
         })
       );
@@ -339,7 +357,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
 
   private async extractProposalArtifacts(
     proposal: Proposal,
-    actor: string
+    actor: ReturnType<typeof normalizeProposalActor>
   ): Promise<Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>> {
     const extractedByPath = new Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>();
 
@@ -365,7 +383,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           AuditEntry.create({
             proposalId: proposal.id,
             action: 'extract_proposal_file_failed',
-            actor,
+            ...auditActor(actor),
             after: { file: file.path, error: (error as Error).message },
           })
         );
@@ -377,7 +395,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
 
   private async judgeProposalFiles(
     proposal: Proposal,
-    actor: string,
+    actor: ReturnType<typeof normalizeProposalActor>,
     extractedByPath: Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>
   ): Promise<Proposal> {
     let updated = proposal;
@@ -411,7 +429,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           AuditEntry.create({
             proposalId: proposal.id,
             action: 'file_judgement_failed',
-            actor,
+            ...auditActor(actor),
             after: { file: file.path, error: (error as Error).message },
           })
         );
@@ -612,6 +630,25 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
 
     return findings;
   }
+}
+
+function normalizeProposalActor(actor: ProposalActor): {
+  label: string;
+  principalId: string | null;
+  clientId: string | null;
+} {
+  return typeof actor === 'string'
+    ? { label: actor, principalId: null, clientId: null }
+    : { label: actor.label, principalId: actor.principalId, clientId: actor.clientId };
+}
+
+function auditActor(actor: ReturnType<typeof normalizeProposalActor>) {
+  return {
+    actor: actor.label,
+    actorPrincipalId: actor.principalId,
+    actorDisplayName: actor.label,
+    actorClientId: actor.clientId,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,12 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { Container } from '../../../infrastructure/container';
-import { SimpleAdminAuth, adminGuard } from './simple-admin-auth';
+import { AdminAuth, adminGuard } from './admin-auth';
 import { ObservabilityExportFormat } from '../../../application/usecases/observability/export-observability.usecase';
 
 export function registerAdminObservabilityRoutes(
   app: FastifyInstance,
   container: Container,
-  auth: SimpleAdminAuth
+  auth: AdminAuth
 ): void {
   const guard = { preHandler: adminGuard(auth) };
 

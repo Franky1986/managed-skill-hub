@@ -16,12 +16,42 @@ import { registerAdminProposalRoutes } from './adapters/inbound/http/admin-propo
 import { registerApiErrorHandler } from './adapters/inbound/http/error-response';
 import { registerAdminObservabilityRoutes } from './adapters/inbound/http/admin-observability.controller';
 import { registerHttpObservability } from './adapters/inbound/http/http-observability';
+import { OidcAdminAuth } from './adapters/inbound/http/oidc-admin-auth';
+import { AdminOidcIdentityProvider } from './adapters/outbound/identity/admin-oidc.identity-provider';
+import { AdminAuth } from './adapters/inbound/http/admin-auth';
+import { AuthentikAccessTokenVerifier } from './adapters/outbound/identity/authentik-access-token.verifier';
 
 async function start() {
   const config = loadConfig();
   const container = await buildContainer(config);
-  const auth = new SimpleAdminAuth(config);
-  const agentAuth = new AgentApiAuth(config);
+  const auth: AdminAuth = config.adminAuthMode === 'oidc'
+    ? new OidcAdminAuth(config, container.adminSessions, container.principalRepository)
+    : new SimpleAdminAuth(config);
+  const adminOidcProvider = config.adminAuthMode === 'oidc'
+    ? new AdminOidcIdentityProvider(config)
+    : undefined;
+  await adminOidcProvider?.initialize();
+  const oidcAdminRoutes = adminOidcProvider
+    ? {
+      config,
+      provider: adminOidcProvider,
+      transactions: container.oidcLoginTransactions,
+      principalProjection: container.principalProjection,
+    }
+    : undefined;
+  const agentTokenVerifier = [
+    config.discoveryAuthMode,
+    config.publicReadAuthMode,
+    config.proposalAuthMode,
+  ].includes('oidc')
+    ? new AuthentikAccessTokenVerifier(
+      config,
+      container.principalProjection,
+      container.authorizationPolicy
+    )
+    : undefined;
+  await agentTokenVerifier?.initialize();
+  const agentAuth = new AgentApiAuth(config, agentTokenVerifier);
   const proposalRateLimiter = createProposalRateLimiter(config);
 
   const app = Fastify({
@@ -59,7 +89,7 @@ async function start() {
       registerSkillReadRoutes(apiApp, container, agentAuth);
       registerProposalRoutes(apiApp, container, agentAuth, proposalRateLimiter);
       registerJudgementRoutes(apiApp, container, auth);
-      registerAdminAuthRoutes(apiApp, auth);
+      registerAdminAuthRoutes(apiApp, auth, oidcAdminRoutes);
       registerAdminSkillRoutes(apiApp, container, auth);
       registerAdminProposalRoutes(apiApp, container, auth);
       registerAdminObservabilityRoutes(apiApp, container, auth);
@@ -71,7 +101,7 @@ async function start() {
   registerSkillReadRoutes(app, container, agentAuth);
   registerProposalRoutes(app, container, agentAuth, proposalRateLimiter);
   registerJudgementRoutes(app, container, auth);
-  registerAdminAuthRoutes(app, auth);
+  registerAdminAuthRoutes(app, auth, oidcAdminRoutes);
   registerAdminSkillRoutes(app, container, auth);
   registerAdminProposalRoutes(app, container, auth);
   registerAdminObservabilityRoutes(app, container, auth);

@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfigurationError } from '../domain/errors';
-import { loadConfig, parseAgentAuthMode, parseCatalogProvider, parseContentStorageProvider, parseJudgerProvider, parseSearchProvider, resolveDataDir } from './config';
+import {
+  loadConfig,
+  parseAdminAuthMode,
+  parseAgentAuthMode,
+  parseCatalogProvider,
+  parseContentStorageProvider,
+  parseJudgerProvider,
+  parseOidcAccessPolicy,
+  parseSearchProvider,
+  resolveDataDir,
+} from './config';
 
 describe('resolveDataDir', () => {
   it('keeps absolute paths unchanged', () => {
@@ -295,7 +305,132 @@ describe('agent api auth config', () => {
   it('rejects unsupported agent auth modes', () => {
     expect(parseAgentAuthMode(undefined, 'PUBLIC_READ_AUTH_MODE')).toBe('none');
     expect(parseAgentAuthMode('bearer', 'PUBLIC_READ_AUTH_MODE')).toBe('bearer');
+    expect(parseAgentAuthMode('oidc', 'PUBLIC_READ_AUTH_MODE')).toBe('oidc');
     expect(() => parseAgentAuthMode('oauth', 'PUBLIC_READ_AUTH_MODE')).toThrow(ConfigurationError);
+  });
+
+  it('loads independently mixed OIDC and legacy agent modes', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('DISCOVERY_AUTH_MODE', 'none');
+    vi.stubEnv('PUBLIC_READ_AUTH_MODE', 'bearer');
+    vi.stubEnv('PUBLIC_READ_BEARER_TOKEN', 'read-token');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_AGENT_ISSUER', 'https://auth.example.test/application/o/agent/');
+    vi.stubEnv('OIDC_AGENT_CLIENT_ID', 'managedskillhub-agent-device');
+    vi.stubEnv('OIDC_PROPOSAL_SCOPE', 'managedskillhub:proposals');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    const config = loadConfig();
+
+    expect(config.discoveryAuthMode).toBe('none');
+    expect(config.publicReadAuthMode).toBe('bearer');
+    expect(config.proposalAuthMode).toBe('oidc');
+    expect(config.oidcAgentBaseScopes).toEqual(['openid', 'profile', 'email']);
+  });
+
+  it('requires issuer, client, and area scope for each OIDC agent area', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'oidc');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/OIDC_AGENT_ISSUER/);
+
+    vi.stubEnv('OIDC_AGENT_ISSUER', 'https://auth.example.test/application/o/agent/');
+    expect(() => loadConfig()).toThrow(/OIDC_AGENT_CLIENT_ID/);
+
+    vi.stubEnv('OIDC_AGENT_CLIENT_ID', 'managedskillhub-agent-device');
+    expect(() => loadConfig()).toThrow(/OIDC_PROPOSAL_SCOPE/);
+  });
+
+  it('rejects unsafe issuer URLs and permits explicit localhost HTTP', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_AGENT_CLIENT_ID', 'managedskillhub-agent-device');
+    vi.stubEnv('OIDC_PROPOSAL_SCOPE', 'managedskillhub:proposals');
+    vi.stubEnv('OIDC_AGENT_ISSUER', 'http://auth.example.test/application/o/agent/');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/HTTPS/);
+
+    vi.stubEnv('OIDC_AGENT_ISSUER', 'https://user:pass@auth.example.test/application/o/agent/');
+    expect(() => loadConfig()).toThrow(/credentials/);
+
+    vi.stubEnv('OIDC_AGENT_ISSUER', 'http://127.0.0.1:9000/application/o/agent/');
+    expect(loadConfig().oidcAgentIssuer).toContain('127.0.0.1');
+  });
+
+  it('rejects required-group policies without configured groups', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('OIDC_PROPOSAL_ACCESS', 'required_groups');
+    vi.stubEnv('OIDC_PROPOSAL_GROUPS', ',');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/OIDC_PROPOSAL_GROUPS/);
+  });
+});
+
+describe('admin auth config', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('parses supported admin modes and OIDC access policies', () => {
+    expect(parseAdminAuthMode(undefined)).toBe('simple');
+    expect(parseAdminAuthMode('oidc')).toBe('oidc');
+    expect(() => parseAdminAuthMode('oauth')).toThrow(ConfigurationError);
+    expect(parseOidcAccessPolicy(undefined, 'OIDC_PROPOSAL_ACCESS')).toBe('all_authenticated_users');
+    expect(parseOidcAccessPolicy('required_groups', 'OIDC_PROPOSAL_ACCESS')).toBe('required_groups');
+    expect(() => parseOidcAccessPolicy('everyone', 'OIDC_PROPOSAL_ACCESS')).toThrow(ConfigurationError);
+  });
+
+  it('loads a complete OIDC admin profile without simple credentials', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('ADMIN_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_ADMIN_ISSUER', 'https://auth.example.test/application/o/admin/');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_ID', 'managedskillhub-admin-web');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_SECRET', 'test-client-secret');
+    vi.stubEnv('OIDC_ADMIN_REDIRECT_URI', 'https://skills.example.test/api/admin/auth/oidc/callback');
+    vi.stubEnv('OIDC_ADMIN_SUBJECTS', 'user-uuid-1');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    const config = loadConfig();
+
+    expect(config.adminAuthMode).toBe('oidc');
+    expect(config.oidcAdminSubjects).toEqual(['user-uuid-1']);
+    expect(config.oidcAdminScopes).toContain('openid');
+  });
+
+  it('rejects incomplete OIDC admin profiles and implicit password fallback', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('ADMIN_AUTH_MODE', 'oidc');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/OIDC_ADMIN_ISSUER/);
+
+    vi.stubEnv('OIDC_ADMIN_ISSUER', 'https://auth.example.test/application/o/admin/');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_ID', 'managedskillhub-admin-web');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_SECRET', 'test-client-secret');
+    vi.stubEnv('OIDC_ADMIN_REDIRECT_URI', 'https://skills.example.test/api/admin/auth/oidc/callback');
+    vi.stubEnv('ADMIN_USER', 'admin');
+    expect(() => loadConfig()).toThrow(/implicit simple-admin fallback/);
+  });
+
+  it('requires an admin subject or group and an openid scope', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('ADMIN_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_ADMIN_ISSUER', 'https://auth.example.test/application/o/admin/');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_ID', 'managedskillhub-admin-web');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_SECRET', 'test-client-secret');
+    vi.stubEnv('OIDC_ADMIN_REDIRECT_URI', 'https://skills.example.test/api/admin/auth/oidc/callback');
+    vi.stubEnv('OIDC_ADMIN_SCOPES', 'profile,email');
+    vi.stubEnv('OIDC_ADMIN_GROUPS', ',');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/OIDC_ADMIN_SCOPES/);
+
+    vi.stubEnv('OIDC_ADMIN_SCOPES', 'openid,profile');
+    expect(() => loadConfig()).toThrow(/OIDC_ADMIN_SUBJECTS or OIDC_ADMIN_GROUPS/);
   });
 });
 
