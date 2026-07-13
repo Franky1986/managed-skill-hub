@@ -1,0 +1,4456 @@
+openapi: 3.1.0
+info:
+  title: ManagedSkillHub API
+  description: Self-hosted skill registry for AI agents.
+  version: 0.1.0
+servers:
+  - url: http://localhost:3040
+    description: Local API server
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      tags:
+        - Health
+      summary: API Healthcheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /discover:
+    get:
+      operationId: discover
+      tags:
+        - Discovery
+      summary: Registry discovery endpoint
+      description: >-
+        Returns registry identity, canonical API base URL, entrypoints, and runtime auth requirements. May require
+        discoveryBearer when DISCOVERY_AUTH_MODE=bearer.
+      responses:
+        '200':
+          description: Registry metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /howToPropose:
+    get:
+      operationId: getHowToPropose
+      tags:
+        - Proposals
+      summary: Get proposal workflow instructions for agents
+      description: >-
+        Returns proposal workflow and runtime proposal auth guidance. May require discoveryBearer when
+        DISCOVERY_AUTH_MODE=bearer.
+      responses:
+        '200':
+          description: Recommended proposal workflow for agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HowToProposeResponse'
+              examples:
+                default:
+                  value:
+                    id: how-to-propose
+                    title: Proposal workflow for agents
+                    summary: Mandatory preflight before submit
+                    description: >-
+                      Read this endpoint before every proposal upload. Agents must communicate with the user in the
+                      language the user is currently using, validate the local package, normalize it only when needed,
+                      ensure SKILL.md is the root entrypoint, keep dependency installation artifacts out of the uploaded
+                      package, verify self-contained references, scan for credentials or PII, and only then continue to
+                      duplicate prechecks and submission.
+                    conversationLanguage: >-
+                      When communicating with the user, use the language the user is currently using unless the user
+                      explicitly asks for another language.
+                    metadataLanguageGuidance: >-
+                      Proposal metadata should preferably be written in English: title, description, category, tags,
+                      capabilities, useWhen and doNotUseWhen. Uploaded content files may be in any language.
+                    escalationRule: >-
+                      Do not proceed with proposal creation while the package is structurally ambiguous, references are
+                      broken, sensitive content is present, or duplicate intent is unconfirmed.
+                    duplicateConfirmationRule:
+                      appliesWhen:
+                        - exactDuplicateProposalId is set
+                        - exactDuplicateSkillId is set
+                        - skillIdCollision.exists is true
+                        - similarMatches contains a strong title/description intent match
+                      requiredUserFacingSummary:
+                        - >-
+                          Name each relevant duplicate candidate with kind, id, skillId/title when available,
+                          status/version when available, and similarity score for similar matches.
+                        - >-
+                          Summarize the core overlap including matching title or intent, shared category, shared
+                          tags/capabilities, matching entrypoint, and exact content digest when available.
+                        - >-
+                          Summarize what would change if uploaded, including resolution option, metadata changes, file
+                          additions/removals, or changed file fingerprints.
+                        - Provide a concise diff from duplicate-check differences and local file fingerprint comparison.
+                      confirmationRequired: >-
+                        Ask the user explicitly whether to upload despite the duplicate or choose one of the returned
+                        resolutionOptions. Do not call POST /proposals until the user confirms.
+                    normalizationRules:
+                      entrypointFile: SKILL.md
+                      packageRoot: proposal package root
+                      normalizeOnlyWhenNeeded: true
+                      preserveUsefulSubfolders: true
+                      transparentToSubmitter: true
+                    packageHandling:
+                      principle: >-
+                        Upload source artifacts and setup manifests, not initialized package-manager outputs. The later
+                        consumer of the skill is responsible for dependency installation in their own environment.
+                      disallowedInstalledPaths:
+                        - node_modules/
+                        - .venv/
+                        - venv/
+                        - vendor/
+                        - dist-packages/
+                        - site-packages/
+                      allowedManifestFiles:
+                        - package.json
+                        - package-lock.json
+                        - pnpm-lock.yaml
+                        - yarn.lock
+                        - pyproject.toml
+                        - poetry.lock
+                        - requirements.txt
+                        - Pipfile.lock
+                      submitterResponsibility: >-
+                        The uploaded proposal may document how dependencies should be installed later, but it should not
+                        contain preinstalled packages or environment snapshots.
+                    requiredSteps:
+                      - step: 1
+                        title: Read this workflow first
+                        checks:
+                          - GET /howToPropose is mandatory before POST /proposals
+                      - step: 2
+                        title: Use the user conversation language
+                        checks:
+                          - Use English API and contract fields as documented
+                          - Respond to the user in the language they are currently using
+                      - step: 3
+                        title: Inspect the local package
+                        checks:
+                          - Determine whether the package already matches the upload contract
+                          - >-
+                            Detect installed dependency folders such as node_modules, .venv, venv, vendor,
+                            dist-packages, or site-packages
+                          - >-
+                            Detect references outside the effective skill root, such as parent-directory references,
+                            absolute local paths, IDE/agent workspace folders, command folders, generated-output
+                            folders, or other project-root-relative paths
+                          - >-
+                            If an outside-root reference points to a required artifact, copy it into the
+                            temporary upload package and rewrite the reference to a package-relative path
+                          - >-
+                            If a runtime command reference points to .cursor/commands, .codex/commands, or
+                            .claude/commands and is relevant to using the skill, copy or merge it into
+                            commands/ and add commands/manifest.json
+                          - >-
+                            If the source package already contains commands/, preserve existing command
+                            files, compare collisions, and do not silently overwrite command artifacts
+                          - Keep dependency manifests and lockfiles, but do not upload installed package trees
+                      - step: 4
+                        title: Normalize only when needed
+                        checks:
+                          - Final entrypoint must be SKILL.md in the package root
+                          - Preserve meaningful subfolders such as commands/, scripts/, docs/, templates/, examples/, assets/, or prompts/
+                          - Rewrite workspace-root, IDE-specific, agent-specific, and generated-output references to package-relative references in the temporary upload copy
+                          - Rewrite active runtime command references to commands/<name>.md when the command ships with the package
+                          - Strip installed dependency folders from the temporary upload package
+                      - step: 5
+                        title: Prefer English proposal metadata
+                        checks:
+                          - Prefer English for title, description, category, tags and capabilities
+                          - Uploaded content files may be in any language
+                      - step: 6
+                        title: Validate self-contained and safe content
+                        checks:
+                          - No required artifact reference may still resolve outside the temporary upload package root
+                          - Broken references, credentials or PII must block the upload
+                      - step: 7
+                        title: Build and prove the final upload package before network upload
+                        checks:
+                          - Create a temporary upload package if normalization was needed
+                          - Recursively scan every readable file in the final package before POST /proposals
+                          - >-
+                            Scan for .cursor/skills, .cursor/commands, .codex/commands,
+                            .claude/commands, CursorProjects, /Users, ../, absolute local paths,
+                            Markdown links, Markdown inline-code file paths, and JSON path/source fields
+                          - >-
+                            Verify every required package reference exists, runtime output examples use
+                            placeholders, and relevant command shortcuts are packaged under commands/
+                          - Compute sha256 values from the final temporary upload package after normalization
+                          - Do not call POST /proposals until this local package proof is complete
+                      - step: 8
+                        title: Search the public catalog exploratively
+                        checks:
+                          - GET /skills/search?q=<title>&mode=keyword
+                          - GET /skills/search?q=<short description keywords>&mode=keyword
+                          - Inspect matching descriptions and public files when relevant
+                      - step: 9
+                        title: Run duplicate precheck
+                        checks:
+                          - POST /proposals/check-duplicate
+                          - Stop on exact duplicates, skill-id collisions, or strong intent matches
+                          - >-
+                            Show duplicate candidate, overlap, intended resolution, and concise
+                            metadata/file-fingerprint diff before asking
+                      - step: 10
+                        title: Create proposal only after confirmation
+                        checks:
+                          - Final temporary upload package is complete, locally scanned, normalized, and hashed
+                          - POST /proposals opens an in_upload proposal
+                          - POST /proposals/{id}/files attaches files within configured limits
+                          - POST /proposals/{id}/validate-upload returns all package findings without finalizing
+                          - >-
+                            POST /proposals/{id}/finalize-upload explicitly marks the package complete and starts
+                            judgement
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /agent-credentials/setup.sh:
+    get:
+      operationId: getAgentCredentialSetupScript
+      tags:
+        - Discovery
+      summary: Download a local ManagedSkillHub credential setup script
+      description: >-
+        Generates a no-secret shell script for this registry URL and active auth requirements. By default the script
+        opens a local browser form with only the token fields required by the current config; --terminal uses terminal
+        prompts. It updates ~/.managed-skill-hub/credentials.json per registry alias/base URL.
+      responses:
+        '200':
+          description: Shell setup script
+          content:
+            text/x-shellscript:
+              schema:
+                type: string
+  /skills/suggest-name:
+    get:
+      operationId: suggestSkillName
+      tags:
+        - Skills
+      summary: Suggest a valid Skill ID
+      parameters:
+        - name: title
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: description
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Suggested names
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillNameSuggestionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /skills:
+    get:
+      operationId: listSkills
+      tags:
+        - Skills
+      summary: List published skills
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          description: Filter by tags. Repeat the parameter to require multiple tags.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of published skills
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /skills/search:
+    get:
+      operationId: searchSkills
+      tags:
+        - Skills
+      summary: Search published skills
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum:
+              - keyword
+              - fulltext
+              - regex
+            default: keyword
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          description: Filter by tags. Repeat the parameter to require multiple tags.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillSearchResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /categories:
+    get:
+      operationId: listCategories
+      tags:
+        - Skills
+      summary: List known skill categories
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /tags:
+    get:
+      operationId: listTags
+      tags:
+        - Skills
+      summary: List known skill tags
+      responses:
+        '200':
+          description: Tag list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /skills/{skillId}:
+    get:
+      operationId: getSkill
+      tags:
+        - Skills
+      summary: Get published skill
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /skills/{skillId}/manifest:
+    get:
+      operationId: getSkillManifest
+      tags:
+        - Skills
+      summary: Get skill manifest
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manifest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /skills/{skillId}/package:
+    get:
+      operationId: downloadSkillPackage
+      tags:
+        - Skills
+      summary: Download a published skill package
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          description: Optional published version. Omit to use latest published.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill package or single SKILL.md file
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+            text/markdown:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /skills/{skillId}/files:
+    get:
+      operationId: listSkillFiles
+      tags:
+        - Skills
+      summary: List skill files
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillFileListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /skills/{skillId}/files/{fileId}:
+    get:
+      operationId: getSkillFile
+      tags:
+        - Skills
+      summary: Download a skill file
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /skills/{skillId}/files/{fileId}/extracted-content:
+    get:
+      operationId: getSkillFileExtractedContent
+      tags:
+        - Skills
+      summary: Get extracted text for an extractable published skill file
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Extracted file content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractedContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /skills/{skillId}/files/{fileId}/probe:
+    get:
+      operationId: getSkillFileProbe
+      tags:
+        - Skills
+      summary: Probe a published skill file with ffprobe
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Probe output and parsed summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /skills/{skillId}/deprecation:
+    get:
+      operationId: getSkillDeprecation
+      tags:
+        - Skills
+      summary: Public deprecation info for a published skill version
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deprecation information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDeprecationInfoResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /skills/{skillId}/versions:
+    get:
+      operationId: listSkillVersions
+      tags:
+        - Skills
+      summary: List versions of a skill
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of versions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillVersionListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /skills/{skillId}/history:
+    get:
+      operationId: getSkillHistory
+      tags:
+        - Skills
+      summary: Get audit history of a skill
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Audit history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /proposals/check-duplicate:
+    post:
+      operationId: checkDuplicateProposal
+      tags:
+        - Proposals
+      summary: Pre-submission duplicate and similarity check
+      description: |
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+        Checks whether an identical or similar proposal/skill already exists before creating a proposal.
+        Agents should call this endpoint before submitting. Submission is not blocked by matches;
+        the response only provides transparency about existing content and skill id collisions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckDuplicateProposalRequest'
+      responses:
+        '200':
+          description: Duplicate check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckDuplicateProposalResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /proposals:
+    post:
+      operationId: submitProposal
+      tags:
+        - Proposals
+      summary: Submit a new proposal
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitProposalRequest'
+      responses:
+        '201':
+          description: Proposal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalSubmissionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /proposals/notice:
+    get:
+      operationId: getProposalNotice
+      tags:
+        - Proposals
+      summary: Show whether new proposals are waiting for admin review
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      responses:
+        '200':
+          description: Aggregated proposal notice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalNoticeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+  /proposals/{proposalId}/status:
+    get:
+      operationId: getProposalStatus
+      tags:
+        - Proposals
+      summary: Public proposal status lookup
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public proposal status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalPublicStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /proposals/{proposalId}:
+    patch:
+      operationId: updateOpenProposalMetadata
+      tags:
+        - Proposals
+      summary: Update metadata for an open proposal upload
+      description: >-
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Only proposals still in `in_upload` can be
+        updated through this public submitter path. Agents should use this after submitter-side post-checks when title,
+        description, category, tags, capabilities, or entrypoint need correction before finalization.
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalMetadataUpdateRequest'
+      responses:
+        '200':
+          description: Proposal metadata updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalMetadataUpdateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      operationId: deleteOpenProposalUpload
+      tags:
+        - Proposals
+      summary: Abort and delete an open proposal upload
+      description: >-
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Only proposals still in `in_upload` can be deleted
+        through this submitter path. After finalize-upload, public proposal deletion is blocked.
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Open proposal upload deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /proposals/{proposalId}/files:
+    post:
+      operationId: attachProposalFile
+      tags:
+        - Proposals
+      summary: Attach a file to a proposal
+      description: >-
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Attach one proposal artifact. When the file belongs
+        in a subfolder, send multipart field `path` with the relative in-package path such as `scripts/build.py`.
+        While the proposal is still `in_upload`, sending the same relative path again replaces that file so agents can
+        apply post-check corrections without creating another proposal.
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                path:
+                  type: string
+                  description: >-
+                    Optional relative in-package path. Use this to preserve subfolders like scripts/, templates/, docs/,
+                    or assets/ during upload.
+      responses:
+        '200':
+          description: File attached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalAttachmentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /proposals/{proposalId}/validate-upload:
+    post:
+      operationId: validateProposalUpload
+      tags:
+        - Proposals
+      summary: Validate an open proposal upload without finalizing
+      description: >-
+        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer. Checks the currently uploaded package while the
+        proposal is still `in_upload`, returns all package-reference findings, and does not finalize the upload, run
+        extraction, run judgement, or change proposal status. Agents should call this before finalize-upload and apply
+        corrections through PATCH /proposals/{proposalId} or POST /proposals/{proposalId}/files upserts.
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Upload validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalUploadValidationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /proposals/{proposalId}/finalize-upload:
+    post:
+      operationId: finalizeProposalUpload
+      tags:
+        - Proposals
+      summary: Finalize an open proposal upload and start judgement
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer.
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Upload finalized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalFinalizeUploadResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/proposals/{proposalId}/judge:
+    post:
+      operationId: judgeProposal
+      tags:
+        - Judgements
+      summary: Request judgement for a proposal
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Judgement result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /admin/judge/file:
+    post:
+      operationId: judgeFile
+      tags:
+        - Judgements
+      summary: Judge a single file
+      security:
+        - adminSession: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Judgement result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/judge/skill/{skillId}/version/{version}:
+    post:
+      operationId: judgeSkillVersion
+      tags:
+        - Judgements
+      summary: Judge a published skill version
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Judgement result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /admin/judgements/{targetType}/{targetId}:
+    get:
+      operationId: listJudgements
+      tags:
+        - Judgements
+      summary: List judgements for a target
+      security:
+        - adminSession: []
+      parameters:
+        - name: targetType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - proposal
+              - skill
+              - file
+        - name: targetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of judgements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags:
+        - Admin Auth
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLoginResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/logout:
+    post:
+      operationId: adminLogout
+      tags:
+        - Admin Auth
+      summary: Admin logout
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Logout successful
+  /admin/session:
+    get:
+      operationId: getAdminSession
+      tags:
+        - Admin Auth
+      summary: Validate the current admin session
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Session is valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSessionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/skills:
+    get:
+      operationId: adminListSkills
+      tags:
+        - Admin Skills
+      summary: List skills including unpublished latest versions
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Skill list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      operationId: adminCreateSkill
+      tags:
+        - Admin Skills
+      summary: Create a skill from a proposal or draft
+      security:
+        - adminSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateSkillRequest'
+      responses:
+        '201':
+          description: Created initial draft version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillMutationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}:
+    get:
+      operationId: adminGetSkill
+      tags:
+        - Admin Skills
+      summary: Get any skill including unpublished versions
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      operationId: adminUpdateSkill
+      tags:
+        - Admin Skills
+      summary: Update skill draft metadata by creating a new draft version
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateSkillRequest'
+      responses:
+        '200':
+          description: Created draft version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillMutationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /admin/skills/{skillId}/files:
+    get:
+      operationId: adminListSkillFiles
+      tags:
+        - Admin Skills
+      summary: List files for any skill version including unpublished ones
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillFileListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    post:
+      operationId: adminUploadSkillFile
+      tags:
+        - Admin Skills
+      summary: Create a new draft version by uploading or replacing a skill file
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                role:
+                  type: string
+                  enum:
+                    - entrypoint
+                    - example
+                    - knowledge
+                    - test
+                    - attachment
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Created draft version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillMutationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}/files/{fileId}:
+    get:
+      operationId: adminGetSkillFile
+      tags:
+        - Admin Skills
+      summary: Download any skill file including unpublished versions
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      operationId: adminMoveSkillFile
+      tags:
+        - Admin Skills
+      summary: Create a new draft version by moving or renaming a skill file
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMoveSkillFileRequest'
+      responses:
+        '200':
+          description: Created draft version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillMutationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      operationId: adminDeleteSkillFile
+      tags:
+        - Admin Skills
+      summary: Create a new draft version by removing a skill file
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Created draft version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillMutationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}/files/{fileId}/content:
+    put:
+      operationId: adminUpdateSkillFileContent
+      tags:
+        - Admin Skills
+      summary: Create a new draft version by replacing text-based file content
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateSkillFileContentRequest'
+      responses:
+        '200':
+          description: Created draft version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillMutationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}/files/{fileId}/extracted-content:
+    get:
+      operationId: adminGetSkillFileExtractedContent
+      tags:
+        - Admin Skills
+      summary: Get extracted text for any skill file including unpublished versions
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Extracted file content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractedContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}/files/{fileId}/probe:
+    get:
+      operationId: adminGetSkillFileProbe
+      tags:
+        - Admin Skills
+      summary: Probe a skill file with ffprobe
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Probe output and parsed summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}/submit-review:
+    post:
+      operationId: adminSubmitForReview
+      tags:
+        - Admin Skills
+      summary: Submit skill for review
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /admin/skills/{skillId}/approve:
+    post:
+      operationId: adminApproveSkill
+      tags:
+        - Admin Skills
+      summary: Approve skill version
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /admin/skills/{skillId}/publish:
+    post:
+      operationId: adminPublishSkill
+      tags:
+        - Admin Skills
+      summary: Publish approved skill version
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /admin/skills/{skillId}/reject:
+    post:
+      operationId: adminRejectSkill
+      tags:
+        - Admin Skills
+      summary: Reject a draft, in-review, or approved skill version
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}/deprecate:
+    post:
+      operationId: adminDeprecateSkill
+      tags:
+        - Admin Skills
+      summary: Deprecate published skill version
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Deprecated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /admin/skills/{skillId}/files/{fileId}/re-extract:
+    post:
+      operationId: adminReextractSkillFile
+      tags:
+        - Admin Skills
+      summary: Re-run extraction for a skill file without modifying the original artifact
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Extracted content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractedContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/skills/{skillId}/versions/{version}/re-judge:
+    post:
+      operationId: adminRejudgeSkillVersion
+      tags:
+        - Admin Skills
+      summary: Re-run judgement for a skill version
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Judgement result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /admin/search/reindex:
+    post:
+      operationId: adminReindexSearch
+      tags:
+        - Admin Skills
+      summary: Rebuild the published skill search index
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Reindex result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexSearchResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/projections/rebuild:
+    post:
+      operationId: adminRebuildProjections
+      tags:
+        - Admin Skills
+      summary: Rebuild relational projections for configured catalog/search providers
+      security:
+        - adminSession: []
+      parameters:
+        - name: clearProjections
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Rebuild summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebuildProjectionsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/observability/metrics:
+    get:
+      operationId: adminGetObservabilityMetrics
+      tags:
+        - Admin Observability
+      summary: Get the current observability snapshot
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Observability snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservabilityMetricsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/observability/metrics/export:
+    get:
+      operationId: adminExportObservabilityMetrics
+      tags:
+        - Admin Observability
+      summary: Export the current observability snapshot
+      security:
+        - adminSession: []
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - json
+              - csv
+            default: json
+      responses:
+        '200':
+          description: Observability export
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservabilityMetricsResponse'
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/proposals/{proposalId}/convert:
+    post:
+      operationId: adminConvertProposal
+      tags:
+        - Admin Proposals
+      summary: Convert a proposal to a skill or skill version
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Converted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /admin/proposals/{proposalId}/reject:
+    post:
+      operationId: adminRejectProposal
+      tags:
+        - Admin Proposals
+      summary: Reject a proposal
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /admin/proposals:
+    get:
+      operationId: adminListProposals
+      tags:
+        - Admin Proposals
+      summary: List proposals for review
+      security:
+        - adminSession: []
+      parameters:
+        - name: skillId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            description: Optional comma-separated list of proposal states.
+      responses:
+        '200':
+          description: Proposal list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /admin/proposals/{proposalId}:
+    get:
+      operationId: adminGetProposal
+      tags:
+        - Admin Proposals
+      summary: Get proposal details
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proposal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      operationId: adminUpdateProposal
+      tags:
+        - Admin Proposals
+      summary: Update proposal metadata before conversion
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalAdminUpdateRequest'
+      responses:
+        '200':
+          description: Proposal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      operationId: adminDeleteProposal
+      tags:
+        - Admin Proposals
+      summary: Delete an abandoned open proposal upload
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /admin/proposals/{proposalId}/files/{fileId}:
+    get:
+      operationId: adminGetProposalFile
+      tags:
+        - Admin Proposals
+      summary: Get proposal file content
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proposal file content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /admin/proposals/{proposalId}/files/{fileId}/extracted-content:
+    get:
+      operationId: adminGetProposalFileExtractedContent
+      tags:
+        - Admin Proposals
+      summary: Get extracted proposal file content
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Extracted proposal file content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractedContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/proposals/{proposalId}/files/{fileId}/probe:
+    get:
+      operationId: adminGetProposalFileProbe
+      tags:
+        - Admin Proposals
+      summary: Probe a proposal file with ffprobe
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Probe output and parsed summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/proposals/{proposalId}/files/{fileId}/re-extract:
+    post:
+      operationId: adminReextractProposalFile
+      tags:
+        - Admin Proposals
+      summary: Re-run extraction for a proposal file without modifying the original artifact
+      security:
+        - adminSession: []
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Extracted proposal file content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractedContentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /openapi.yaml:
+    get:
+      operationId: getOpenApiYaml
+      tags:
+        - Discovery
+      summary: Download OpenAPI specification
+      description: Returns the OpenAPI YAML contract. May require discoveryBearer when DISCOVERY_AUTH_MODE=bearer.
+      responses:
+        '200':
+          description: OpenAPI YAML
+          content:
+            text/yaml:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /skills/{skillId}/judgements:
+    get:
+      operationId: listSkillPublicJudgements
+      tags:
+        - Skills
+      summary: List public judgements for a published skill version
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill judgements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /skills/{skillId}/files/{fileId}/judgements:
+    get:
+      operationId: listSkillFilePublicJudgements
+      tags:
+        - Skills
+      summary: List public judgements for a published skill file
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill file judgements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+components:
+  securitySchemes:
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: skill_hub_session
+    publicReadBearer:
+      type: http
+      scheme: bearer
+      description: Runtime-configurable bearer token for published skill consumption when PUBLIC_READ_AUTH_MODE=bearer.
+    proposalBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        Runtime-configurable bearer token for proposal duplicate check, submit, upload, finalization, notices, and
+        status when PROPOSAL_AUTH_MODE=bearer.
+    discoveryBearer:
+      type: http
+      scheme: bearer
+      description: Runtime-configurable bearer token for discovery/contract endpoints when DISCOVERY_AUTH_MODE=bearer.
+  responses:
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ConflictError:
+      description: Conflict error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Authenticated actor is not allowed to access this resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimitError:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds until the current rate-limit window resets.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    DiscoveryResponse:
+      type: object
+      required:
+        - name
+        - version
+        - description
+        - registryId
+        - registryName
+        - apiBaseUrl
+        - readAuthRequired
+        - proposalAuthRequired
+        - discoveryAuthRequired
+        - documentation
+        - capabilities
+        - entrypoints
+      properties:
+        name:
+          type: string
+        registryId:
+          type: string
+        registryName:
+          type: string
+        apiBaseUrl:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        proposalAuthRequired:
+          type: boolean
+        discoveryAuthRequired:
+          type: boolean
+        authSchemes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeAuthScheme'
+        credentialSetupScriptUrl:
+          type:
+            - string
+            - 'null'
+        workflowNotes:
+          type: object
+          properties:
+            conversationLanguage:
+              type: string
+            readPath:
+              type: string
+            proposalPath:
+              type: string
+            publishedSkillDownload:
+              type: string
+            howToProposeUrl:
+              type: string
+            frontendUrl:
+              type: string
+            adminOnlyActions:
+              type: array
+              items:
+                type: string
+        readAuthRequired:
+          type: boolean
+        documentation:
+          type: object
+          required:
+            - human
+            - openapi
+            - frontend
+          properties:
+            human:
+              type: string
+              format: uri
+            openapi:
+              type: string
+            frontend:
+              type: string
+        capabilities:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+              - description
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+        entrypoints:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+              - description
+              - methods
+              - path
+              - url
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              methods:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - GET
+                    - POST
+                    - PATCH
+                    - PUT
+                    - DELETE
+              path:
+                type: string
+              url:
+                type: string
+    RuntimeAuthScheme:
+      type: object
+      required:
+        - id
+        - type
+        - appliesTo
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - bearer
+        appliesTo:
+          type: array
+          items:
+            type: string
+            enum:
+              - discovery
+              - public-read
+              - proposal
+    HowToProposeResponse:
+      type: object
+      required:
+        - id
+        - title
+        - summary
+        - description
+        - requiredSteps
+        - escalationRule
+        - duplicateConfirmationRule
+        - normalizationRules
+        - packageHandling
+        - uploadLimits
+        - uploadFinalization
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        description:
+          type: string
+        conversationLanguage:
+          type: string
+        metadataLanguageGuidance:
+          type: string
+        requiredSteps:
+          type: array
+          items:
+            type: object
+            required:
+              - step
+              - title
+              - purpose
+              - checks
+            properties:
+              step:
+                type: integer
+              title:
+                type: string
+              purpose:
+                type: string
+              checks:
+                type: array
+                items:
+                  type: string
+        escalationRule:
+          type: string
+        duplicateConfirmationRule:
+          type: object
+          properties:
+            appliesWhen:
+              type: array
+              items:
+                type: string
+            requiredUserFacingSummary:
+              type: array
+              items:
+                type: string
+            confirmationRequired:
+              type: string
+        normalizationRules:
+          type: object
+          required:
+            - entrypointFile
+            - packageRoot
+            - normalizeOnlyWhenNeeded
+            - preserveUsefulSubfolders
+            - transparentToSubmitter
+          properties:
+            entrypointFile:
+              type: string
+            packageRoot:
+              type: string
+            normalizeOnlyWhenNeeded:
+              type: boolean
+            preserveUsefulSubfolders:
+              type: boolean
+            transparentToSubmitter:
+              type: boolean
+        packageHandling:
+          type: object
+          required:
+            - principle
+            - disallowedInstalledPaths
+            - allowedManifestFiles
+            - submitterResponsibility
+          properties:
+            principle:
+              type: string
+            disallowedInstalledPaths:
+              type: array
+              items:
+                type: string
+            allowedManifestFiles:
+              type: array
+              items:
+                type: string
+            submitterResponsibility:
+              type: string
+        uploadLimits:
+          type: object
+          required:
+            - maxFiles
+            - maxFileSizeBytes
+            - disallowedPaths
+            - recommendations
+          properties:
+            maxFiles:
+              type: integer
+            maxFileSizeBytes:
+              type: integer
+            disallowedPaths:
+              type: array
+              items:
+                type: string
+            recommendations:
+              type: array
+              items:
+                type: string
+        uploadFinalization:
+          type: object
+          required:
+            - required
+            - finalizeEndpoint
+            - statusFollowUp
+          properties:
+            required:
+              type: boolean
+            finalizeEndpoint:
+              type: string
+            statusFollowUp:
+              type: string
+        uploadGuardrails:
+          type: array
+          items:
+            type: string
+        apiNotes:
+          type: object
+          properties:
+            signInRequiredForSubmitter:
+              type: boolean
+            publicOnly:
+              type: boolean
+            registryId:
+              type: string
+            registryName:
+              type: string
+            apiBaseUrl:
+              type: string
+            readAuthRequired:
+              type: boolean
+            proposalAuthRequired:
+              type: boolean
+            discoveryAuthRequired:
+              type: boolean
+            credentialSetupScriptUrl:
+              type:
+                - string
+                - 'null'
+            authorizationHeader:
+              type:
+                - string
+                - 'null'
+            authSetupFlow:
+              type: string
+            checkDuplicateNote:
+              type: string
+    SkillNameSuggestionRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+    SkillNameSuggestionResponse:
+      type: object
+      required:
+        - suggestion
+        - alternatives
+        - isAvailable
+      properties:
+        suggestion:
+          type: string
+        alternatives:
+          type: array
+          items:
+            type: string
+        isAvailable:
+          type: boolean
+    SkillListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillSummary'
+        total:
+          type: integer
+    SkillSearchResponse:
+      type: object
+      required:
+        - items
+        - total
+        - mode
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillSearchResult'
+        total:
+          type: integer
+        mode:
+          type: string
+    SkillSummary:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - category
+        - tags
+        - skillUuid
+        - versionUuid
+        - contentDigest
+        - version
+        - status
+        - publishedAt
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        skillUuid:
+          type: string
+          format: uuid
+        versionUuid:
+          type: string
+          format: uuid
+        contentDigest:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+          enum:
+            - draft
+            - in_review
+            - approved
+            - rejected
+            - published
+            - deprecated
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SkillSearchResult:
+      allOf:
+        - $ref: '#/components/schemas/SkillSummary'
+        - type: object
+          properties:
+            score:
+              type: number
+    SkillResponse:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - category
+        - tags
+        - capabilities
+        - useWhen
+        - doNotUseWhen
+        - entrypoint
+        - skillUuid
+        - latestPublishedVersion
+        - versions
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        useWhen:
+          type: array
+          items:
+            type: string
+        doNotUseWhen:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+        skillUuid:
+          type: string
+          format: uuid
+        latestPublishedVersion:
+          type: string
+          nullable: true
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillVersionSummary'
+    SkillVersionSummary:
+      type: object
+      required:
+        - version
+        - versionUuid
+        - contentDigest
+        - status
+        - createdAt
+      properties:
+        version:
+          type: string
+        versionUuid:
+          type: string
+          format: uuid
+        contentDigest:
+          type: string
+        status:
+          type: string
+          enum:
+            - draft
+            - in_review
+            - approved
+            - rejected
+            - published
+            - deprecated
+        createdAt:
+          type: string
+          format: date-time
+        approvedBy:
+          type: string
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        publishedBy:
+          type: string
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectedBy:
+          type: string
+          nullable: true
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        deprecatedBy:
+          type: string
+          nullable: true
+        deprecatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deprecationReason:
+          type: string
+          nullable: true
+    SkillVersionListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillVersionSummary'
+    Manifest:
+      type: object
+      required:
+        - id
+        - title
+        - version
+        - status
+        - category
+        - entrypoint
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+          enum:
+            - draft
+            - in_review
+            - approved
+            - rejected
+            - published
+            - deprecated
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        useWhen:
+          type: array
+          items:
+            type: string
+        doNotUseWhen:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestFile'
+    ManifestFile:
+      type: object
+      required:
+        - path
+        - role
+      properties:
+        path:
+          type: string
+        role:
+          type: string
+          enum:
+            - entrypoint
+            - example
+            - knowledge
+            - test
+            - attachment
+        mimeType:
+          type: string
+        sha256:
+          type: string
+    SkillFileListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFileInfo'
+    SkillFileInfo:
+      type: object
+      required:
+        - id
+        - artifactId
+        - path
+        - role
+        - mimeType
+        - sizeBytes
+        - extractable
+      properties:
+        id:
+          type: string
+        artifactId:
+          type: string
+          format: uuid
+        path:
+          type: string
+        role:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+        sha256:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        extractable:
+          type: boolean
+    ExtractedContentResponse:
+      type: object
+      required:
+        - text
+        - extractedBy
+        - metadata
+      properties:
+        text:
+          type: string
+        extractedBy:
+          type: string
+        metadata:
+          type: object
+    ProbeResponse:
+      type: object
+      required:
+        - probedBy
+        - tool
+        - filePath
+        - mimeType
+        - summary
+        - parsed
+        - format
+        - streams
+        - rawOutput
+      properties:
+        probedBy:
+          type: string
+        tool:
+          type: string
+        filePath:
+          type: string
+        mimeType:
+          type: string
+        summary:
+          type: object
+        parsed:
+          type: object
+        format:
+          type: object
+        streams:
+          type: array
+          items:
+            type: object
+        rawOutput:
+          type: string
+    AuditLogResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+    AuditEntry:
+      type: object
+      required:
+        - id
+        - skillId
+        - action
+        - actor
+        - createdAt
+      properties:
+        id:
+          type: string
+        skillId:
+          type: string
+        skillVersion:
+          type: string
+        proposalId:
+          type: string
+        action:
+          type: string
+        actor:
+          type: string
+        before:
+          type: object
+        after:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+    SubmitProposalRequest:
+      type: object
+      required:
+        - title
+        - description
+        - category
+      properties:
+        skillId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+    ProposalReview:
+      type: object
+      required:
+        - latestJudgementRisk
+        - labels
+        - latestJudgementId
+        - latestJudgedAt
+      properties:
+        latestJudgementRisk:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+            - no_judge_available
+          nullable: true
+        labels:
+          type: array
+          items:
+            type: string
+            enum:
+              - safe
+              - needs_review
+              - contains_executable
+              - external_dependency
+              - sensitive_input
+              - prompt_injection_risk
+              - download_only
+        latestJudgementId:
+          type: string
+          nullable: true
+        latestJudgedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ProposalResponse:
+      type: object
+      required:
+        - id
+        - skillId
+        - title
+        - description
+        - category
+        - tags
+        - capabilities
+        - status
+        - createdAt
+        - files
+        - judgements
+        - review
+        - conversion
+        - lifecycle
+        - uploadFinalized
+        - fileCount
+        - maxFiles
+        - maxFileSizeBytes
+        - disallowedPaths
+        - autoPublishEnabled
+        - autoPublishEligible
+        - autoPublishBlockedReason
+        - autoPublishBlockedByCategory
+        - autoPublishClassifierReason
+        - autoPublishMatchedExcludedCategory
+        - autoPublished
+        - autoPublishedSkillId
+        - autoPublishedVersion
+      properties:
+        id:
+          type: string
+        skillId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - in_upload
+            - submitted
+            - judged
+            - approved
+            - rejected
+            - converted
+        createdAt:
+          type: string
+          format: date-time
+        submittedBy:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalFileResponse'
+        judgements:
+          type: array
+          items:
+            $ref: '#/components/schemas/JudgementResponse'
+        review:
+          $ref: '#/components/schemas/ProposalReview'
+        conversion:
+          $ref: '#/components/schemas/ProposalConversionPreview'
+        lifecycle:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalLifecycleEvent'
+        uploadFinalized:
+          type: boolean
+        fileCount:
+          type: integer
+        maxFiles:
+          type: integer
+        maxFileSizeBytes:
+          type: integer
+        disallowedPaths:
+          type: array
+          items:
+            type: string
+        autoPublishEnabled:
+          type: boolean
+        autoPublishEligible:
+          type: boolean
+          nullable: true
+        autoPublishBlockedReason:
+          type: string
+          nullable: true
+        autoPublishBlockedByCategory:
+          type: boolean
+          nullable: true
+        autoPublishClassifierReason:
+          type: string
+          nullable: true
+        autoPublishMatchedExcludedCategory:
+          type: string
+          nullable: true
+        autoPublished:
+          type: boolean
+        autoPublishedSkillId:
+          type: string
+          nullable: true
+        autoPublishedVersion:
+          type: string
+          nullable: true
+    ProposalLifecycleEvent:
+      type: object
+      required:
+        - id
+        - action
+        - actor
+        - at
+        - fromStatus
+        - toStatus
+        - skillId
+        - skillVersion
+        - reason
+        - comment
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+        actor:
+          type: string
+        at:
+          type: string
+          format: date-time
+        fromStatus:
+          type: string
+          nullable: true
+        toStatus:
+          type: string
+          nullable: true
+        skillId:
+          type: string
+          nullable: true
+        skillVersion:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+    ProposalAdminUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+          nullable: true
+    ProposalListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalSummary'
+        total:
+          type: integer
+    ProposalSummary:
+      type: object
+      required:
+        - id
+        - skillId
+        - title
+        - status
+        - createdAt
+        - submittedAt
+        - rejectedAt
+        - rejectedBy
+        - latestJudgementRisk
+        - latestJudgement
+        - labels
+      properties:
+        id:
+          type: string
+        skillId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+            - in_upload
+            - submitted
+            - judged
+            - approved
+            - rejected
+            - converted
+        createdAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectedBy:
+          type: string
+          nullable: true
+        latestJudgementRisk:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+            - no_judge_available
+          nullable: true
+        latestJudgement:
+          allOf:
+            - $ref: '#/components/schemas/JudgementResponse'
+          nullable: true
+        labels:
+          type: array
+          items:
+            type: string
+        conversion:
+          $ref: '#/components/schemas/ProposalConversionPreview'
+    ProposalConversionPreview:
+      type: object
+      required:
+        - mode
+        - targetSkillId
+        - targetSkillExists
+        - currentLatestVersion
+        - nextVersion
+        - targetEntrypoint
+      properties:
+        mode:
+          type: string
+          enum:
+            - create_skill
+            - create_version
+        targetSkillId:
+          type: string
+        targetSkillTitle:
+          type: string
+          nullable: true
+        targetSkillExists:
+          type: boolean
+        currentLatestVersion:
+          type: string
+          nullable: true
+        nextVersion:
+          type: string
+        targetEntrypoint:
+          type: string
+          enum:
+            - safe
+            - needs_review
+            - contains_executable
+            - external_dependency
+            - sensitive_input
+            - prompt_injection_risk
+            - download_only
+    CheckDuplicateProposalRequest:
+      type: object
+      required:
+        - title
+        - description
+        - category
+      properties:
+        skillId:
+          type: string
+          description: Optional target skill id. If it already exists, conversion would create a new draft version.
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+        files:
+          type: array
+          description: >-
+            Optional file fingerprints. If sha256 values are provided, an exact content digest can be computed and
+            checked against existing proposals/skills without uploading the full content.
+          items:
+            type: object
+            required:
+              - path
+            properties:
+              path:
+                type: string
+              sha256:
+                type: string
+                nullable: true
+    CheckDuplicateProposalMatch:
+      type: object
+      required:
+        - kind
+        - id
+        - skillId
+        - title
+        - description
+        - category
+        - similarityScore
+        - matchedOn
+        - differences
+      properties:
+        kind:
+          type: string
+          enum:
+            - proposal
+            - skill
+        id:
+          type: string
+        skillId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        version:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        similarityScore:
+          type: number
+          minimum: 0
+          maximum: 1
+        matchedOn:
+          type: array
+          items:
+            type: string
+        differences:
+          type: object
+          properties:
+            title:
+              type: string
+              nullable: true
+            description:
+              type: string
+              nullable: true
+            tags:
+              type: object
+              nullable: true
+              properties:
+                shared:
+                  type: array
+                  items:
+                    type: string
+                onlyInSubmitted:
+                  type: array
+                  items:
+                    type: string
+                onlyInExisting:
+                  type: array
+                  items:
+                    type: string
+            capabilities:
+              type: object
+              nullable: true
+              properties:
+                shared:
+                  type: array
+                  items:
+                    type: string
+                onlyInSubmitted:
+                  type: array
+                  items:
+                    type: string
+                onlyInExisting:
+                  type: array
+                  items:
+                    type: string
+            entrypoint:
+              type: string
+              nullable: true
+    CheckDuplicateProposalResolutionOption:
+      type: object
+      required:
+        - strategy
+        - label
+        - description
+        - requiresAdminAction
+      properties:
+        strategy:
+          type: string
+          enum:
+            - create_new_skill
+            - create_new_version
+            - request_admin_update
+        label:
+          type: string
+        description:
+          type: string
+        suggestedSkillId:
+          type: string
+          nullable: true
+        requiresAdminAction:
+          type: boolean
+    CheckDuplicateProposalResponse:
+      type: object
+      required:
+        - submittedContentDigest
+        - exactDuplicateProposalId
+        - exactDuplicateSkillId
+        - similarMatches
+        - skillIdCollision
+        - resolutionOptions
+        - note
+      properties:
+        submittedContentDigest:
+          type: string
+          nullable: true
+          description: Computed content digest if file fingerprints were provided, otherwise null.
+        exactDuplicateProposalId:
+          type: string
+          nullable: true
+        exactDuplicateSkillId:
+          type: string
+          nullable: true
+        similarMatches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckDuplicateProposalMatch'
+        skillIdCollision:
+          type: object
+          required:
+            - exists
+            - existingSkillId
+            - note
+          properties:
+            exists:
+              type: boolean
+            existingSkillId:
+              type: string
+              nullable: true
+            note:
+              type: string
+        resolutionOptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckDuplicateProposalResolutionOption'
+          description: Actions the submitter can choose from based on duplicate/skill-id collision findings.
+        note:
+          type: string
+    ProposalSubmissionResponse:
+      type: object
+      required:
+        - id
+        - message
+        - statusUrl
+        - checkUrl
+        - finalizeUploadUrl
+      properties:
+        id:
+          type: string
+        message:
+          type: string
+          description: Human-readable confirmation that the upload was opened and must still be finalized by the submitter.
+        statusUrl:
+          type: string
+          description: Absolute or prefix-aware URL to poll the public proposal status.
+        checkUrl:
+          type: string
+          description: Alias for statusUrl, provided for convenience.
+        finalizeUploadUrl:
+          type: string
+          description: Absolute or prefix-aware URL to explicitly finalize the upload after all files were attached.
+    ProposalMetadataUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+          nullable: true
+    ProposalMetadataUpdateResponse:
+      type: object
+      required:
+        - id
+        - status
+        - title
+        - description
+        - category
+        - tags
+        - capabilities
+        - entrypoint
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - in_upload
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+          nullable: true
+    ProposalFinalizeUploadResponse:
+      type: object
+      required:
+        - id
+        - status
+        - message
+        - statusUrl
+        - checkUrl
+        - uploadFinalized
+        - judgementStatus
+        - autoPublishStatus
+        - autoPublishBlockedReason
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - submitted
+            - judged
+            - approved
+            - rejected
+            - converted
+        message:
+          type: string
+          description: Human-readable confirmation that the upload was finalized and judgement started.
+        statusUrl:
+          type: string
+        checkUrl:
+          type: string
+        uploadFinalized:
+          type: boolean
+        judgementStatus:
+          type: string
+          enum:
+            - completed
+        autoPublishStatus:
+          type: string
+          enum:
+            - disabled
+            - skipped
+            - published
+        autoPublishBlockedReason:
+          type: string
+          nullable: true
+    ProposalPublicStatusResponse:
+      type: object
+      required:
+        - id
+        - skillId
+        - title
+        - status
+        - createdAt
+        - submittedBy
+        - latestJudgementRisk
+        - rejectionReason
+        - convertedSkillId
+        - contentDigest
+        - duplicateOfProposalId
+        - duplicateOfSkillId
+        - uploadFinalized
+        - finalizeRequired
+        - autoPublishEnabled
+        - autoPublishEligible
+        - autoPublishBlockedReason
+        - reviewNote
+        - nextStepForSubmitter
+        - adminOnlyNextSteps
+      properties:
+        id:
+          type: string
+        skillId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+            - in_upload
+            - submitted
+            - judged
+            - approved
+            - rejected
+            - converted
+        createdAt:
+          type: string
+          format: date-time
+        submittedBy:
+          type: string
+        latestJudgementRisk:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+            - no_judge_available
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        convertedSkillId:
+          type: string
+          nullable: true
+        contentDigest:
+          type: string
+          nullable: true
+          description: >-
+            Content-derived digest of proposal metadata and attached file checksums. Used for duplicate detection across
+            proposals and published skills.
+        duplicateOfProposalId:
+          type: string
+          nullable: true
+          description: >-
+            ID of another proposal with identical content, if any. Submission is not blocked; admins decide which
+            proposal to convert.
+        duplicateOfSkillId:
+          type: string
+          nullable: true
+          description: >-
+            ID of a published skill with identical content, if any. Submission is not blocked; admins should verify
+            whether a new version is needed.
+        uploadFinalized:
+          type: boolean
+          description: False while the submitter is still attaching files and has not called finalize-upload yet.
+        finalizeRequired:
+          type: boolean
+          description: True while the submitter still has to call finalize-upload.
+        autoPublishEnabled:
+          type: boolean
+        autoPublishEligible:
+          type: boolean
+          nullable: true
+        autoPublishBlockedReason:
+          type: string
+          nullable: true
+        reviewNote:
+          type: string
+          description: Explains whether the proposal is still waiting for admin review or has already been reviewed.
+        nextStepForSubmitter:
+          type: string
+          description: >-
+            Action guidance for the submitter. Only status polling is possible; approval and publication require admin
+            access.
+        adminOnlyNextSteps:
+          type: array
+          items:
+            type: string
+          description: List of actions that can only be performed by an admin.
+    ProposalNoticeResponse:
+      type: object
+      required:
+        - hasNewProposals
+        - totalPending
+      properties:
+        hasNewProposals:
+          type: boolean
+        totalPending:
+          type: integer
+    ProposalAttachmentResponse:
+      type: object
+      required:
+        - id
+        - files
+      properties:
+        id:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalFileResponse'
+    ProposalUploadValidationResponse:
+      type: object
+      required:
+        - proposalId
+        - status
+        - valid
+        - fileCount
+        - checkedTextFileCount
+        - findings
+      properties:
+        proposalId:
+          type: string
+        status:
+          type: string
+          enum:
+            - in_upload
+        valid:
+          type: boolean
+        fileCount:
+          type: integer
+        checkedTextFileCount:
+          type: integer
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalUploadFinding'
+          description: >-
+            Structured findings. Variable placeholder runtime-output examples such as
+            `{output}/screenshots/{name}.png`, documentation-only external references, and portable
+            command guidance findings are not hard-blocking package-reference findings.
+    ProposalUploadFinding:
+      type: object
+      required:
+        - kind
+        - severity
+        - blocksFinalize
+        - message
+        - file
+        - line
+        - candidate
+        - suggestedReplacement
+      properties:
+        kind:
+          type: string
+          enum:
+            - empty_upload
+            - external_reference
+            - missing_package_reference
+            - outside_root_reference
+            - portable_command_manifest_invalid
+            - portable_command_manifest_missing
+            - portable_command_missing
+            - portable_command_reference
+        severity:
+          type: string
+          enum:
+            - error
+            - warning
+            - info
+        blocksFinalize:
+          type: boolean
+          description: True when the finding must be fixed before finalize-upload can succeed.
+        message:
+          type: string
+        file:
+          type: string
+          nullable: true
+        line:
+          type: integer
+          nullable: true
+        candidate:
+          type: string
+          nullable: true
+        suggestedReplacement:
+          type: string
+          nullable: true
+    ProposalFileResponse:
+      type: object
+      required:
+        - id
+        - path
+        - mimeType
+        - sizeBytes
+        - extractable
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+        sha256:
+          type: string
+          nullable: true
+        extractable:
+          type: boolean
+    SkillDeprecationInfoResponse:
+      type: object
+      required:
+        - skillId
+        - version
+        - status
+        - deprecatedBy
+        - deprecatedAt
+        - reason
+      properties:
+        skillId:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+          enum:
+            - draft
+            - in_review
+            - approved
+            - rejected
+            - published
+            - deprecated
+        deprecatedBy:
+          type: string
+          nullable: true
+        deprecatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+    CategoryListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+    TagListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+    ReindexSearchResponse:
+      type: object
+      required:
+        - indexedVersions
+      properties:
+        indexedVersions:
+          type: integer
+    RebuildProjectionsResponse:
+      type: object
+      required:
+        - skills
+        - proposals
+        - publishedVersions
+        - skillJudgements
+        - auditEntries
+      properties:
+        skills:
+          type: integer
+        proposals:
+          type: integer
+        publishedVersions:
+          type: integer
+        skillJudgements:
+          type: integer
+        auditEntries:
+          type: integer
+    ObservabilityMetricsResponse:
+      type: object
+      required:
+        - generatedAt
+        - counters
+        - areaSummaries
+        - requestTimeline
+        - latencyHistogram
+        - hourlyRollups
+        - recentRequests
+        - recentErrors
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        counters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservabilityCounter'
+        areaSummaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservabilityAreaSummary'
+        requestTimeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservabilityTimelineBucket'
+        latencyHistogram:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservabilityLatencyHistogramBucket'
+        hourlyRollups:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservabilityHourlyRollup'
+        recentRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservabilityRequest'
+        recentErrors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservabilityRequest'
+    ObservabilityCounter:
+      type: object
+      required:
+        - name
+        - area
+        - method
+        - route
+        - statusClass
+        - count
+        - lastObservedAt
+      properties:
+        name:
+          type: string
+        area:
+          type: string
+          enum:
+            - retrieval
+            - viewer
+            - proposal
+            - review
+            - publish
+            - extraction
+            - auth
+            - observability
+            - other
+        method:
+          type: string
+        route:
+          type: string
+        statusClass:
+          type: string
+        count:
+          type: integer
+        lastObservedAt:
+          type: string
+          format: date-time
+    ObservabilityAreaSummary:
+      type: object
+      required:
+        - area
+        - totalRequests
+        - errorRequests
+        - avgDurationMs
+        - p95DurationMs
+        - maxDurationMs
+        - lastObservedAt
+      properties:
+        area:
+          type: string
+          enum:
+            - retrieval
+            - viewer
+            - proposal
+            - review
+            - publish
+            - extraction
+            - auth
+            - observability
+            - other
+        totalRequests:
+          type: integer
+        errorRequests:
+          type: integer
+        avgDurationMs:
+          type: integer
+        p95DurationMs:
+          type: integer
+        maxDurationMs:
+          type: integer
+        lastObservedAt:
+          type: string
+          format: date-time
+    ObservabilityTimelineBucket:
+      type: object
+      required:
+        - bucketStart
+        - bucketEnd
+        - totalRequests
+        - errorRequests
+      properties:
+        bucketStart:
+          type: string
+          format: date-time
+        bucketEnd:
+          type: string
+          format: date-time
+        totalRequests:
+          type: integer
+        errorRequests:
+          type: integer
+    ObservabilityLatencyHistogramBucket:
+      type: object
+      required:
+        - label
+        - minDurationMs
+        - maxDurationMs
+        - count
+      properties:
+        label:
+          type: string
+        minDurationMs:
+          type: integer
+        maxDurationMs:
+          type: integer
+          nullable: true
+        count:
+          type: integer
+    ObservabilityHourlyRollup:
+      type: object
+      required:
+        - bucketStart
+        - bucketEnd
+        - totalRequests
+        - errorRequests
+        - avgDurationMs
+        - maxDurationMs
+      properties:
+        bucketStart:
+          type: string
+          format: date-time
+        bucketEnd:
+          type: string
+          format: date-time
+        totalRequests:
+          type: integer
+        errorRequests:
+          type: integer
+        avgDurationMs:
+          type: integer
+        maxDurationMs:
+          type: integer
+    ObservabilityRequest:
+      type: object
+      required:
+        - traceId
+        - method
+        - route
+        - url
+        - statusCode
+        - durationMs
+        - area
+        - timestamp
+      properties:
+        traceId:
+          type: string
+        method:
+          type: string
+        route:
+          type: string
+        url:
+          type: string
+        statusCode:
+          type: integer
+        durationMs:
+          type: integer
+        area:
+          type: string
+          enum:
+            - retrieval
+            - viewer
+            - proposal
+            - review
+            - publish
+            - extraction
+            - auth
+            - observability
+            - other
+        timestamp:
+          type: string
+          format: date-time
+        skillId:
+          type: string
+          nullable: true
+        proposalId:
+          type: string
+          nullable: true
+        fileId:
+          type: string
+          nullable: true
+        skillUuid:
+          type: string
+          nullable: true
+        versionUuid:
+          type: string
+          nullable: true
+        artifactId:
+          type: string
+          nullable: true
+    IdResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+    SkillMutationResponse:
+      type: object
+      required:
+        - id
+        - version
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+    JudgementResponse:
+      type: object
+      required:
+        - id
+        - targetType
+        - targetId
+        - dimensions
+        - overallRisk
+        - summary
+        - skillPurposeSummary
+        - createdAt
+      properties:
+        id:
+          type: string
+        targetType:
+          type: string
+          enum:
+            - proposal
+            - skill
+            - file
+        targetId:
+          type: string
+        dimensions:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/JudgementDimension'
+        overallRisk:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+            - no_judge_available
+        summary:
+          type: string
+        skillPurposeSummary:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    JudgementDimension:
+      type: object
+      required:
+        - risk
+        - score
+      properties:
+        risk:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+        score:
+          type: number
+        reason:
+          type: string
+    JudgementListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JudgementResponse'
+    AdminLoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    AdminLoginResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+    AdminSessionResponse:
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          type: string
+    AdminCreateSkillRequest:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - category
+        - entrypoint
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        entrypoint:
+          type: string
+    AdminUpdateSkillRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+    AdminMoveSkillFileRequest:
+      type: object
+      required:
+        - path
+      properties:
+        path:
+          type: string
+    AdminUpdateSkillFileContentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+        mimeType:
+          type: string
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - code
+        - requestId
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        requestId:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          properties:
+            authRequired:
+              type: boolean
+            authArea:
+              type: string
+              enum:
+                - discovery
+                - public-read
+                - proposal
+            authScheme:
+              type: string
+              enum:
+                - bearer
+            discoverUrl:
+              type: string
+            credentialSetupScriptUrl:
+              type:
+                - string
+                - 'null'
+            recommendation:
+              type: string
+        originalError:
+          type: string

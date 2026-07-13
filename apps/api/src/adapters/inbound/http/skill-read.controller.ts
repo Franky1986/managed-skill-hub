@@ -1,0 +1,1118 @@
+import { FastifyInstance, FastifyReply } from 'fastify';
+import { promises as fs } from 'fs';
+import { Container } from '../../../infrastructure/container';
+import { SkillSearchQuery } from '../../../application/ports/inbound/skill-query.port';
+import { NotFoundError, UnsupportedFileTypeError, ValidationError } from '../../../domain/errors';
+import { sendApiError, sendMappedApiError } from './error-response';
+import { AgentApiAuth } from './agent-api-auth';
+import { normalizeRelativeArtifactPath } from '../../../domain/files/relative-artifact-path';
+import { sendArtifactResponse } from './artifact-response';
+
+function parseTagQuery(value: string | string[] | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  const items = Array.isArray(value) ? value : [value];
+  return items.map((item) => item.trim()).filter(Boolean);
+}
+
+function buildZipArchive(files: Array<{ path: string; content: Buffer }>): Buffer {
+  const localParts: Buffer[] = [];
+  const centralDirectory: Buffer[] = [];
+  let offset = 0;
+
+  const crcTable = new Array<number>(256).fill(0).map((_, index) => {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
+    }
+    return value >>> 0;
+  });
+
+  const crc32 = (buffer: Buffer): number => {
+    let crc = 0xffffffff;
+    for (const byte of buffer) {
+      const tableIndex = (crc ^ byte) & 0xff;
+      crc = (crc >>> 8) ^ crcTable[tableIndex];
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+
+  for (const file of files) {
+    const fileName = Buffer.from(file.path, 'utf-8');
+    const crc = crc32(file.content);
+    const fileHeader = Buffer.alloc(30);
+    let cursor = 0;
+    fileHeader.writeUInt32LE(0x04034b50, cursor); // local header signature
+    cursor += 4;
+    fileHeader.writeUInt16LE(20, cursor); // version needed
+    cursor += 2;
+    fileHeader.writeUInt16LE(0, cursor); // flags
+    cursor += 2;
+    fileHeader.writeUInt16LE(0, cursor); // stored
+    cursor += 2;
+    fileHeader.writeUInt16LE(0, cursor); // mod time
+    cursor += 2;
+    fileHeader.writeUInt16LE(0, cursor); // mod date
+    cursor += 2;
+    fileHeader.writeUInt32LE(crc, cursor);
+    cursor += 4;
+    fileHeader.writeUInt32LE(file.content.length, cursor); // compressed
+    cursor += 4;
+    fileHeader.writeUInt32LE(file.content.length, cursor); // uncompressed
+    cursor += 4;
+    fileHeader.writeUInt16LE(fileName.length, cursor);
+    cursor += 2;
+    fileHeader.writeUInt16LE(0, cursor); // extra
+    cursor += 2;
+
+    localParts.push(fileHeader, fileName, file.content);
+    const localOffset = offset;
+    offset += fileHeader.length + fileName.length + file.content.length;
+
+    const centralHeader = Buffer.alloc(46);
+    let centralCursor = 0;
+    centralHeader.writeUInt32LE(0x02014b50, centralCursor); // central signature
+    centralCursor += 4;
+    centralHeader.writeUInt16LE(20, centralCursor); // made version
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(20, centralCursor); // needed version
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // flags
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // stored
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // time
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // date
+    centralCursor += 2;
+    centralHeader.writeUInt32LE(crc, centralCursor);
+    centralCursor += 4;
+    centralHeader.writeUInt32LE(file.content.length, centralCursor);
+    centralCursor += 4;
+    centralHeader.writeUInt32LE(file.content.length, centralCursor);
+    centralCursor += 4;
+    centralHeader.writeUInt16LE(fileName.length, centralCursor);
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // extra len
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // comment len
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // disk number
+    centralCursor += 2;
+    centralHeader.writeUInt16LE(0, centralCursor); // internal attrs
+    centralCursor += 2;
+    centralHeader.writeUInt32LE(0, centralCursor); // external attrs
+    centralCursor += 4;
+    centralHeader.writeUInt32LE(localOffset, centralCursor); // local header offset
+    centralCursor += 4;
+
+    centralDirectory.push(centralHeader, fileName);
+  }
+
+  const cdSize = centralDirectory.reduce((total, chunk) => total + chunk.length, 0);
+  const cdOffset = offset;
+  const endRecord = Buffer.alloc(22);
+  let endCursor = 0;
+  endRecord.writeUInt32LE(0x06054b50, endCursor); // end signature
+  endCursor += 4;
+  endRecord.writeUInt16LE(0, endCursor); // disk
+  endCursor += 2;
+  endRecord.writeUInt16LE(0, endCursor); // disk with cd
+  endCursor += 2;
+  const totalEntries = files.length;
+  endRecord.writeUInt16LE(totalEntries, endCursor);
+  endCursor += 2;
+  endRecord.writeUInt16LE(totalEntries, endCursor);
+  endCursor += 2;
+  endRecord.writeUInt32LE(cdSize, endCursor);
+  endCursor += 4;
+  endRecord.writeUInt32LE(cdOffset, endCursor);
+  endCursor += 4;
+  endRecord.writeUInt16LE(0, endCursor); // comment len
+  endCursor += 2;
+
+  return Buffer.concat([...localParts, ...centralDirectory, endRecord]);
+}
+
+function safeFilename(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+async function buildSkillPackageBuffer(
+  skillId: string,
+  version: string,
+  files: { path: string }[],
+  getFile: (fileId: string) => Promise<{ path: string; mimeType: string; content: Buffer } | null>
+): Promise<{ content: Buffer; filename: string; mimeType: string }> {
+  const normalizedFiles = files.map((file) => ({
+    ...file,
+    path: normalizeRelativeArtifactPath(file.path, { fieldLabel: 'Skill package file path' }),
+  }));
+
+  if (normalizedFiles.length === 1 && normalizedFiles[0].path === 'SKILL.md') {
+    const file = await getFile(normalizedFiles[0].path);
+    if (!file) {
+      throw new NotFoundError(`Skill ${skillId} version ${version} has missing SKILL.md`);
+    }
+    return {
+      content: file.content,
+      filename: `${safeFilename(skillId)}-${safeFilename(version)}-SKILL.md`,
+      mimeType: file.mimeType ?? 'text/markdown',
+    };
+  }
+
+  const packageFiles: Array<{ path: string; content: Buffer }> = [];
+  for (const file of normalizedFiles.sort((left, right) => left.path.localeCompare(right.path))) {
+    const artifact = await getFile(file.path);
+    if (!artifact) {
+      throw new NotFoundError(`Skill ${skillId} version ${version} file ${file.path} not found`);
+    }
+    packageFiles.push({
+      path: file.path,
+      content: artifact.content,
+    });
+  }
+  const content = buildZipArchive(packageFiles);
+  return {
+    content,
+    filename: `${safeFilename(skillId)}-${safeFilename(version)}.zip`,
+    mimeType: 'application/zip',
+  };
+}
+
+function buildDiscoveryResponse(request: import('fastify').FastifyRequest, container: Container, agentAuth: AgentApiAuth) {
+  const rawUrl = request.url ?? request.raw.url ?? '/discover';
+  const prefix = rawUrl.startsWith('/api/') ? '/api' : '';
+  const url = (path: string) => `${prefix}${path}`;
+  const howToProposeUrl = url('/howToPropose');
+  const frontendUrl = '/frontend';
+
+  const proposalPath = [
+    '1) Read GET /howToPropose first (required).',
+    '2) Communicate with the user in the language they are currently using, unless they explicitly ask for another language.',
+    `3) Validate the local package, enforce the current hard limits (${container.config.proposalMaxFiles} files max, ${container.config.proposalMaxFileSizeBytes} bytes per file max), and only normalize it when needed.`,
+    '4) The final package must use SKILL.md as root entrypoint, keep references self-contained, and exclude installed dependency directories such as node_modules, .venv, venv, vendor, dist-packages, or site-packages.',
+    '5) Prefer English for proposal metadata such as title, description, category, tags and capabilities; uploaded content files may be in any language.',
+    '6) Search public catalog for similar intent: GET /skills/search?q=<title-or-keywords>&mode=keyword.',
+    '7) Run precheck: POST /proposals/check-duplicate with title, description, category and final file hashes.',
+    '8) If duplicates, unclear intent, credentials or PII are detected, stop and ask for explicit confirmation or cleanup before continuing; for duplicates, name the matching candidate, summarize the overlap, summarize what would change, and include a concise diff before asking.',
+    '9) Only then create proposal: POST /proposals, attach files, run POST /proposals/{id}/validate-upload until valid=true, explicitly finalize upload through POST /proposals/{id}/finalize-upload, and then poll GET /proposals/{id}/status.',
+  ].join(' ');
+
+  const authMetadata = agentAuth.metadata();
+  return {
+    name: 'managed-skill-hub',
+    registryId: authMetadata.registryId,
+    registryName: authMetadata.registryName,
+    apiBaseUrl: authMetadata.apiBaseUrl,
+    version: '0.1.0',
+    description:
+      'ManagedSkillHub skill registry for AI agents. Product managers and developers publish versioned, reviewed skills; agents discover and consume them through a stable API.',
+    readAuthRequired: authMetadata.readAuthRequired,
+    proposalAuthRequired: authMetadata.proposalAuthRequired,
+    discoveryAuthRequired: authMetadata.discoveryAuthRequired,
+    authSchemes: authMetadata.authSchemes,
+    credentialSetupScriptUrl: authMetadata.credentialSetupScriptUrl ?? undefined,
+    documentation: {
+      human: 'https://github.com/frankrichter/managed-skill-hub/blob/main/docs/product/AGENT_BOOTSTRAP.md',
+      openapi: url('/openapi.yaml'),
+      frontend: frontendUrl,
+    },
+    capabilities: [
+      {
+        id: 'list-skills',
+        name: 'List published skills',
+        description: 'Retrieve all publicly available skills with their metadata, categories and tags.',
+      },
+      {
+        id: 'search-skills',
+        name: 'Search published skills',
+        description: 'Fulltext, keyword and regex search across published skill metadata and content.',
+      },
+      {
+        id: 'read-skill',
+        name: 'Read skill details',
+        description: 'Fetch skill manifests, file listings, individual files and extracted text content.',
+      },
+      {
+        id: 'submit-proposal',
+        name: 'Submit skill proposals',
+        description:
+          'Propose new skills or changes to existing skills without admin credentials. Proposals are automatically judged and then reviewed by an admin; only admins can convert or publish them.',
+      },
+      {
+        id: 'check-proposal',
+        name: 'Check proposal status',
+        description:
+          'Poll the public status of a previously submitted proposal by UUID. The submitter can read status, judgement risk and rejection reason, but cannot approve or publish.',
+      },
+    ],
+    workflowNotes: {
+      conversationLanguage:
+        'When communicating with the user, use the language the user is currently using unless the user explicitly asks for another language.',
+      readPath: authMetadata.readAuthRequired
+        ? 'Read endpoints require Authorization: Bearer <read token>. Use /skills, /skills/search, /categories and /tags to discover published skills, then /skills/:id/files to inspect artifacts.'
+        : 'All read endpoints are open. Use /skills, /skills/search, /categories and /tags to discover published skills, then /skills/:id/files to inspect artifacts.',
+      auth: authMetadata,
+      proposalPath:
+        proposalPath,
+      howToProposeUrl,
+      frontendUrl,
+      publishedSkillDownload:
+        'Download published skills for local execution with GET /skills/{skillId}/package?version=<published-version>. Omit the version query to get the latest published version.',
+      adminOnlyActions: ['review proposal', 'convert proposal to skill', 'approve/publish/deprecate skill versions'],
+    },
+    entrypoints: [
+      {
+        id: 'frontend-ui',
+        name: 'Frontend UI',
+        description: 'Human-facing registry UI served under /frontend.',
+        methods: ['GET'],
+        path: '/frontend',
+        url: frontendUrl,
+      },
+      {
+        id: 'skills',
+        name: 'Skills',
+        description: 'List all published skills.',
+        methods: ['GET'],
+        path: '/skills',
+        url: url('/skills'),
+      },
+      {
+        id: 'skills-search',
+        name: 'Skill Search',
+        description: 'Search published skills by keyword, fulltext or regex.',
+        methods: ['GET'],
+        path: '/skills/search',
+        url: url('/skills/search'),
+      },
+      {
+        id: 'skills-suggest-name',
+        name: 'Skill ID Suggestion',
+        description: 'Suggest a valid, available Skill ID from a title and optional description.',
+        methods: ['GET'],
+        path: '/skills/suggest-name',
+        url: url('/skills/suggest-name'),
+      },
+      {
+        id: 'categories',
+        name: 'Categories',
+        description: 'List categories used by published skills.',
+        methods: ['GET'],
+        path: '/categories',
+        url: url('/categories'),
+      },
+      {
+        id: 'tags',
+        name: 'Tags',
+        description: 'List tags used by the latest published skill versions.',
+        methods: ['GET'],
+        path: '/tags',
+        url: url('/tags'),
+      },
+      {
+        id: 'proposals-notice',
+        name: 'Proposal Notice',
+        description: 'Public notice about recently submitted proposals.',
+        methods: ['GET'],
+        path: '/proposals/notice',
+        url: url('/proposals/notice'),
+      },
+      {
+        id: 'proposals-submit',
+        name: 'Submit Proposal',
+        description:
+          'Submit a new skill proposal. Response contains a status URL for polling. Only admins can review, convert and publish proposals.',
+        methods: ['POST'],
+        path: '/proposals',
+        url: url('/proposals'),
+      },
+      {
+        id: 'proposals-status',
+        name: 'Proposal Status',
+        description:
+          'Check the public status of a submitted proposal by UUID. Submitters can poll this endpoint; approval and publication require admin access.',
+        methods: ['GET'],
+        path: '/proposals/:id/status',
+        url: url('/proposals/:id/status'),
+      },
+      {
+        id: 'skills-package',
+        name: 'Skill Package Download',
+        description:
+          'Download a deterministic package for a published skill version. Supports optional version= query parameter.',
+        methods: ['GET'],
+        path: '/skills/{skillId}/package',
+        url: url('/skills/{skillId}/package'),
+      },
+      {
+        id: 'how-to-propose',
+        name: 'How To Propose',
+        description:
+          'Read the mandatory proposal preflight and normalization workflow before creating a new proposal.',
+        methods: ['GET'],
+        path: '/howToPropose',
+        url: howToProposeUrl,
+      },
+    ],
+  };
+}
+
+function buildCredentialSetupScript(agentAuth: AgentApiAuth): string {
+  const metadata = agentAuth.metadata();
+  const script = [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    '',
+    '# Generated by ManagedSkillHub. This file contains no secrets.',
+    '# Default mode opens a local browser form. Use --terminal for terminal prompts.',
+    'export MSH_REGISTRY_ID=' + shellQuote(metadata.registryId),
+    'export MSH_REGISTRY_NAME=' + shellQuote(metadata.registryName),
+    'export MSH_REGISTRY_URL=' + shellQuote(metadata.apiBaseUrl),
+    'export MSH_REQUIRE_READ=' + shellQuote(metadata.readAuthRequired ? 'true' : 'false'),
+    'export MSH_REQUIRE_PROPOSAL=' + shellQuote(metadata.proposalAuthRequired ? 'true' : 'false'),
+    '',
+    'node - \"$@\" <<\'NODE\'',
+    'const fs = require(\"fs\");',
+    'const http = require(\"http\");',
+    'const os = require(\"os\");',
+    'const path = require(\"path\");',
+    'const readline = require(\"readline\");',
+    'const { execFile } = require(\"child_process\");',
+    '',
+    'const registryId = process.env.MSH_REGISTRY_ID;',
+    'const registryName = process.env.MSH_REGISTRY_NAME;',
+    'const registryUrl = process.env.MSH_REGISTRY_URL;',
+    'const requireRead = process.env.MSH_REQUIRE_READ === \"true\";',
+    'const requireProposal = process.env.MSH_REQUIRE_PROPOSAL === \"true\";',
+    'const configDir = path.join(os.homedir(), \".managed-skill-hub\");',
+    'const configFile = path.join(configDir, \"credentials.json\");',
+    'const mode = process.argv.includes(\"--terminal\") ? \"terminal\" : \"browser\";',
+    '',
+    'function saveCredentials(tokens) {',
+    '  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });',
+    '  try { fs.chmodSync(configDir, 0o700); } catch {}',
+    '  let data = { defaultRegistry: registryId, registries: {} };',
+    '  if (fs.existsSync(configFile)) {',
+    '    try { data = JSON.parse(fs.readFileSync(configFile, \"utf8\")); } catch { data = { defaultRegistry: registryId, registries: {} }; }',
+    '  }',
+    '  data.defaultRegistry = data.defaultRegistry || registryId;',
+    '  data.registries = data.registries || {};',
+    '  const previous = data.registries[registryId];',
+    '  if (previous && previous.url && previous.url !== registryUrl) {',
+    '    throw new Error(\"Alias \" + registryId + \" already points to \" + previous.url + \"; refusing to overwrite with \" + registryUrl + \".\");',
+    '  }',
+    '  const entry = { ...(previous || {}), url: registryUrl, name: registryName };',
+    '  if (requireRead && tokens.readToken) entry.readToken = tokens.readToken;',
+    '  if (requireProposal && tokens.proposalToken) entry.proposalToken = tokens.proposalToken;',
+    '  data.registries[registryId] = entry;',
+    '  fs.writeFileSync(configFile, JSON.stringify(data, null, 2) + \"\\n\", { mode: 0o600 });',
+    '  try { fs.chmodSync(configFile, 0o600); } catch {}',
+    '}',
+    '',
+    'function openBrowser(url) {',
+    '  const platform = process.platform;',
+    '  const command = platform === \"darwin\" ? \"open\" : platform === \"win32\" ? \"cmd\" : \"xdg-open\";',
+    '  const args = platform === \"win32\" ? [\"/c\", \"start\", \"\", url] : [url];',
+    '  execFile(command, args, { stdio: \"ignore\" }, () => {});',
+    '}',
+    '',
+    'function requiredFieldsHtml() {',
+    '  const fields = [];',
+    '  if (requireRead) fields.push(\"<label>Read bearer token<input name=\\\"readToken\\\" type=\\\"password\\\" autocomplete=\\\"off\\\" required /></label>\");',
+    '  if (requireProposal) fields.push(\"<label>Proposal bearer token<input name=\\\"proposalToken\\\" type=\\\"password\\\" autocomplete=\\\"off\\\" required /></label>\");',
+    '  return fields.join(\"\\n\");',
+    '}',
+    '',
+    'function setupHtml() {',
+    '  return \"<!doctype html><html><head><meta charset=\\\"utf-8\\\"><title>ManagedSkillHub setup</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:48px auto;padding:0 24px;background:#f6f2ea;color:#1f1b16}main{background:white;border:1px solid #ddd1c0;border-radius:20px;padding:28px;box-shadow:0 20px 60px #0001}label{display:block;margin:18px 0;font-weight:650}input{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:12px;border:1px solid #c8bca9;border-radius:12px;font:inherit}button{border:0;border-radius:12px;padding:12px 18px;background:#235347;color:white;font-weight:750}.hint{color:#665f55}.mono{font-family:ui-monospace,monospace}</style></head><body><main><h1>ManagedSkillHub credentials</h1><p class=\\\"hint\\\">Registry: <span class=\\\"mono\\\">\" + registryId + \"</span><br/>URL: <span class=\\\"mono\\\">\" + registryUrl + \"</span></p><p>Enter only the tokens required by this registry. Tokens are written locally to <span class=\\\"mono\\\">~/.managed-skill-hub/credentials.json</span> and are not sent to chat.</p><form method=\\\"POST\\\">\" + requiredFieldsHtml() + \"<button type=\\\"submit\\\">Save credentials</button></form></main></body></html>\";',
+    '}',
+    '',
+    'async function runBrowserSetup() {',
+    '  if (!requireRead && !requireProposal) {',
+    '    saveCredentials({});',
+    '    console.log(\"No tokens required. Registry \" + registryId + \" (\" + registryUrl + \") saved locally.\");',
+    '    return;',
+    '  }',
+    '  const server = http.createServer((req, res) => {',
+    '    if (req.method === \"GET\") {',
+    '      res.writeHead(200, { \"content-type\": \"text/html; charset=utf-8\" });',
+    '      res.end(setupHtml());',
+    '      return;',
+    '    }',
+    '    if (req.method === \"POST\") {',
+    '      let body = \"\";',
+    '      req.on(\"data\", chunk => { body += chunk; });',
+    '      req.on(\"end\", () => {',
+    '        const params = new URLSearchParams(body);',
+    '        try {',
+    '          saveCredentials({ readToken: params.get(\"readToken\") || \"\", proposalToken: params.get(\"proposalToken\") || \"\" });',
+    '          res.writeHead(200, { \"content-type\": \"text/html; charset=utf-8\" });',
+    '          res.end(\"<h1>Saved</h1><p>Credentials saved locally. You can close this tab and return to your agent.</p>\");',
+    '          console.log(\"Credentials saved for \" + registryId + \" (\" + registryUrl + \"). Tokens were not printed.\");',
+    '          setTimeout(() => server.close(() => process.exit(0)), 250);',
+    '        } catch (error) {',
+    '          res.writeHead(500, { \"content-type\": \"text/plain; charset=utf-8\" });',
+    '          res.end(error.message);',
+    '          console.error(error.message);',
+    '        }',
+    '      });',
+    '      return;',
+    '    }',
+    '    res.writeHead(405).end();',
+    '  });',
+    '  server.listen(0, \"127.0.0.1\", () => {',
+    '    const address = server.address();',
+    '    const url = \"http://127.0.0.1:\" + address.port;',
+    '    console.log(\"Opening local setup page: \" + url);',
+    '    openBrowser(url);',
+    '  });',
+    '}',
+    '',
+    'function askHidden(rl, prompt) {',
+    '  return new Promise(resolve => {',
+    '    const stdin = process.stdin;',
+    '    const onData = char => { char = char + \"\"; switch (char) { case \"\\n\": case \"\\r\": case \"\\u0004\": stdin.removeListener(\"data\", onData); break; default: process.stdout.write(\"*\"); break; } };',
+    '    process.stdout.write(prompt + \": \");',
+    '    stdin.on(\"data\", onData);',
+    '    rl.question(\"\", answer => { process.stdout.write(\"\\n\"); resolve(answer); });',
+    '  });',
+    '}',
+    '',
+    'async function runTerminalSetup() {',
+    '  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });',
+    '  const tokens = {};',
+    '  if (requireRead) tokens.readToken = process.env.MANAGED_SKILL_HUB_READ_TOKEN || await askHidden(rl, \"Read bearer token\");',
+    '  if (requireProposal) tokens.proposalToken = process.env.MANAGED_SKILL_HUB_PROPOSAL_TOKEN || await askHidden(rl, \"Proposal bearer token\");',
+    '  rl.close();',
+    '  saveCredentials(tokens);',
+    '  console.log(\"Credentials saved for \" + registryId + \" (\" + registryUrl + \"). Tokens were not printed.\");',
+    '}',
+    '',
+    '(mode === \"terminal\" ? runTerminalSetup() : runBrowserSetup()).catch(error => { console.error(error.message); process.exit(1); });',
+    'NODE',
+  ];
+  let output = script.join('\n') + '\n';
+  const browserTokenEntries: string[] = [];
+  if (metadata.readAuthRequired) {
+    browserTokenEntries.push('readToken: params.get(\"readToken\") || \"\"');
+  } else {
+    output = output.replace('  if (requireRead) fields.push(\"<label>Read bearer token<input name=\\\"readToken\\\" type=\\\"password\\\" autocomplete=\\\"off\\\" required /></label>\");\n', '');
+    output = output.replace('  if (requireRead && tokens.readToken) entry.readToken = tokens.readToken;\n', '');
+    output = output.replace('  if (requireRead) tokens.readToken = process.env.MANAGED_SKILL_HUB_READ_TOKEN || await askHidden(rl, \"Read bearer token\");\n', '');
+  }
+  if (metadata.proposalAuthRequired) {
+    browserTokenEntries.push('proposalToken: params.get(\"proposalToken\") || \"\"');
+  } else {
+    output = output.replace('  if (requireProposal) fields.push(\"<label>Proposal bearer token<input name=\\\"proposalToken\\\" type=\\\"password\\\" autocomplete=\\\"off\\\" required /></label>\");\n', '');
+    output = output.replace('  if (requireProposal && tokens.proposalToken) entry.proposalToken = tokens.proposalToken;\n', '');
+    output = output.replace('  if (requireProposal) tokens.proposalToken = process.env.MANAGED_SKILL_HUB_PROPOSAL_TOKEN || await askHidden(rl, \"Proposal bearer token\");\n', '');
+  }
+  output = output.replace(
+    '          saveCredentials({ readToken: params.get(\"readToken\") || \"\", proposalToken: params.get(\"proposalToken\") || \"\" });',
+    '          saveCredentials({ ' + browserTokenEntries.join(', ') + ' });'
+  );
+  return output;
+}
+function shellQuote(value: string): string {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth) {
+  const authMetadata = agentAuth.metadata();
+  const agentAuthRequired = Boolean(authMetadata.credentialSetupScriptUrl);
+  const stepOffset = agentAuthRequired ? 1 : 0;
+  const authSetupStep = agentAuthRequired
+    ? [
+      {
+        step: 1,
+        title: 'Handle registry authentication outside chat',
+        purpose: 'Bearer tokens must not be pasted into the agent conversation.',
+        checks: [
+          'Read /discover and inspect readAuthRequired, proposalAuthRequired, discoveryAuthRequired, authSchemes, registryId, apiBaseUrl, and credentialSetupScriptUrl.',
+          'If a protected endpoint returns 401 with details.authRequired=true, use details.authArea and details.credentialSetupScriptUrl to explain which token is needed.',
+          'Ask the user for permission before downloading or running the setup script.',
+          'After confirmation, download credentialSetupScriptUrl, let the user enter tokens in the local browser form or terminal fallback, then read ~/.managed-skill-hub/credentials.json by registry alias or apiBaseUrl.',
+          'Never ask the user to paste bearer tokens into chat and never print Authorization headers in logs.',
+        ],
+      },
+    ]
+    : [];
+
+  return {
+    id: 'how-to-propose',
+    title: 'Proposal workflow for agents',
+    summary: 'Mandatory preflight before submit',
+    description:
+      'Read this endpoint before every proposal upload. Agents must communicate with the user in the language the user is currently using, validate the local package, normalize it only when needed, ensure SKILL.md is the root entrypoint, keep meaningful relative subfolders intact, keep dependency installation artifacts out of the uploaded package, identify every local artifact that the skill actually needs, verify self-contained references, scan for credentials/PII, and only then continue to duplicate prechecks and submission.',
+    conversationLanguage:
+      'When communicating with the user, use the language the user is currently using unless the user explicitly asks for another language.',
+    metadataLanguageGuidance:
+      'Proposal metadata should preferably be written in English: title, description, category, tags, capabilities, useWhen and doNotUseWhen. Uploaded content files may be in any language.',
+    requiredSteps: [
+      ...authSetupStep,
+      {
+        step: 1 + stepOffset,
+        title: 'Read this workflow first',
+        purpose: 'Proposal clients must not invent their own upload flow.',
+        checks: [
+          'GET /howToPropose is a mandatory read step before POST /proposals.',
+          'Abort if this endpoint is missing or its response is structurally invalid.',
+        ],
+      },
+      {
+        step: 2 + stepOffset,
+        title: 'Use the user conversation language',
+        purpose: 'Keep the registry contract English while keeping the user interaction natural.',
+        checks: [
+          'Use English API and contract fields as documented.',
+          'Respond to the user in the language they are currently using unless they explicitly ask for another language.',
+          'Do not infer the conversation language from browser language, UI language, or API response language.',
+        ],
+      },
+      {
+        step: 3 + stepOffset,
+        title: 'Inspect the local package',
+        purpose: 'Decide whether the submitted files already match the upload contract or need temporary normalization.',
+        checks: [
+          'Determine the effective entrypoint from the provided files.',
+          `Keep the final package within ${container.config.proposalMaxFiles} uploaded files and ${container.config.proposalMaxFileSizeBytes} bytes per file.`,
+          'Detect whether the package contains installed dependency directories or vendored runtime packages such as node_modules, .venv, venv, vendor, dist-packages, or site-packages.',
+          'Inspect SKILL.md, adjacent docs, commands, scripts, examples, templates, assets, and setup files together to infer which local artifacts are actually required for the skill to work as described.',
+          'Treat referenced local templates, example manifests, fixture files, prompts, images, PDFs, PPTX files, and other non-code assets as required proposal artifacts when the skill depends on them for execution, demonstration, or reproducible output.',
+          'Detect references that point outside the effective skill root, for example parent-directory references, absolute local paths, IDE/agent workspace folders, command folders, generated-output folders, or other project-root-relative paths.',
+          'If an outside-root reference points to an artifact needed by the skill, build a temporary upload package that copies that artifact into the package and rewrites the reference to the new package-relative path before any POST /proposals call.',
+          'If a runtime-specific command reference such as .cursor/commands/foo.md, .codex/commands/foo.md, or .claude/commands/foo.md is relevant to using the skill, copy or merge it into commands/foo.md and add commands/manifest.json with runtime target hints.',
+          'If the source package already contains commands/, preserve it. Merge command metadata when safe, compare colliding command filenames, and stop for user input instead of silently overwriting existing command artifacts.',
+          'Keep dependency manifests and lockfiles when they document setup, but do not upload installed package trees.',
+          'Do not classify a local runtime artifact as proprietary, optional, or external unless the skill explicitly documents that it is an external prerequisite and the uploaded package remains truthful and usable without it.',
+          'If the package is already valid, do not rewrite it.',
+          'If the package is ambiguous or cannot be normalized safely, stop before upload.',
+        ],
+      },
+      {
+        step: 4 + stepOffset,
+        title: 'Normalize only when needed',
+        purpose: 'Every uploaded proposal package must arrive with SKILL.md in the root.',
+        checks: [
+          'The final package entrypoint must be SKILL.md in the package root.',
+          'If the source entrypoint has another name or path, create a temporary upload package and rename/copy it to SKILL.md.',
+          'Preserve useful subfolders such as commands/, scripts/, docs/, templates/, examples/, assets/, or prompts/ when they help keep the package understandable and executable.',
+          'Adjust relative references so the final package still works from SKILL.md and from every moved artifact that keeps local links.',
+          'Rewrite workspace-root, IDE-specific, agent-specific, and generated-output references to package-relative references in the temporary upload copy. Do not upload files that still point to the submitter workspace layout.',
+          'Rewrite active runtime command references to commands/<name>.md when the command ships with the package. Leave purely historical command references only when they are explicitly documented as external.',
+          'When moving or trimming files, preserve all local artifacts that the skill requires, including templates and non-code assets.',
+          'Strip installed dependency folders from the temporary upload package; keep only the skill sources, assets, and setup manifests/lockfiles that explain later initialization.',
+        ],
+      },
+      {
+        step: 5 + stepOffset,
+        title: 'Prefer English proposal metadata',
+        purpose: 'Keep registry discovery useful across teams and agents while allowing content files in any language.',
+        checks: [
+          'Prefer English for title, description, category, tags, capabilities, useWhen and doNotUseWhen.',
+          'Do not rewrite uploaded content files solely for language reasons.',
+          'Do not block a proposal only because human-authored content is not English.',
+        ],
+      },
+      {
+        step: 6 + stepOffset,
+        title: 'Validate self-contained and safe content',
+        purpose: 'The package must work on its own and must not leak secrets or personal data.',
+        checks: [
+          'Verify that relative references inside the package resolve after normalization.',
+          'Verify that no required artifact reference still resolves outside the temporary upload package root.',
+          'Verify that every required local artifact referenced by the skill is either included in the upload package or explicitly documented as an external prerequisite.',
+          'If the agent cannot explain why a referenced local artifact is safe to omit, treat the package as incomplete and stop before upload.',
+          'Scan readable text files for credentials, tokens, private keys, or obvious PII before upload.',
+          'If sensitive content or broken references are detected, stop and ask for cleanup before continuing.',
+        ],
+      },
+      {
+        step: 7 + stepOffset,
+        title: 'Build and prove the final upload package before network upload',
+        purpose: 'Avoid server-driven repair loops by proving the exact temporary package before creating a proposal.',
+        checks: [
+          'If any normalization was needed, create a temporary upload package and perform all edits only there. Never edit the submitter workspace in place.',
+          'Before POST /proposals, recursively scan every readable file in the final upload package, not just SKILL.md.',
+          'At minimum, scan for workspace and agent-runtime paths: .cursor/skills/, .cursor/commands/, .codex/commands/, .claude/commands/, CursorProjects/, /Users/, parent-directory references such as ../, and absolute paths.',
+          'Extract Markdown inline-code paths, Markdown links, and JSON path/source fields that look like local files; verify every required package reference exists in the final package.',
+          'For runtime output examples, prefer variable placeholders such as {output}/screenshots/{name}.png instead of concrete missing filenames.',
+          'For relevant outside-root command shortcuts, copy or merge command files into commands/ and add or merge commands/manifest.json before computing hashes.',
+          'If any required artifact is missing, any outside-root reference is unexplained, or any command collision is unresolved, stop before POST /proposals and ask the user.',
+          'Compute sha256 for the final temporary upload package after normalization. Use these final hashes for duplicate check and upload; do not compute duplicate-check hashes from the original source when a temp package exists.',
+          'Do not call POST /proposals until this final package proof is complete.',
+        ],
+      },
+      {
+        step: 8 + stepOffset,
+        title: 'Search the public catalog exploratively',
+        purpose: 'Avoid duplicate public skills with the same title or intent.',
+        checks: [
+          'GET /tags to inspect the current public discovery vocabulary before choosing metadata tags.',
+          'GET /skills/search?q=<title>&mode=keyword',
+          'GET /skills/search?q=<short description keywords>&mode=keyword',
+          'Inspect matching skill descriptions and public files when they are relevant to the duplicate decision.',
+          'Prepare a short overlap and change summary for likely matches before asking the user to continue.',
+        ],
+      },
+      {
+        step: 9 + stepOffset,
+        title: 'Run duplicate precheck',
+        purpose: 'Compare final metadata and file hashes with existing proposals and published skills.',
+        checks: [
+          'POST /proposals/check-duplicate',
+          'Payload: title, description, category, tags, capabilities, entrypoint=SKILL.md, optional skillId, files[].sha256 from the final package.',
+          'If title/description intent is similar, exact duplicate fields are set, or the target skill already exists, stop before upload.',
+          'Before asking, present the duplicate candidate, core overlap, intended resolution option, and concise metadata/file-fingerprint diff.',
+          'Ask for explicit user confirmation to upload despite the duplicate or to choose another returned resolution option.',
+        ],
+      },
+      {
+        step: 10 + stepOffset,
+        title: 'Create proposal only after confirmation',
+        purpose: 'Upload only when the final package is valid and no blocking ambiguity remains.',
+        checks: [
+          'Before this step, the final temporary upload package must already be complete, locally scanned, normalized, and hashed.',
+          'POST /proposals',
+          'If submitter-side post-checks require metadata corrections while the proposal is still in_upload, call PATCH /proposals/{id} instead of creating another proposal.',
+          'Then POST /proposals/{id}/files for each file and send multipart path=<relative package path> whenever the file belongs in a subfolder.',
+          'While the proposal is still in_upload, re-uploading the same relative path replaces that file; use this for post-check corrections instead of creating another proposal.',
+          'Then POST /proposals/{id}/validate-upload and fix every returned finding with blocksFinalize=true in the temporary upload package before finalization.',
+          'Validate-upload findings include kind, severity, blocksFinalize, file, line, candidate, and suggestedReplacement; variable placeholder runtime-output paths such as {output}/screenshots/{name}.png, documentation-only external references, and portable command guidance findings are not hard-blocking package references.',
+          'Then POST /proposals/{id}/finalize-upload to mark the package complete and start proposal/file judgements.',
+          'Tell the submitter which temporary normalizations were applied, which installed dependency folders were excluded, and what the final server-side structure looks like, including preserved subfolders.',
+          'GET /proposals/{id}/status for review state',
+        ],
+      },
+      {
+        step: 11 + stepOffset,
+        title: 'Download published skill packages per version',
+        purpose: 'Get deterministic artifacts for local consumption and validation.',
+        checks: [
+          'Use GET /skills/{skillId}/package?version=<published-version> to download any published version.',
+          'If version is omitted, the endpoint resolves to the latest published version.',
+          'After download, extract to a user-approved location and verify manifest entrypoint and manifest.files all exist before running the skill.',
+          'If commands/manifest.json is present, inspect command sources and runtime target hints. Ask for confirmation before copying any command file into Cursor, Codex, Claude Code, or another runtime-specific command folder.',
+          'If only one file is available and it is SKILL.md, the endpoint may return SKILL.md directly for direct local execution.',
+        ],
+      },
+    ],
+    escalationRule:
+      'Do not proceed with proposal creation while the package is structurally ambiguous, referenced local artifacts are missing or unjustifiably omitted, references are broken, sensitive content is present, or duplicate intent is unconfirmed. Ask the submitter to confirm or clean up first.',
+    duplicateConfirmationRule: {
+      appliesWhen: [
+        'exactDuplicateProposalId is set',
+        'exactDuplicateSkillId is set',
+        'skillIdCollision.exists is true',
+        'similarMatches contains a strong title/description intent match',
+      ],
+      requiredUserFacingSummary: [
+        'Name each relevant duplicate candidate with kind, id, skillId/title when available, status/version when available, and similarity score for similar matches.',
+        'Summarize the core overlap: matching title or intent, shared category, shared tags/capabilities, matching entrypoint, and exact content digest when available.',
+        'Summarize what would change if uploaded: new skill, new draft version, admin update request, unchanged duplicate, changed metadata, changed capabilities/tags, changed entrypoint, added files, removed files, or changed file fingerprints.',
+        'Provide a concise diff from the duplicate-check differences and local file fingerprint comparison. If file contents are not available through the public API, say that only hashes/metadata were compared.',
+      ],
+      confirmationRequired:
+        'Ask the user explicitly whether to upload despite the duplicate or choose one of the returned resolutionOptions. Do not call POST /proposals until the user confirms.',
+    },
+    normalizationRules: {
+      entrypointFile: 'SKILL.md',
+      packageRoot: 'proposal package root',
+      normalizeOnlyWhenNeeded: true,
+      preserveUsefulSubfolders: true,
+      transparentToSubmitter: true,
+    },
+    packageHandling: {
+      principle:
+        'Upload the complete skill package: source artifacts, required local assets, and setup manifests. Do not upload initialized package-manager outputs. The later consumer of the skill is responsible for dependency installation in their own environment, but not for reconstructing missing local skill assets.',
+      disallowedInstalledPaths: ['node_modules/', '.venv/', 'venv/', 'vendor/', 'dist-packages/', 'site-packages/'],
+      allowedManifestFiles: ['package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'pyproject.toml', 'poetry.lock', 'requirements.txt', 'requirements-dev.txt', 'Pipfile', 'Pipfile.lock', 'setup.py', 'setup.cfg'],
+      submitterResponsibility:
+        'The uploaded proposal may document how dependencies should be installed later, but it should not contain preinstalled packages or environment snapshots. In contrast, local templates, example inputs, prompts, fixtures, and other package artifacts that the skill relies on should be uploaded unless the skill clearly marks them as external prerequisites.',
+    },
+    preUploadPackageProof: {
+      requiredBeforeProposalCreation: true,
+      finalPackageHashSource: 'temporary upload package after all normalization',
+      scanAllReadableFiles: true,
+      minimumReferencePatterns: [
+        '.cursor/skills/',
+        '.cursor/commands/',
+        '.codex/commands/',
+        '.claude/commands/',
+        'CursorProjects/',
+        '/Users/',
+        '../',
+        'absolute local paths',
+        'Markdown inline-code file paths',
+        'Markdown links',
+        'JSON path/source fields',
+      ],
+      requiredLocalChecks: [
+        'SKILL.md exists in the final package root.',
+        'Every required package-relative file reference exists in the final package.',
+        'No required reference still points outside the final package root.',
+        'Runtime output examples use placeholders instead of concrete missing files.',
+        'Relevant runtime command shortcuts are copied or merged into commands/ with commands/manifest.json.',
+        'Final sha256 values are computed from the temporary upload package after normalization.',
+      ],
+      forbiddenBeforeProof: [
+        'POST /proposals',
+        'POST /proposals/{id}/files',
+      ],
+    },
+    uploadLimits: {
+      maxFiles: container.config.proposalMaxFiles,
+      maxFileSizeBytes: container.config.proposalMaxFileSizeBytes,
+      disallowedPaths: container.config.proposalDisallowedPaths,
+      recommendations: [
+        'Upload source files, assets, and setup manifests only.',
+        'Do not upload initialized dependency trees.',
+        'Preserve meaningful relative subfolders instead of flattening everything into the package root.',
+        'If the package exceeds the limit, reduce files before the first upload instead of relying on server-side partial acceptance.',
+      ],
+    },
+    uploadFinalization: {
+      required: true,
+      finalizeEndpoint: 'POST /proposals/{id}/finalize-upload',
+      statusFollowUp: container.config.autoPublishOnGreen
+        ? 'After upload finalization, check the proposal status again after about one minute to see whether it was published automatically.'
+        : 'After upload finalization, poll the proposal status endpoint to follow judgement and admin review progress.',
+    },
+    uploadGuardrails: [
+      'Use SKILL.md as the final entrypoint file in the uploaded package.',
+      'Only rewrite files in a temporary upload package, never in-place in the source workspace.',
+      'Do not upload installed dependency directories or vendored package-manager outputs; keep only manifests/lockfiles and source files needed to understand the skill.',
+      'Do upload local artifacts that the skill actually depends on; missing templates or omitted runtime assets make the proposal incomplete.',
+      'Preserve meaningful relative folder structure and send that structure during upload instead of flattening files into the root.',
+      'Keep references valid after normalization.',
+      'Before POST /proposals, prove the exact final temporary upload package and compute hashes from that package, not from the original source if normalization was needed.',
+      'Do not use server-side validate-upload as the first path/reference scan. It is a final server check after local proof, not a substitute for local preflight.',
+      'Readable files should be judged or pre-checked; binary files may still be attached unchanged.',
+    ],
+    apiNotes: {
+      signInRequiredForSubmitter: false,
+      publicOnly: true,
+      registryId: authMetadata.registryId,
+      registryName: authMetadata.registryName,
+      apiBaseUrl: authMetadata.apiBaseUrl,
+      readAuthRequired: authMetadata.readAuthRequired,
+      proposalAuthRequired: authMetadata.proposalAuthRequired,
+      discoveryAuthRequired: authMetadata.discoveryAuthRequired,
+      credentialSetupScriptUrl: authMetadata.credentialSetupScriptUrl ?? undefined,
+      authorizationHeader: authMetadata.proposalAuthRequired ? 'Authorization: Bearer <proposal token>' : null,
+      authSetupFlow: authMetadata.credentialSetupScriptUrl
+        ? 'If auth is required, ask the user for permission to download and run credentialSetupScriptUrl. The setup script opens a local browser form by default and only shows the token fields required by the current registry config; --terminal is available as fallback. Then read ~/.managed-skill-hub/credentials.json by registry alias or apiBaseUrl. Never request tokens in chat.'
+        : undefined,
+      checkDuplicateNote: authMetadata.proposalAuthRequired
+        ? 'This endpoint follows PROPOSAL_AUTH_MODE and requires the proposal token. Local upload agents should still stop for explicit confirmation on strong matches.'
+        : 'This endpoint is available to all submitters and is informational on the API contract, but local upload agents should still stop for explicit confirmation on strong matches.',
+    },
+  };
+}
+
+async function sendSkillPackage(
+  request: import('fastify').FastifyRequest,
+  reply: FastifyReply,
+  container: Container
+) {
+  const { skillId } = request.params as { skillId: string };
+  const { version } = request.query as { version?: string };
+  const manifest = await container.skillQuery.getManifest(skillId, version);
+  if (!manifest) {
+    return sendApiError(reply, request, {
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'Skill or published version not found',
+    });
+  }
+
+  const files = await container.skillQuery.listFiles(skillId, manifest.version);
+  if (files.length === 0) {
+    return sendApiError(reply, request, {
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'Skill has no downloadable files',
+    });
+  }
+
+  try {
+    const packageBuffer = await buildSkillPackageBuffer(
+      skillId,
+      manifest.version,
+      files,
+      (fileId: string) => container.skillQuery.getFile(skillId, fileId, manifest.version)
+    );
+    return reply
+      .header('Content-Type', packageBuffer.mimeType)
+      .header('Content-Disposition', `attachment; filename="${packageBuffer.filename}"`)
+      .send(packageBuffer.content);
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      return sendMappedApiError(reply, request, error);
+    }
+    return sendMappedApiError(reply, request, error);
+  }
+}
+
+export function registerSkillReadRoutes(app: FastifyInstance, container: Container, agentAuth = new AgentApiAuth(container.config)): void {
+  const discoveryGuard = { preHandler: agentAuth.guard('discovery') };
+  const publicReadGuard = { preHandler: agentAuth.guard('public-read') };
+  app.get('/discover', discoveryGuard, async (request) => buildDiscoveryResponse(request, container, agentAuth));
+
+  app.get('/howToPropose', discoveryGuard, async () => buildHowToProposeResponse(container, agentAuth));
+
+  app.get('/agent-credentials/setup.sh', async (_request, reply) => {
+    return reply
+      .type('text/x-shellscript')
+      .header('Content-Disposition', 'attachment; filename=\"setup-managed-skill-hub.sh\"')
+      .send(buildCredentialSetupScript(agentAuth));
+  });
+
+  app.get('/openapi.yaml', discoveryGuard, async (request, reply) => {
+    try {
+      const content = await fs.readFile(container.config.openapiYamlPath, 'utf-8');
+      return reply.type('text/yaml').send(content);
+    } catch {
+      return sendApiError(reply, request, {
+        statusCode: 404,
+        code: 'NOT_FOUND',
+        message: 'OpenAPI specification not available',
+      });
+    }
+  });
+
+  app.get('/skills/suggest-name', publicReadGuard, async (request, reply) => {
+    const { title, description } = request.query as { title?: string; description?: string };
+    if (!title) {
+      return sendApiError(reply, request, {
+        statusCode: 422,
+        code: 'VALIDATION_ERROR',
+        message: 'title is required',
+      });
+    }
+    return container.nameSuggestion.suggestSkillId(title, description);
+  });
+
+  app.get('/skills', publicReadGuard, async (request, reply) => {
+    const { category, group, tag, limit, offset } = request.query as {
+      category?: string;
+      group?: string;
+      tag?: string | string[];
+      limit?: string;
+      offset?: string;
+    };
+    const useCase = new (await import('../../../application/usecases/skill/list-skills.usecase')).ListSkillsUseCase(container.skillQuery);
+    const tags = parseTagQuery(tag);
+    const result = await useCase.execute(
+      category ?? group,
+      tags,
+      limit ? Number(limit) : undefined,
+      offset ? Number(offset) : undefined
+    );
+    return reply.send(result);
+  });
+
+  app.get('/skills/search', publicReadGuard, async (request, reply) => {
+    const { q, mode, category, group, tag, limit, offset } = request.query as {
+      q: string;
+      mode?: string;
+      category?: string;
+      group?: string;
+      tag?: string | string[];
+      limit?: string;
+      offset?: string;
+    };
+    if (!q) {
+      return sendApiError(reply, request, {
+        statusCode: 422,
+        code: 'VALIDATION_ERROR',
+        message: 'q is required',
+      });
+    }
+    const query: SkillSearchQuery = {
+      q,
+      mode: (mode as 'keyword' | 'fulltext' | 'regex') ?? 'keyword',
+      category: category ?? group,
+      tags: parseTagQuery(tag),
+      limit: Number(limit ?? 20),
+      offset: Number(offset ?? 0),
+    };
+    const result = await container.skillQuery.search(query);
+    return reply.send({ ...result, mode: query.mode });
+  });
+
+  app.get('/categories', publicReadGuard, async (_request, reply) => {
+    const items = await container.skillQuery.listCategories();
+    return reply.send({ items });
+  });
+
+  app.get('/tags', publicReadGuard, async (_request, reply) => {
+    const items = await container.skillQuery.listTags();
+    return reply.send({ items });
+  });
+
+  app.get('/skills/:skillId/package', publicReadGuard, (request, reply) => sendSkillPackage(request, reply, container));
+
+  app.get('/skills/:skillId', publicReadGuard, async (request, reply) => {
+    const { skillId } = request.params as { skillId: string };
+    const skill = await container.skillQuery.getSkillDetail(skillId);
+    if (!skill) {
+      return sendApiError(reply, request, {
+        statusCode: 404,
+        code: 'NOT_FOUND',
+        message: `Skill ${skillId} not found`,
+      });
+    }
+    return reply.send(skill);
+  });
+
+  app.get('/skills/:skillId/manifest', publicReadGuard, async (request, reply) => {
+    const { skillId } = request.params as { skillId: string };
+    const { version } = request.query as { version?: string };
+    const manifest = await container.skillQuery.getManifest(skillId, version);
+    if (!manifest) {
+      return sendApiError(reply, request, {
+        statusCode: 404,
+        code: 'NOT_FOUND',
+        message: 'Manifest not found',
+      });
+    }
+    return reply.send(manifest);
+  });
+
+  app.get('/skills/:skillId/files', publicReadGuard, async (request, reply) => {
+    const { skillId } = request.params as { skillId: string };
+    const { version } = request.query as { version?: string };
+    const files = await container.skillQuery.listFiles(skillId, version);
+    return reply.send({ items: files });
+  });
+
+  app.get('/skills/:skillId/judgements', publicReadGuard, async (request, reply) => {
+    try {
+      const { skillId } = request.params as { skillId: string };
+      const { version } = request.query as { version?: string };
+      const manifest = await container.skillQuery.getManifest(skillId, version);
+      if (!manifest) {
+        return sendApiError(reply, request, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: 'Skill or published version not found',
+        });
+      }
+      const judgements = await container.listJudgements.execute('skill', `${skillId}:${manifest.version}`);
+      return reply.send({ items: judgements });
+    } catch (error) {
+      return sendMappedApiError(reply, request, error);
+    }
+  });
+
+  app.get('/skills/:skillId/files/:fileId', publicReadGuard, async (request, reply) => {
+    const { skillId, fileId } = request.params as { skillId: string; fileId: string };
+    const { version } = request.query as { version?: string };
+    const file = await container.skillQuery.getFile(skillId, fileId, version);
+    if (!file) {
+      return sendApiError(reply, request, {
+        statusCode: 404,
+        code: 'NOT_FOUND',
+        message: 'File not found',
+      });
+    }
+    return sendArtifactResponse(reply, file);
+  });
+
+  app.get('/skills/:skillId/files/:fileId/judgements', publicReadGuard, async (request, reply) => {
+    try {
+      const { skillId, fileId } = request.params as { skillId: string; fileId: string };
+      const { version } = request.query as { version?: string };
+      const manifest = await container.skillQuery.getManifest(skillId, version);
+      if (!manifest) {
+        return sendApiError(reply, request, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: 'Skill or published version not found',
+        });
+      }
+      const files = await container.skillQuery.listFiles(skillId, manifest.version);
+      if (!files.some((file) => file.path === fileId)) {
+        return sendApiError(reply, request, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: 'File not found',
+        });
+      }
+      const judgements = await container.listJudgements.execute('file', `${skillId}:${manifest.version}:${fileId}`);
+      return reply.send({ items: judgements });
+    } catch (error) {
+      return sendMappedApiError(reply, request, error);
+    }
+  });
+
+  app.get('/skills/:skillId/files/:fileId/extracted-content', publicReadGuard, async (request, reply) => {
+    try {
+      const { skillId, fileId } = request.params as { skillId: string; fileId: string };
+      const { version } = request.query as { version?: string };
+      const extracted = await container.extractSkillFileContent.execute(skillId, fileId, { version });
+      return reply.send(extracted);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return sendMappedApiError(reply, request, error);
+      }
+      if (error instanceof UnsupportedFileTypeError || error instanceof ValidationError) {
+        return sendMappedApiError(reply, request, error);
+      }
+      throw error;
+    }
+  });
+
+  app.get('/skills/:skillId/files/:fileId/probe', publicReadGuard, async (request, reply) => {
+    try {
+      const { skillId, fileId } = request.params as { skillId: string; fileId: string };
+      const { version } = request.query as { version?: string };
+      const response = await container.probeSkillFileContent.execute(skillId, fileId, {
+        version,
+        includeUnpublished: false,
+      });
+      return reply.send(response);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return sendMappedApiError(reply, request, error);
+      }
+      if (error instanceof ValidationError) {
+        return sendMappedApiError(reply, request, error);
+      }
+      return sendMappedApiError(reply, request, error);
+    }
+  });
+
+  app.get('/skills/:skillId/versions', publicReadGuard, async (request, reply) => {
+    const { skillId } = request.params as { skillId: string };
+    const versions = await container.skillQuery.listVersions(skillId);
+    return reply.send({ items: versions });
+  });
+
+  app.get('/skills/:skillId/history', publicReadGuard, async (request, reply) => {
+    const { skillId } = request.params as { skillId: string };
+    const history = await container.skillQuery.getHistory(skillId);
+    return reply.send({ items: history });
+  });
+
+  app.get('/skills/:skillId/deprecation', publicReadGuard, async (request, reply) => {
+    try {
+      const { skillId } = request.params as { skillId: string };
+      const { version } = request.query as { version?: string };
+      const result = await container.skillQuery.getDeprecationInfo(skillId, version);
+      if (!result) {
+        return sendApiError(reply, request, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: 'Skill or published version not found',
+        });
+      }
+      return reply.send(result);
+    } catch (error) {
+      return sendMappedApiError(reply, request, error);
+    }
+  });
+}

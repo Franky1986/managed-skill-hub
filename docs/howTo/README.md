@@ -1,0 +1,29 @@
+# How-To Index
+
+This folder points agents and operators to task-oriented setup guides.
+
+## Local Development
+
+- Use `docs/setup/BUILD_AND_CHECKS.md` for dependency installation, local startup,
+  checks, and build output.
+- Use `docs/setup/TESTING.md` for API smoke tests, admin flows, and provider
+  validation checks.
+
+## Runtime Providers
+
+- Use `docs/setup/ENVIRONMENT.md` for root `.env` variables, SQLite/MySQL
+  provider flags, judger settings, and auto-publish options.
+- Use `docs/product/AGENT_OPERATIONS.md` for local runbooks covering SQLite,
+  MySQL, mixed provider modes, judgers, and future provider boundaries.
+
+## Judger Adapters
+
+- Use `docs/setup/JUDGER_ADAPTERS.md` to add a Vercel AI SDK/OpenAI-backed
+  judger or a custom adapter implementing `SkillJudgerPort`.
+
+## Server Operation
+
+- Use `docs/setup/DEPLOYMENT.md` for server layout, deployment archive flow,
+  persistent `DATA_DIR`, and SQLite/MySQL server provider choices.
+- Use `docs/setup/NGINX.md` for reverse proxy setup.
+- Use `docs/setup/BACKUP_AND_RESTORE.md` for data backups and restores.

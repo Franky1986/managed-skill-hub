@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.example.private
+scripts/prepare-deploy.sh
+scripts/call-*judger.sh
+docs/setup/*INTERNAL*.md
+
+# Private adapter implementations (e.g. internal non-OSS adapters)
+apps/api/src/adapters/outbound/judger/custom-judger.private.judger.ts
+apps/api/src/adapters/outbound/judger/custom-judger.private.judger.test.ts
+apps/api/src/adapters/outbound/judger/custom-judger.spec.md
+apps/api/src/internal/adapter/custom-judger.judger.ts
+apps/api/src/internal/adapter/custom-judger.judger.test.ts
+apps/api/src/internal/adapter/CustomJudgerSkillJudger.spec.md
+apps/api/src/internal/adapter/
+
+# Logs
+logs/
+*.log
+.tmp/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Data backups
+data/
+!data/.gitkeep

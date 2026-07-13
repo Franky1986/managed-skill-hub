@@ -1,0 +1,88 @@
+name: ManagedSkillHub Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      run_mysql_full_check:
+        description: 'Run Docker/MySQL full validation gate'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+
+jobs:
+  lightweight-check:
+    name: Lightweight deterministic check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run lightweight validation
+        run: ./scripts/check.sh
+
+      - name: Build production artifacts
+        run: npm run build:prod
+
+      - name: Audit locked production dependency graph
+        run: npm audit --audit-level=moderate --package-lock-only
+
+      - name: Upload proof artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightweight-proof-artifacts
+          path: |
+            .tmp/*.log
+            .tmp/*.json
+          if-no-files-found: warn
+
+  mysql-full-check:
+    name: MySQL full validation gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mysql_full_check == 'true')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run full MySQL validation
+        run: RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh
+
+      - name: Upload full proof artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-full-proof-artifacts
+          path: |
+            .tmp/*.log
+            .tmp/*.json
+          if-no-files-found: warn

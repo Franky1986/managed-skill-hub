@@ -1,0 +1,17 @@
+{
+  "name": "@managed-skill-hub/openapi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:prod": "openapi-typescript skill-registry.openapi.yaml -o dist/skill-registry.d.ts",
+    "generate": "openapi-typescript skill-registry.openapi.yaml -o dist/skill-registry.d.ts",
+    "lint": "echo 'no lint'",
+    "typecheck": "echo 'no typecheck'",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.0.4",
+    "typescript": "^5.7.3"
+  }
+}

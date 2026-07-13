@@ -1,0 +1,35 @@
+{
+  "name": "managed-skill-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/api & npm run dev --workspace=apps/web",
+    "build:prod": "npm run build:prod --workspaces",
+    "check": "./scripts/check.sh",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "lightningcss": "^1.32.0",
+    "prettier": "^3.3.2",
+    "tsx": "^4.23.1",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}

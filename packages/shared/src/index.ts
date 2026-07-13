@@ -1,0 +1,4 @@
+// Shared technical types only - no domain logic
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
