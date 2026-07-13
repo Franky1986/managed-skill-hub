@@ -12,15 +12,19 @@ co-located `*.spec.md` files.
 4. [`docs/setup/TESTING.md`](setup/TESTING.md) - local testing and API checks
 5. [`docs/setup/ENVIRONMENT.md`](setup/ENVIRONMENT.md) - root environment variables,
    SQLite/MySQL providers, judger settings, and auto-publish flags
-6. [`docs/setup/JUDGER_ADAPTERS.md`](setup/JUDGER_ADAPTERS.md) - built-in and custom judger adapters
-7. [`docs/product/AGENT_OPERATIONS.md`](product/AGENT_OPERATIONS.md) - SQLite/MySQL,
+6. [`docs/setup/AUTHENTIK.md`](setup/AUTHENTIK.md) - authentik/OIDC target setup,
+   cutover, and rollback
+7. [`docs/setup/JUDGER_ADAPTERS.md`](setup/JUDGER_ADAPTERS.md) - built-in and custom judger adapters
+8. [`docs/product/AGENT_OPERATIONS.md`](product/AGENT_OPERATIONS.md) - SQLite/MySQL,
    judger, and auto-publish runbooks
-8. [`docs/setup/DEPLOYMENT.md`](setup/DEPLOYMENT.md) - server deployment
-9. [`docs/howTo/README.md`](howTo/README.md) - task-oriented setup guide index
-10. [`LICENSE`](../LICENSE) - project license
-11. [`CONTRIBUTING.md`](../CONTRIBUTING.md) - contribution process
-12. [`SECURITY.md`](../SECURITY.md) - security policy
-13. [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md) - collaboration standards
+9. [`docs/product/AGENT_OIDC_DEVICE_FLOW.md`](product/AGENT_OIDC_DEVICE_FLOW.md) -
+   target agent Device Authorization linkout contract
+10. [`docs/setup/DEPLOYMENT.md`](setup/DEPLOYMENT.md) - server deployment
+11. [`docs/howTo/README.md`](howTo/README.md) - task-oriented setup guide index
+12. [`LICENSE`](../LICENSE) - project license
+13. [`CONTRIBUTING.md`](../CONTRIBUTING.md) - contribution process
+14. [`SECURITY.md`](../SECURITY.md) - security policy
+15. [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md) - collaboration standards
 
 ## Roadmap And Progress
 
@@ -35,6 +39,7 @@ co-located `*.spec.md` files.
 | [docs/roadmap/EPIC-008-deterministic-validation-and-release-proofing.md](roadmap/EPIC-008-deterministic-validation-and-release-proofing.md) | Implemented deterministic validation scripts and proof artifacts for release confidence |
 | [docs/roadmap/EPIC-009-database-backed-content-storage.md](roadmap/EPIC-009-database-backed-content-storage.md) | Planned database-backed content storage |
 | [docs/roadmap/EPIC-010-portable-agent-command-artifacts.md](roadmap/EPIC-010-portable-agent-command-artifacts.md) | Planned portable command artifacts for Cursor, Codex, Claude Code, and generic agent runtimes |
+| [docs/roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md](roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md) | Planned Authentik admin OIDC, agent Device Authorization, and verified proposal ownership |
 | [docs/progress/CURRENT_STATUS.md](progress/CURRENT_STATUS.md) | Current project state |
 | [docs/progress/NEXT_STEPS.md](progress/NEXT_STEPS.md) | Concrete next steps |
 | [docs/progress/CHANGELOG_INTERNAL.md](progress/CHANGELOG_INTERNAL.md) | Engineering change journal |
@@ -60,6 +65,8 @@ co-located `*.spec.md` files.
 | [docs/decisions/ADR-011-skill-id-rules.md](decisions/ADR-011-skill-id-rules.md) | Skill ID rules |
 | [docs/decisions/ADR-012-content-extraction-strategy.md](decisions/ADR-012-content-extraction-strategy.md) | Content extraction strategy |
 | [docs/decisions/ADR-013-sqlite-metadata-truth.md](decisions/ADR-013-sqlite-metadata-truth.md) | SQLite as metadata truth |
+| [docs/decisions/ADR-014-database-backed-content-storage.md](decisions/ADR-014-database-backed-content-storage.md) | Configurable database-backed managed content storage |
+| [docs/decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md](decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md) | Authentik OIDC and human-delegated agent identity target |
 
 ## Setup And Operations
 
@@ -68,6 +75,7 @@ co-located `*.spec.md` files.
 | [docs/setup/BUILD_AND_CHECKS.md](setup/BUILD_AND_CHECKS.md) | Build, checks, local startup |
 | [docs/setup/TESTING.md](setup/TESTING.md) | Local testing and API checks |
 | [docs/setup/ENVIRONMENT.md](setup/ENVIRONMENT.md) | Environment variables |
+| [docs/setup/AUTHENTIK.md](setup/AUTHENTIK.md) | Authentik OIDC operator setup, cutover, and rollback playbook |
 | [docs/setup/JUDGER_ADAPTERS.md](setup/JUDGER_ADAPTERS.md) | Judger adapter contract and extension |
 | [docs/setup/DEPLOYMENT.md](setup/DEPLOYMENT.md) | Server deployment |
 | [docs/setup/BACKUP_AND_RESTORE.md](setup/BACKUP_AND_RESTORE.md) | Backup and restore |
@@ -160,3 +168,4 @@ rg --files | rg '\.spec\.md$'
 | [docs/product/DESIGN_AGENT_BRIEF.md](product/DESIGN_AGENT_BRIEF.md) | Handoff document for design agents |
 | [docs/product/AGENT_BOOTSTRAP.md](product/AGENT_BOOTSTRAP.md) | How agents bootstrap without the UI |
 | [docs/product/AGENT_OPERATIONS.md](product/AGENT_OPERATIONS.md) | Local provider modes, auto-publish options, and agent operation guidance |
+| [docs/product/AGENT_OIDC_DEVICE_FLOW.md](product/AGENT_OIDC_DEVICE_FLOW.md) | Target Device Authorization linkout and token-handling guidance for agents |

@@ -19,6 +19,21 @@ Prerequisites:
 - Optional shared options in root `.env`: `JUDGER_PROVIDER`, auto-publish flags, etc.
 - Build output exists (`npm run build:prod`) when using `node apps/api/dist/server.js`.
 
+## Authentication Profiles
+
+- `.env.example.simple` is the explicit currently runnable simple-admin profile.
+- `.env.example` remains the provider-neutral current development template.
+- `.env.example.authentik` is the accepted ADR-015 target profile and is not
+  supported by the current runtime.
+
+For Authentik operator setup, cutover, and rollback, use
+[`docs/setup/AUTHENTIK.md`](../setup/AUTHENTIK.md). For agent Device
+Authorization behavior, use
+[`docs/product/AGENT_OIDC_DEVICE_FLOW.md`](./AGENT_OIDC_DEVICE_FLOW.md).
+
+Do not test OIDC by placing authentik credentials or tokens into agent prompts.
+The target flow requires a trusted clickable link and server-defined polling.
+
 ## Provider Profiles
 
 Control the backend behavior with:

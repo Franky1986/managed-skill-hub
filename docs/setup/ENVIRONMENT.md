@@ -5,12 +5,25 @@ This repository uses a single runtime configuration file:
 - `/.env` in repository root
 
 Do not keep per-app `.env` files anymore. Keep all configuration in repository
-root `/.env` and keep `.env.example` there as the copy template.
+root `/.env`.
+
+Available templates:
+
+- `.env.example`: current provider-neutral development template.
+- `.env.example.simple`: complete current-runtime simple-auth profile.
+- `.env.example.authentik`: accepted ADR-015 target profile; OIDC runtime
+  support is not implemented yet.
 
 ## Root `.env` (copy this first)
 
 ```bash
 cp .env.example .env
+```
+
+For an explicit currently supported simple profile:
+
+```bash
+cp .env.example.simple .env
 ```
 
 ## Core Variables
@@ -69,6 +82,44 @@ When `PROPOSAL_AUTH_MODE=bearer`, the authenticated bearer actor is used for pro
 Consumer credentials should be stored per registry alias/base URL outside agent conversations, for example in `~/.managed-skill-hub/credentials.json`. When any agent auth is enabled, `/discover` points to `/agent-credentials/setup.sh`, which generates a no-secret local setup script for this registry.
 
 Protected agent routes return `401` with machine-readable `details.authRequired`, `details.authArea`, `details.authScheme`, `details.discoverUrl`, and `details.credentialSetupScriptUrl` so agents can ask the user for setup-script confirmation instead of requesting tokens in chat.
+
+## Planned Authentik/OIDC Profile
+
+[ADR-015](../decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md)
+accepts `oidc` as a future third mode for discovery, published reads, and
+proposals, plus `ADMIN_AUTH_MODE=simple|oidc`. This is a target contract, not a
+current runtime feature. The current config parser rejects `oidc` for agent API
+areas and still requires simple admin credentials in production.
+
+The target profile is documented in `.env.example.authentik` and
+[`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md). Its principal settings are:
+
+| Variable | Target purpose |
+|---|---|
+| `ADMIN_AUTH_MODE` | Select `simple` or OIDC admin login. |
+| `OIDC_AGENT_ISSUER` | Exact issuer for the public authentik Device Authorization provider. |
+| `OIDC_AGENT_CLIENT_ID` | Public device client ID; no client secret exists. |
+| `OIDC_AGENT_BASE_SCOPES` | OIDC identity scopes requested by agents. |
+| `OIDC_DISCOVERY_SCOPE` | API scope required only when discovery uses OIDC. |
+| `OIDC_PUBLIC_READ_SCOPE` | API scope required for protected published reads. |
+| `OIDC_PROPOSAL_SCOPE` | API scope required for proposal operations. |
+| `OIDC_ADMIN_ISSUER` | Exact issuer for the admin web provider. |
+| `OIDC_ADMIN_CLIENT_ID` | Confidential admin client ID. |
+| `OIDC_ADMIN_CLIENT_SECRET` | Admin client secret supplied through deployment secret management. |
+| `OIDC_ADMIN_REDIRECT_URI` | Exact server-side admin callback URI. |
+| `OIDC_PROPOSAL_ACCESS` | `all_authenticated_users` or `required_groups`. |
+| `OIDC_PROPOSAL_GROUPS` | Required proposal groups when group policy is selected. |
+| `OIDC_PUBLIC_READ_ACCESS` | `all_authenticated_users` or `required_groups`. |
+| `OIDC_PUBLIC_READ_GROUPS` | Required read groups when group policy is selected. |
+| `OIDC_ADMIN_SUBJECTS` | Stable authentik user UUIDs for initial admin bootstrap. |
+| `OIDC_ADMIN_GROUPS` | Admin group names, normally `managedskillhub-admins`. |
+| `OIDC_REVIEWER_GROUPS` | Reviewer group names. |
+| `OIDC_PUBLISHER_GROUPS` | Publisher group names. |
+
+When implemented, `OIDC_PROPOSAL_ACCESS=all_authenticated_users` allows every
+active interactive human accepted by the configured authentik application to
+submit proposals and read status by a known proposal UUID. It does not expose a
+proposal list and does not permit cross-owner mutation.
 
 ## Provider + Data
 
@@ -146,6 +197,10 @@ When switching environments, copy the template and update the required keys:
 ```bash
 cp .env.example .env
 ```
+
+Do not copy `.env.example.authentik` into an active deployment until the
+ADR-015 implementation gate is complete. Follow
+[`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md) for staging proof and cutover.
 
 Then restart the stack and check relevant endpoints (`/health`, `/discover`, `/skills`,
 `/skills/search`) to validate the active provider, auth, and judger setup.

@@ -30,8 +30,11 @@ English-first docs, specs, UI localization, and agent-facing contracts.
 - SQLite FTS5 search index in `data/index/`.
 - SQLite metadata projection as domain truth and read layer for large parts of
   retrieval and review.
-- Simple session-protected admin path today; authentik/OIDC later.
-- Public read and proposal paths are open by default, with configurable agent/API auth planned in EPIC-007.
+- Simple session-protected admin path today; accepted authentik/OIDC target in
+  ADR-015 with Authorization Code admin login and human-delegated agent Device
+  Authorization.
+- Public read and proposal paths are open by default, with implemented
+  `none`/`bearer` agent API auth and accepted OIDC expansion in ADR-015.
 - Ports for storage, search, audit, and auth to enable later migration.
 
 ## Major Epics
@@ -86,6 +89,9 @@ English-first docs, specs, UI localization, and agent-facing contracts.
    - Optional bearer authentication for published-skill consumption.
    - Optional bearer authentication for proposal submission and status polling.
    - Discovery/OpenAPI contracts that tell agents which auth mode is active.
+   - Accepted follow-up: independently configurable Authentik OIDC modes,
+     just-in-time principals, and Device Authorization linkout for agents acting
+     on behalf of humans.
 
 10. **Deterministic Validation And Release Proofing**
    - Script-driven proof artifacts for provider, judger, proposal, download, agent-contract, hygiene, backup/restore, and OpenAPI parity checks.
@@ -101,6 +107,14 @@ English-first docs, specs, UI localization, and agent-facing contracts.
    - Consumer-side mapping hints for Cursor, Codex, Claude Code, and generic
      command folders without leaking submitter-workspace paths.
 
+13. **Authentik OIDC And Delegated Agent Authentication**
+   - Server-side Authorization Code + PKCE for the admin UI.
+   - Device Authorization linkout for agents acting on behalf of humans.
+   - Just-in-time principals, verified proposal ownership, and
+     `managedskillhub-*` role mapping.
+   - Independent `none`, `bearer`, and `oidc` modes for discovery, published
+     reads, and proposals.
+
 ## Dependency Order
 
 1. OpenAPI contract and domain model.
@@ -115,6 +129,7 @@ English-first docs, specs, UI localization, and agent-facing contracts.
 10. Deterministic validation and release proofing.
 11. Database-backed content storage.
 12. Portable agent command artifacts.
+13. Authentik OIDC and delegated agent authentication.
 
 ## Definition Of Done Per Epic
 

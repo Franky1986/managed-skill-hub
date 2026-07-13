@@ -159,6 +159,20 @@ limits at nginx or the API gateway.
 
 After deployment, validate `/discover`. It should return the expected `registryId`, `apiBaseUrl`, auth flags, and `credentialSetupScriptUrl` when auth is enabled. Consumers can then download `/agent-credentials/setup.sh` and store credentials locally per registry alias/URL.
 
+## Planned Authentik/OIDC Deployment
+
+The accepted Authentik target is documented in
+[`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md) and
+`.env.example.authentik`. It preserves independent `none`, `bearer`, and future
+`oidc` choices for discovery, published reads, and proposals. It also replaces
+the password admin form with server-side Authorization Code login when
+`ADMIN_AUTH_MODE=oidc`.
+
+The current runtime does not implement this mode. Do not deploy the Authentik
+template until the ADR-015 implementation gate and staging cutover checklist
+have passed. Continue using the current simple/bearer production baseline until
+then.
+
 ## nginx
 
 An example nginx configuration is documented in `docs/setup/NGINX.md`. It must

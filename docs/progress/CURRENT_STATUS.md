@@ -41,7 +41,19 @@ EPIC-007 static bearer phase is implemented:
 - `/agent-credentials/setup.sh` generates a no-secret local setup script that stores user credentials per registry alias/base URL outside agent conversation.
 - Proposal bearer auth uses the configured bearer actor as authoritative proposal actor instead of trusting `X-Actor`.
 
-Future auth expansion remains open for multi-token stores, API gateways, OAuth/OIDC, and richer per-consumer identity.
+Runtime auth expansion remains open for multi-token stores, API gateways,
+OAuth/OIDC, and richer per-consumer identity.
+
+The Authentik/OIDC target is now specified in ADR-015, with separate complete
+environment profiles and operator/agent playbooks. The accepted target keeps
+auth modes independent, allows all active interactive Authentik users to submit
+and read proposal status by known UUID by default, uses Device Authorization
+for human-delegated agent work, and supports `managedskillhub-*` groups plus
+stable subject UUIDs for privileged access. This is documentation and target
+architecture only; runtime OIDC support has not been implemented yet.
+EPIC-011 now defines the implementation sequence, provider-neutral identity and
+session boundaries, additive proposal/audit migration, protocol and role test
+matrix, staged rollout, rollback, and production acceptance gate.
 
 ## EPIC-006 MySQL Support and Relational Provider Decoupling
 

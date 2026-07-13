@@ -1,5 +1,23 @@
 # CHANGELOG_INTERNAL
 
+## 2026-07-13: Authentik/OIDC Target Playbooks
+
+- Accepted ADR-015 for independently configurable Authentik OIDC admin,
+  discovery, published-read, and proposal authentication modes.
+- Defined human-delegated agent proposal identity through OAuth Device
+  Authorization, with all active interactive Authentik users allowed to submit
+  and read status by known UUID by default.
+- Added complete `.env.example.simple` and target-only
+  `.env.example.authentik` profiles with explicit implementation status.
+- Added the Authentik operator setup/cutover/rollback playbook and the normative
+  agent Device Flow guide.
+- Linked the target contract from setup, deployment, architecture, roadmap,
+  agent bootstrap, operations, and documentation indexes without claiming that
+  OIDC runtime support is already implemented.
+- Added EPIC-011 with implementation phases, identity/session ports, additive
+  migration, protocol and authorization tests, rollout, rollback, and complete
+  acceptance criteria for the Authentik target.
+
 ## 2026-07-13: Public Release Baseline
 
 - Reduced the public judger boundary to provider-neutral adapter selection;

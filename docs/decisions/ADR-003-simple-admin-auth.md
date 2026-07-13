@@ -29,6 +29,7 @@ The MVP uses simple HTTP basic auth with a single admin user.
 
 ## Open Points
 
-- A later ADR will document the move to authentik/OIDC.
+- ADR-015 documents the accepted authentik/OIDC target. This ADR remains the
+  current runtime decision until the ADR-015 implementation gate is complete.
 - Multi-user support, roles, and audit metadata such as `created_by` and
   `approved_by` are technical strings in the MVP, not verified identities.

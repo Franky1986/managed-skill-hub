@@ -18,6 +18,11 @@ Before closing future language work, run the German-text search checklist and
 
 ## Product Follow-Ups Outside EPIC-003
 
+- Execute
+  [`EPIC-011`](../roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md)
+  phase by phase; do not activate `.env.example.authentik` before its
+  implementation and staging gates pass.
+
 - EPIC-009 follow-up: decide whether production-specific MySQL dump/restore automation should be added beyond the current explicit fail-fast guard and documentation.
 - Improve judgement consistency across proposal overview, proposal detail, and
   skill context views.
@@ -50,11 +55,26 @@ Before closing future language work, run the German-text search checklist and
 - Evaluate a shared gateway or datastore-backed proposal limiter before running
   multiple API instances; the built-in limiter intentionally remains
   process-local.
-- EPIC-007 follow-up: evaluate multi-token stores, API gateway asserted identity,
-  OAuth/OIDC setup UX, and richer per-consumer audit attribution after the
-  static bearer phase.
-- Plan productionization: authentik/OIDC, CI/CD, dependency consolidation, and
-  operational integrity checks.
+- EPIC-007 Authentik follow-up: implement ADR-015 config parsing and fail-fast
+  validation for independent admin, discovery, public-read, and proposal auth
+  modes.
+- Add OIDC identity/session ports plus Authentik adapters for admin
+  Authorization Code with PKCE and public agent Device Authorization.
+- Add just-in-time principal projection, stable Authentik user UUID ownership,
+  agent-client attribution, and migration handling for existing technical
+  actor strings.
+- Update OpenAPI and `/discover` with OIDC device metadata, scopes, and
+  machine-readable authorization errors; implement the agent linkout contract
+  from `docs/product/AGENT_OIDC_DEVICE_FLOW.md`.
+- Add role checks for `managedskillhub-*` groups and subject UUID bootstrap,
+  with all authenticated interactive humans allowed to submit by default.
+- Remove personal and linked-proposal identifiers from non-admin proposal
+  status before exposing per-user OIDC identity.
+- Add deterministic mode-matrix, token-validation, Device Flow, login/logout,
+  role, ownership, privacy, expiry, replay, and JWKS-rotation tests before
+  enabling `.env.example.authentik` in deployment.
+- Continue productionization with CI/CD, dependency consolidation, and
+  operational integrity checks after Authentik staging proof.
 - Evaluate web chunk splitting if the current Vite production bundle warning
   becomes a startup or cache-performance concern.
 

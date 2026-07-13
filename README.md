@@ -82,20 +82,26 @@ English-first documentation and agent-facing contracts with a bilingual web UI.
    checks
 4. [`docs/setup/ENVIRONMENT.md`](./docs/setup/ENVIRONMENT.md) - root `.env`,
    SQLite/MySQL providers, judger settings, and auto-publish flags
-5. [`docs/setup/JUDGER_ADAPTERS.md`](./docs/setup/JUDGER_ADAPTERS.md) - add
+5. [`docs/setup/AUTHENTIK.md`](./docs/setup/AUTHENTIK.md) - accepted authentik
+   OIDC target, operator setup, cutover, and rollback playbook
+6. [`docs/setup/JUDGER_ADAPTERS.md`](./docs/setup/JUDGER_ADAPTERS.md) - add
    OpenAI/Vercel AI SDK or custom judger adapters
-6. [`docs/product/AGENT_OPERATIONS.md`](./docs/product/AGENT_OPERATIONS.md) -
+7. [`docs/product/AGENT_OPERATIONS.md`](./docs/product/AGENT_OPERATIONS.md) -
    local agent runbooks for SQLite, MySQL, judgers, and auto-publish
-7. [`docs/setup/DEPLOYMENT.md`](./docs/setup/DEPLOYMENT.md) - server install
+8. [`docs/product/AGENT_OIDC_DEVICE_FLOW.md`](./docs/product/AGENT_OIDC_DEVICE_FLOW.md)
+   - target agent linkout and Device Authorization behavior
+9. [`docs/setup/DEPLOYMENT.md`](./docs/setup/DEPLOYMENT.md) - server install
    and runtime layout
-8. [`docs/roadmap/MASTER_PLAN.md`](./docs/roadmap/MASTER_PLAN.md) - vision,
+10. [`docs/roadmap/MASTER_PLAN.md`](./docs/roadmap/MASTER_PLAN.md) - vision,
    scope, and phases
-9. [`docs/roadmap/EPIC-003-english-first-localization-and-agent-contracts.md`](./docs/roadmap/EPIC-003-english-first-localization-and-agent-contracts.md)
+11. [`docs/roadmap/EPIC-003-english-first-localization-and-agent-contracts.md`](./docs/roadmap/EPIC-003-english-first-localization-and-agent-contracts.md)
    - English-first localization and agent-facing contracts
-10. [`docs/progress/NEXT_STEPS.md`](./docs/progress/NEXT_STEPS.md) - current next
+12. [`docs/roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md`](./docs/roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md)
+   - Authentik/OIDC implementation plan and acceptance gate
+13. [`docs/progress/NEXT_STEPS.md`](./docs/progress/NEXT_STEPS.md) - current next
     steps
-11. [`docs/decisions/`](./docs/decisions/) - architecture decision records
-12. [`docs/index.md`](./docs/index.md) - documentation index
+14. [`docs/decisions/`](./docs/decisions/) - architecture decision records
+15. [`docs/index.md`](./docs/index.md) - documentation index
 
 ## Quickstart
 
@@ -183,7 +189,8 @@ This runs:
 - **Persistence:** file-based artifact storage in `data/skills/`, SQLite FTS5
   search index, and SQLite metadata projection
 - **Search:** keyword/BM25, fulltext, regex
-- **Auth:** simple admin auth via `.env` for the MVP; authentik/OIDC later
+- **Auth:** simple admin auth and configurable agent bearer auth today;
+  authentik/OIDC target specified in ADR-015
 - **Judger:** Noop default with optional Vercel AI SDK provider. Custom judgers
   can be loaded through `JUDGER_ADAPTER_PATH`.
 - **Deployment:** `/path/to/deploy-root/src` is replaceable,

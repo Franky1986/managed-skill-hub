@@ -17,6 +17,26 @@ A self-hosted, agent-facing skill registry with configurable filesystem or datab
   - `database` stores managed content in database-backed adapters following `CATALOG_PROVIDER` (`sqlite` or `mysql`).
   - Categories, skill/version/file metadata, proposal metadata, judgements, and history are projected into configurable relational providers (`sqlite` or `mysql`) and read from there.
 
+## Accepted Authentik Target
+
+[ADR-015](../decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md)
+defines the accepted but not yet implemented identity target:
+
+- admin login uses server-side OIDC Authorization Code with PKCE and a local
+  `HttpOnly` session;
+- agents use Authentik Device Authorization so a human can authorize work from
+  a clickable conversation link;
+- discovery, published reads, proposals, and admin login remain independently
+  configurable;
+- existing active human Authentik users can submit proposals by default without
+  local account import;
+- proposal ownership uses a stable human principal, not email, username, or a
+  shared bearer label;
+- privileged roles use stable subject UUIDs and `managedskillhub-*` groups.
+
+Current runtime behavior remains simple admin auth plus `none`/`bearer` agent
+API auth until the ADR implementation gate is complete.
+
 ## Components
 
 ```text
@@ -26,7 +46,7 @@ A self-hosted, agent-facing skill registry with configurable filesystem or datab
 └──────┬───────┘      └──────┬───────┘      └──────┬───────┘
        │                     │                     │
        │ REST                │ REST                │ REST/MCP
-       │ no auth             │ session/auth        │
+       │ configurable auth   │ session/auth        │
        │                     │                     │
        └─────────────────────┴─────────────────────┘
                              │

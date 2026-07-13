@@ -16,6 +16,15 @@ This folder points agents and operators to task-oriented setup guides.
 - Use `docs/product/AGENT_OPERATIONS.md` for local runbooks covering SQLite,
   MySQL, mixed provider modes, judgers, and future provider boundaries.
 
+## Authentication Profiles
+
+- Use `.env.example.simple` for the currently runnable local/simple profile.
+- Use `docs/setup/AUTHENTIK.md` and `.env.example.authentik` for the accepted
+  authentik/OIDC target configuration. OIDC runtime support is not implemented
+  yet.
+- Use `docs/product/AGENT_OIDC_DEVICE_FLOW.md` for the target agent linkout,
+  polling, token handling, and failure behavior.
+
 ## Judger Adapters
 
 - Use `docs/setup/JUDGER_ADAPTERS.md` to add a Vercel AI SDK/OpenAI-backed
