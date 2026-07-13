@@ -5,17 +5,20 @@ import { adminApi, ObservabilitySnapshot } from '../../api/admin';
 import { handleApiError } from '../../api/client';
 import { useLanguage } from '../../i18n';
 import { formatLocalDateTime } from '../../lib/formatLocalDateTime';
+import { hasAdminRole, useAuthStore } from '../../store/auth';
 
 export function AdminDashboardPage() {
     const { language, t } = useLanguage();
     const [skills, setSkills] = useState<SkillSummary[]>([]);
     const [observability, setObservability] = useState<ObservabilitySnapshot | null>(null);
     const [message, setMessage] = useState<string | null>(null);
+    const roles = useAuthStore((state) => state.roles);
+    const canViewOperations = hasAdminRole(roles, 'admin');
 
     useEffect(() => {
         adminApi.listSkills().then((res) => setSkills(res.data.items ?? []));
-        void refreshObservability();
-    }, []);
+        if (canViewOperations) void refreshObservability();
+    }, [canViewOperations]);
 
     async function refreshObservability() {
         try {
@@ -42,7 +45,7 @@ export function AdminDashboardPage() {
                 <h1 className="text-2xl font-semibold">{t('adminDashboard.title')}</h1>
             </div>
             {message && <p className="text-sm text-gray-700">{message}</p>}
-            <section className="rounded border bg-white p-4">
+            {canViewOperations && <section className="rounded border bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-lg font-medium">{t('adminDashboard.observability')}</h2>
                     <p className="text-xs text-gray-500">
@@ -206,7 +209,7 @@ export function AdminDashboardPage() {
                         </ul>
                     )}
                 </div>
-            </section>
+            </section>}
             <section className="rounded border bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-lg font-medium">{t('adminDashboard.draftSkills')}</h2>

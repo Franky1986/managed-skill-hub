@@ -22,6 +22,12 @@ Central API server configuration, especially:
 - Parse proposal API rate-limit settings and the explicit production override
   for open proposal APIs.
 - Parse an explicit trusted-proxy allowlist used for forwarded client IPs.
+- Parse `simple|oidc` admin auth and independent `none|bearer|oidc` discovery,
+  published-read, and proposal auth modes.
+- Parse OIDC issuers, clients, scopes, group policies, role mappings, callback
+  and UI paths, protocol timeouts, token/group limits, cache lifetimes, and the
+  strict-JWT-profile versus authenticated-introspection validation mode.
+- Parse bounded simple-admin login rate-limit settings.
 
 ## Non-Scope
 
@@ -60,6 +66,26 @@ Central API server configuration, especially:
   startup validation failure.
 - `NODE_ENV=production` with `PROPOSAL_AUTH_MODE=none` and no explicit
   `ALLOW_OPEN_PROPOSALS_IN_PRODUCTION=true` -> startup validation failure.
+- An OIDC-selected area without exact issuer, client ID, or area scope ->
+  startup validation failure.
+- Authentik introspection mode without confidential checker credentials ->
+  startup validation failure.
+- OIDC admin mode without confidential client settings, exact callback,
+  `openid`, and a subject/group admin bootstrap -> startup validation failure.
+- OIDC admin mode with explicitly configured simple credentials -> startup
+  validation failure; there is no implicit password fallback.
+- Non-HTTPS issuer/callback URLs outside explicit localhost development,
+  unsafe URL components, unknown access policies, or empty required groups ->
+  startup validation failure.
+- Production simple mode requires a strong `JWT_SECRET`, password hash, and no
+  plaintext password. OIDC mode uses opaque server-side sessions and does not
+  require local credentials or `JWT_SECRET`.
+- Production static bearer mode requires at least 32 UTF-8 bytes and rejects
+  known example/default values.
+- Production confidential OIDC admin and introspection secrets require at least
+  32 UTF-8 bytes and reject known example/default values.
+- Session TTL, OIDC clock tolerance, transaction/JWKS lifetimes, HTTP timeout,
+  token size, and group count outside their finite ranges -> startup failure.
 - `DATA_DIR` is not writable -> `ConfigurationError` with clear hint to the
   environment variable.
 - `DATA_DIR` is a relative path -> resolved against project root.
@@ -78,6 +104,9 @@ Central API server configuration, especially:
 - Trusted proxy handling defaults off and accepts explicit IP/CIDR entries from
   `API_TRUSTED_PROXIES`.
 - Proposal API rate limiting has a finite in-memory identity-bucket cap.
+- All 27 agent-area auth combinations parse independently.
+- OIDC protocol size, timeout, clock, transaction, and JWKS-cache bounds have
+  finite defaults and reject invalid integers.
 - With non-writable `DATA_DIR`, server does not start and returns a
   `CONFIGURATION_ERROR` response.
 

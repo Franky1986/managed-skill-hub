@@ -82,14 +82,14 @@ English-first documentation and agent-facing contracts with a bilingual web UI.
    checks
 4. [`docs/setup/ENVIRONMENT.md`](./docs/setup/ENVIRONMENT.md) - root `.env`,
    SQLite/MySQL providers, judger settings, and auto-publish flags
-5. [`docs/setup/AUTHENTIK.md`](./docs/setup/AUTHENTIK.md) - accepted authentik
-   OIDC target, operator setup, cutover, and rollback playbook
+5. [`docs/setup/AUTHENTIK.md`](./docs/setup/AUTHENTIK.md) - Authentik OIDC
+   setup, staging gate, cutover, and rollback playbook
 6. [`docs/setup/JUDGER_ADAPTERS.md`](./docs/setup/JUDGER_ADAPTERS.md) - add
    OpenAI/Vercel AI SDK or custom judger adapters
 7. [`docs/product/AGENT_OPERATIONS.md`](./docs/product/AGENT_OPERATIONS.md) -
    local agent runbooks for SQLite, MySQL, judgers, and auto-publish
 8. [`docs/product/AGENT_OIDC_DEVICE_FLOW.md`](./docs/product/AGENT_OIDC_DEVICE_FLOW.md)
-   - target agent linkout and Device Authorization behavior
+   - runtime agent linkout and Device Authorization behavior
 9. [`docs/setup/DEPLOYMENT.md`](./docs/setup/DEPLOYMENT.md) - server install
    and runtime layout
 10. [`docs/roadmap/MASTER_PLAN.md`](./docs/roadmap/MASTER_PLAN.md) - vision,
@@ -189,8 +189,8 @@ This runs:
 - **Persistence:** file-based artifact storage in `data/skills/`, SQLite FTS5
   search index, and SQLite metadata projection
 - **Search:** keyword/BM25, fulltext, regex
-- **Auth:** simple admin auth and configurable agent bearer auth today;
-  authentik/OIDC target specified in ADR-015
+- **Auth:** independently configurable simple/OIDC admin auth and
+  none/bearer/OIDC agent areas with Authentik Device Authorization
 - **Judger:** Noop default with optional Vercel AI SDK provider. Custom judgers
   can be loaded through `JUDGER_ADAPTER_PATH`.
 - **Deployment:** `/path/to/deploy-root/src` is replaceable,
@@ -218,7 +218,8 @@ scripts/      build, deploy, backup, and test scripts
 ## MVP Boundaries
 
 - No production deployment is included.
-- No authentik integration yet.
+- Authentik production activation remains deployment-specific and requires the
+  real staging gate; normal CI uses a deterministic local OIDC/JWKS provider.
 - No hosted third-party judger service is included; deployers configure the
   built-in Vercel AI SDK provider or supply their own adapter.
 - No semantic/vector search.

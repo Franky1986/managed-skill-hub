@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppConfig } from '../../../infrastructure/config';
 import { AdminOidcIdentityProvider } from './admin-oidc.identity-provider';
 
-function config(): AppConfig {
+function config(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
     oidcAdminIssuer: 'https://auth.example.test/application/o/admin/',
     oidcAdminClientId: 'managedskillhub-admin-web',
@@ -10,13 +10,20 @@ function config(): AppConfig {
     oidcAdminRedirectUri: 'https://skills.example.test/api/admin/auth/oidc/callback',
     oidcHttpTimeoutMs: 5000,
     oidcMaxGroups: 100,
+    ...overrides,
   } as AppConfig;
 }
 
 describe('AdminOidcIdentityProvider', () => {
   it('uses S256 and validates state, nonce, PKCE, and an ID Token through openid-client', async () => {
     const configuration = {
-      serverMetadata: () => ({ supportsPKCE: (method: string) => method === 'S256' }),
+      serverMetadata: () => ({
+        issuer: config().oidcAdminIssuer,
+        authorization_endpoint: 'https://auth.example.test/application/o/authorize/',
+        token_endpoint: 'https://auth.example.test/application/o/token/',
+        jwks_uri: 'https://auth.example.test/application/o/admin/jwks/',
+        supportsPKCE: (method: string) => method === 'S256',
+      }),
     };
     const authorizationCodeGrant = vi.fn().mockResolvedValue({
       claims: () => ({
@@ -82,7 +89,13 @@ describe('AdminOidcIdentityProvider', () => {
 
   it('fails closed when callback validation fails or claims are malformed', async () => {
     const configuration = {
-      serverMetadata: () => ({ supportsPKCE: () => true }),
+      serverMetadata: () => ({
+        issuer: config().oidcAdminIssuer,
+        authorization_endpoint: 'https://auth.example.test/application/o/authorize/',
+        token_endpoint: 'https://auth.example.test/application/o/token/',
+        jwks_uri: 'https://auth.example.test/application/o/admin/jwks/',
+        supportsPKCE: () => true,
+      }),
     };
     const client = {
       discovery: vi.fn().mockResolvedValue(configuration),
@@ -99,5 +112,61 @@ describe('AdminOidcIdentityProvider', () => {
       expectedNonce: 'nonce',
       pkceVerifier: 'verifier',
     })).rejects.toThrow('OIDC authorization callback validation failed');
+  });
+
+  it('rejects discovery metadata that sends the browser to another origin', async () => {
+    const configuration = {
+      serverMetadata: () => ({
+        issuer: config().oidcAdminIssuer,
+        authorization_endpoint: 'https://evil.example/authorize',
+        token_endpoint: 'https://auth.example.test/application/o/token/',
+        jwks_uri: 'https://auth.example.test/application/o/admin/jwks/',
+        supportsPKCE: () => true,
+      }),
+    };
+    const client = {
+      discovery: vi.fn().mockResolvedValue(configuration),
+      ClientSecretPost: vi.fn(),
+      customFetch: Symbol('customFetch'),
+    } as unknown as typeof import('openid-client');
+    const provider = new AdminOidcIdentityProvider(config(), async () => client);
+
+    await expect(provider.initialize()).rejects.toThrow(
+      'authorization_endpoint is outside the trusted provider origin'
+    );
+  });
+
+  it('enables insecure transport only for an explicitly configured loopback issuer', async () => {
+    const localConfig = config({
+      oidcAdminIssuer: 'http://127.0.0.1:39001/application/o/admin/',
+      oidcAdminRedirectUri: 'http://127.0.0.1:39002/admin/auth/oidc/callback',
+    });
+    const allowInsecureRequests = vi.fn();
+    const configuration = {
+      serverMetadata: () => ({
+        issuer: localConfig.oidcAdminIssuer,
+        authorization_endpoint: 'http://127.0.0.1:39001/application/o/authorize/',
+        token_endpoint: 'http://127.0.0.1:39001/application/o/token/',
+        jwks_uri: 'http://127.0.0.1:39001/application/o/admin/jwks/',
+        supportsPKCE: () => true,
+      }),
+    };
+    const client = {
+      discovery: vi.fn().mockResolvedValue(configuration),
+      ClientSecretPost: vi.fn(),
+      customFetch: Symbol('customFetch'),
+      allowInsecureRequests,
+    } as unknown as typeof import('openid-client');
+    const provider = new AdminOidcIdentityProvider(localConfig, async () => client);
+
+    await provider.initialize();
+
+    expect(client.discovery).toHaveBeenCalledWith(
+      expect.any(URL),
+      localConfig.oidcAdminClientId,
+      expect.any(Object),
+      undefined,
+      expect.objectContaining({ execute: [allowInsecureRequests] })
+    );
   });
 });

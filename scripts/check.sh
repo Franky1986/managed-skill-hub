@@ -84,6 +84,8 @@ for script in \
   scripts/backup.sh \
   scripts/restore.sh \
   scripts/check-agent-auth-matrix.ts \
+  scripts/check-authentik-staging.ts \
+  scripts/check-oidc-provider.ts \
   scripts/check-agent-contract.ts \
   scripts/check-admin-ui-smoke.ts \
   scripts/check-openapi-parity.ts \
@@ -135,6 +137,11 @@ fi
 log_info "Starting agent auth matrix ..."
 if ! ./node_modules/.bin/tsx scripts/check-agent-auth-matrix.ts >".tmp/agent-auth-matrix.check.log" 2>&1; then
   log_error "Agent auth matrix failed (see .tmp/agent-auth-matrix.check.log and .tmp/agent-auth-matrix.log)"
+fi
+
+log_info "Starting deterministic OIDC provider proof ..."
+if ! ./node_modules/.bin/tsx scripts/check-oidc-provider.ts >".tmp/oidc-provider.check.log" 2>&1; then
+  log_error "OIDC provider proof failed (see .tmp/oidc-provider.check.log and .tmp/oidc-provider.log)"
 fi
 
 log_info "Starting judger auto-publish matrix ..."

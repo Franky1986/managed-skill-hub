@@ -2,14 +2,15 @@
 
 ## Status
 
-Accepted target architecture; implementation pending.
+Implemented. Production activation remains conditional on the real Authentik
+staging gate for the target deployment.
 
 ## Context
 
-ManagedSkillHub currently supports one local admin account and independently
+ManagedSkillHub retains one local admin compatibility mode and independently
 configurable `none` or static `bearer` authentication for discovery, published
-skill reads, and proposal operations. A shared bearer actor can protect an API
-area, but it cannot identify the human who instructed an agent to submit a
+skill reads, and proposal operations. This decision adds OIDC because a shared
+bearer actor cannot identify the human who instructed an agent to submit a
 proposal.
 
 The existing authentik installation already owns the user population. Agents
@@ -125,7 +126,10 @@ Use two authentik OAuth2/OIDC providers:
 Both providers use asymmetric signing, short access-token lifetimes, explicit
 scopes, and `user_uuid` subject mode. The API validates exact issuer, audience,
 signature algorithm, signature, expiry, not-before time, scopes, and client
-identity. JWKS rotation is supported and validation fails closed.
+identity. RFC 9068 access tokens require `typ=at+jwt`. Authentik `typ=JWT`
+access tokens are accepted only when a separate confidential checker confirms
+active-token, client, and subject values through authenticated introspection.
+JWKS rotation is supported and validation fails closed.
 
 The admin browser receives only a ManagedSkillHub `HttpOnly`, `Secure` session
 cookie. OAuth state, nonce, and PKCE verifier are generated cryptographically
@@ -142,21 +146,21 @@ deployment topology permits it.
   protect each API area independently.
 - Authentik availability is required for new logins. Already-issued short-lived
   tokens remain usable until expiry unless introspection is configured.
-- Environment allowlist changes require an application restart; authentik group
-  changes take effect when a fresh token or refreshed admin authorization is
-  evaluated.
+- Environment allowlist changes require an application restart. Agent group
+  changes take effect with a fresh access token; admin role snapshots expire no
+  later than the bounded local session TTL.
 - A compromised agent access token has a bounded lifetime but remains a bearer
   credential during that lifetime.
 
 ## Implementation Gate
 
-This ADR does not make OIDC modes available by itself. Runtime support is
-complete only after config parsing, OIDC adapters, principal persistence,
-OpenAPI/discovery contracts, UI login flow, Device Flow tests, authorization
-tests, migration handling, and production security checks are implemented.
-The concrete work packages and acceptance criteria are tracked in
+The repository implementation gate covers config parsing, OIDC adapters,
+principal persistence, OpenAPI/discovery contracts, UI login flow, deterministic
+Device/JWKS tests, authorization, migration handling, and production security
+validation. These runtime requirements are implemented under
 [EPIC-011](../roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md).
 
-Until that gate is complete, `.env.example.authentik` is a target template and
-the supported runtime modes remain those documented in the current-status
-section of `docs/setup/ENVIRONMENT.md`.
+Production activation is a separate environment gate. `.env.example.authentik`
+remains marked for staging until live Authentik Device Authorization, browser
+callback, two-human ownership, key rotation/outage, and rollback evidence pass
+through `scripts/check-authentik-staging.ts`.

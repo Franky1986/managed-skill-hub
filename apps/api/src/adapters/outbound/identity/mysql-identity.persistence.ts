@@ -71,7 +71,10 @@ implements PrincipalRepositoryPort, AdminSessionPort, OidcLoginTransactionPort {
           FOR UPDATE
         `, [input.issuer, input.externalSubject]);
         const existing = existingRows[0];
-        const principalId = existing?.id ?? input.linkToPrincipalId ?? crypto.randomUUID();
+        const principalId = existing?.id
+          ?? input.linkToPrincipalId
+          ?? input.stablePrincipalId
+          ?? crypto.randomUUID();
 
         if (!existing && input.linkToPrincipalId) {
           const linked = await queryConnection<{ id: string }>(
@@ -90,6 +93,24 @@ implements PrincipalRepositoryPort, AdminSessionPort, OidcLoginTransactionPort {
             SET kind = ?, display_name = ?, email = ?, last_seen_at = ?
             WHERE id = ?
           `, [input.kind, input.displayName, input.email, toMysqlDate(input.seenAt), principalId]);
+        } else if (input.stablePrincipalId) {
+          await executeConnection(connection, `
+            INSERT INTO identity_principals (
+              id, kind, display_name, email, first_seen_at, last_seen_at, disabled_at
+            ) VALUES (?, ?, ?, ?, ?, ?, NULL)
+            ON DUPLICATE KEY UPDATE
+              kind = VALUES(kind),
+              display_name = VALUES(display_name),
+              email = VALUES(email),
+              last_seen_at = VALUES(last_seen_at)
+          `, [
+            principalId,
+            input.kind,
+            input.displayName,
+            input.email,
+            toMysqlDate(input.seenAt),
+            toMysqlDate(input.seenAt),
+          ]);
         } else {
           await executeConnection(connection, `
             INSERT INTO identity_principals (

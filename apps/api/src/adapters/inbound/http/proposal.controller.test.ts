@@ -5,6 +5,9 @@ import { createProposalRateLimiter, registerProposalRoutes } from './proposal.co
 import { AgentApiAuth } from './agent-api-auth';
 import { registerApiErrorHandler } from './error-response';
 import type { Container } from '../../../infrastructure/container';
+import type { AccessTokenVerifierPort, AgentTokenArea } from '../../../application/ports/outbound/access-token-verifier.port';
+import type { AuthenticatedPrincipal } from '../../../application/security/authenticated-principal';
+import { ForbiddenError } from '../../../domain/errors';
 
 async function buildApp(container: Container, trustProxy: boolean | string[] = false): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy });
@@ -46,6 +49,117 @@ describe('registerProposalRoutes', () => {
     expect(missing.statusCode).toBe(401);
     expect(valid.statusCode).toBe(201);
     expect(submitProposal).toHaveBeenCalledWith(expect.any(Object), 'trusted-agent');
+  });
+
+  it('maps stable OIDC ownership while allowing another accepted human to read status only', async () => {
+    const updateProposalMetadata = vi.fn().mockImplementation(async (_id, _update, actor) => {
+      if (typeof actor === 'string' || actor.principalId !== 'principal-owner') {
+        throw new ForbiddenError('Only the owning principal may modify this proposal.');
+      }
+      return {
+        id: 'prop-1',
+        status: 'in_upload',
+        title: 'Updated Skill',
+        description: 'Description',
+        category: 'automation',
+        tags: [],
+        capabilities: [],
+        entrypoint: 'SKILL.md',
+      };
+    });
+    const container = {
+      config: {
+        proposalAuthMode: 'oidc',
+        publicApiBaseUrl: 'https://skills.example.test/api',
+      },
+      proposalRead: {
+        getPublicStatus: vi.fn().mockResolvedValue({
+          id: 'prop-1',
+          title: 'Skill',
+          status: 'in_upload',
+          uploadFinalized: false,
+        }),
+      },
+      proposalCommand: { updateProposalMetadata },
+    } as unknown as Container;
+    const auth = new AgentApiAuth(container.config, oidcVerifier({
+      'owner-token': oidcPrincipal('principal-owner', 'managedskillhub-agent-device'),
+      'reader-token': oidcPrincipal('principal-reader', 'managedskillhub-agent-device'),
+      'owner-new-session-token': oidcPrincipal('principal-owner', 'managedskillhub-agent-device'),
+    }));
+    const app = Fastify({ logger: false });
+    registerProposalRoutes(app, container, auth);
+    registerApiErrorHandler(app);
+
+    const statusAsOtherHuman = await app.inject({
+      method: 'GET',
+      url: '/proposals/prop-1/status',
+      headers: { authorization: 'Bearer reader-token' },
+    });
+    const mutationAsOtherHuman = await app.inject({
+      method: 'PATCH',
+      url: '/proposals/prop-1',
+      headers: { authorization: 'Bearer reader-token' },
+      payload: { title: 'Blocked update' },
+    });
+    const mutationFromNewOwnerSession = await app.inject({
+      method: 'PATCH',
+      url: '/proposals/prop-1',
+      headers: { authorization: 'Bearer owner-new-session-token' },
+      payload: { title: 'Updated Skill' },
+    });
+
+    expect(statusAsOtherHuman.statusCode).toBe(200);
+    expect(statusAsOtherHuman.payload).not.toContain('principal-owner');
+    expect(statusAsOtherHuman.payload).not.toContain('submittedBy');
+    expect(mutationAsOtherHuman.statusCode).toBe(403);
+    expect(mutationFromNewOwnerSession.statusCode).toBe(200);
+    expect(updateProposalMetadata).toHaveBeenLastCalledWith(
+      'prop-1',
+      expect.objectContaining({ title: 'Updated Skill' }),
+      {
+        label: 'User principal-owner',
+        principalId: 'principal-owner',
+        clientId: 'managedskillhub-agent-device',
+      }
+    );
+  });
+
+  it('rate limits refreshed OIDC tokens by stable principal and client identity', async () => {
+    const getNotice = vi.fn().mockResolvedValue({ hasNewProposals: false, totalPending: 0 });
+    const container = {
+      config: {
+        proposalAuthMode: 'oidc',
+        publicApiBaseUrl: 'https://skills.example.test/api',
+        proposalRateLimitWindowMs: 60_000,
+        proposalRateLimitMaxRequests: 1,
+        proposalRateLimitMaxBuckets: 10,
+      },
+      proposalRead: { getNotice },
+    } as unknown as Container;
+    const principal = oidcPrincipal('principal-owner', 'managedskillhub-agent-device');
+    const app = Fastify({ logger: false });
+    registerProposalRoutes(
+      app,
+      container,
+      new AgentApiAuth(container.config, oidcVerifier({ 'token-one': principal, 'token-two': principal }))
+    );
+    registerApiErrorHandler(app);
+
+    const first = await app.inject({
+      method: 'GET',
+      url: '/proposals/notice',
+      headers: { authorization: 'Bearer token-one' },
+    });
+    const refreshedToken = await app.inject({
+      method: 'GET',
+      url: '/proposals/notice',
+      headers: { authorization: 'Bearer token-two' },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(refreshedToken.statusCode).toBe(429);
+    expect(getNotice).toHaveBeenCalledTimes(1);
   });
 
   it('uses the explicit multipart path field for relative proposal file paths', async () => {
@@ -411,3 +525,30 @@ describe('registerProposalRoutes', () => {
     );
   });
 });
+
+function oidcPrincipal(principalId: string, clientId: string): AuthenticatedPrincipal {
+  return {
+    principalId,
+    kind: 'human',
+    externalSubject: `${principalId}-subject`,
+    issuer: 'https://auth.example.test/application/o/agent/',
+    clientId,
+    displayName: `User ${principalId}`,
+    email: null,
+    groups: [],
+    roles: ['submitter'],
+    scheme: 'oidc',
+  };
+}
+
+function oidcVerifier(principals: Record<string, AuthenticatedPrincipal>): AccessTokenVerifierPort {
+  return {
+    initialize: async () => undefined,
+    metadata: () => null,
+    verifyAccessToken: async (token: string, _area: AgentTokenArea) => {
+      const principal = principals[token];
+      if (!principal) throw new Error('invalid token');
+      return principal;
+    },
+  };
+}

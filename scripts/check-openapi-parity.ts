@@ -56,10 +56,32 @@ function responseHasUsableSuccess(operation: any): boolean {
   return Boolean(response && typeof response === 'object' && typeof response.description === 'string' && response.description.length > 0);
 }
 
+function assertRuntimeSecurity(operation: any, auth: Exclude<RouteExpectation['auth'], 'none'>, path: string): void {
+  const security = operation.security as Array<Record<string, string[]>> | undefined;
+  assert(Array.isArray(security), path + ' must declare runtime-selectable security');
+  assert(
+    !security.some((requirement) => Object.keys(requirement).length === 0),
+    path + ' must not claim unconditional anonymous access'
+  );
+  const bearerScheme = auth === 'discovery'
+    ? 'discoveryBearer'
+    : auth === 'public-read'
+      ? 'publicReadBearer'
+      : 'proposalBearer';
+  assert(security.some((requirement) => bearerScheme in requirement), path + ' must document ' + bearerScheme);
+  assert(security.some((requirement) => 'agentOidc' in requirement), path + ' must document agentOidc');
+}
+
 async function main(): Promise<void> {
   const source = await readFile('packages/openapi/skill-registry.openapi.yaml', 'utf8');
   const doc = yaml.load(source) as any;
   const paths = doc.paths ?? {};
+  assert(
+    doc['x-managed-skill-hub-runtime-auth']?.selectors?.discovery === 'DISCOVERY_AUTH_MODE'
+      && doc['x-managed-skill-hub-runtime-auth']?.selectors?.publicRead === 'PUBLIC_READ_AUTH_MODE'
+      && doc['x-managed-skill-hub-runtime-auth']?.selectors?.proposal === 'PROPOSAL_AUTH_MODE',
+    'OpenAPI must declare the runtime auth mode selectors'
+  );
   const results = [];
 
   for (const expected of expectations) {
@@ -68,6 +90,7 @@ async function main(): Promise<void> {
     assert(operation.operationId === expected.operationId, expected.path + ' operationId mismatch');
     if (expected.auth !== 'none') {
       assert(operation.responses?.['401'], expected.path + ' must document 401 UnauthorizedError');
+      assertRuntimeSecurity(operation, expected.auth, expected.path);
     }
     if (expected.requireUsableSuccess) {
       assert(responseHasUsableSuccess(operation), expected.path + ' must document a usable 200/201 response');

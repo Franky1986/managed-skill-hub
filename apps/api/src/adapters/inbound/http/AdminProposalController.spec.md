@@ -7,6 +7,7 @@ HTTP adapter for admin actions on proposals.
 ## Scope
 
 - `GET /admin/proposals`
+- `GET /admin/proposals/notice`
 - `GET /admin/proposals/:proposalId`
 - `GET /admin/proposals/:proposalId/files/:fileId`
 - `GET /admin/proposals/:proposalId/files/:fileId/extracted-content`
@@ -24,6 +25,9 @@ HTTP adapter for admin actions on proposals.
 
 - Enforce admin auth.
 - Deliver proposal lists and details only on admin path.
+- Deliver the reviewer navigation notice through the admin-session boundary;
+  the web workbench must not call the independently protected agent proposal
+  notice route.
 - Deliver structured review metadata for proposal detail/list responses.
 - Deliver guided conversion preview for target skill and next version.
 - Deliver structured file and judgement metadata for proposal detail.

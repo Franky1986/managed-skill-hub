@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { buildContainer } from '../apps/api/src/infrastructure/container';
@@ -90,6 +91,19 @@ function config(providerCase: ProviderCase, dataDir: string): AppConfig {
     discoveryAuthMode: 'none',
     discoveryBearerToken: null,
     discoveryBearerActor: 'discovery-agent',
+    oidcAgentIssuer: 'https://auth.example.test/application/o/agent/',
+    oidcAdminIssuer: 'https://auth.example.test/application/o/admin/',
+    oidcAgentClientId: 'managedskillhub-agent-device',
+    oidcAdminClientId: 'managedskillhub-admin-web',
+    oidcProposalAccess: 'all_authenticated_users',
+    oidcProposalGroups: ['managedskillhub-submitters'],
+    oidcPublicReadAccess: 'all_authenticated_users',
+    oidcPublicReadGroups: ['managedskillhub-readers'],
+    oidcAdminSubjects: [],
+    oidcAdminGroups: ['managedskillhub-admins'],
+    oidcReviewerGroups: ['managedskillhub-reviewers'],
+    oidcPublisherGroups: ['managedskillhub-publishers'],
+    oidcMaxGroups: 100,
   };
 }
 
@@ -144,15 +158,78 @@ async function runCase(providerCase: ProviderCase, baseline: NormalizedPublicSur
   const container = await buildContainer(config(providerCase, dataDir));
   const app = await buildApp(container);
   try {
+    const identityChecks = await proveIdentityPersistence(container, providerCase.id);
     const rebuild = await seedPublishedSkill(container);
     const surface = await collectSurface(app, rebuild);
-    const checks = assertSurface(surface);
+    const checks = { ...assertSurface(surface), ...identityChecks };
     if (baseline) await assertParity(surface, baseline, providerCase.id);
     return { id: providerCase.id, catalogProvider: providerCase.catalogProvider, searchProvider: providerCase.searchProvider, checks, normalized: surface, result: 'PASS' };
   } finally {
     await app.close();
     await container.shutdown();
   }
+}
+
+async function proveIdentityPersistence(
+  container: Container,
+  caseId: string
+): Promise<Record<string, boolean>> {
+  const subject = `provider-proof-${caseId}`;
+  const identity = {
+    issuer: container.config.oidcAgentIssuer!,
+    subject,
+    clientId: container.config.oidcAgentClientId!,
+    kind: 'human' as const,
+    displayName: 'Provider Matrix User',
+    email: 'provider-matrix@example.test',
+    groups: ['managedskillhub-admins'],
+  };
+  const first = await container.principalProjection.project(identity);
+  const refreshed = await container.principalProjection.project({
+    ...identity,
+    displayName: 'Provider Matrix User Updated',
+    email: 'updated-provider-matrix@example.test',
+  });
+  assert(first.principalId === refreshed.principalId, `${caseId} principal projection must remain stable`);
+  assert(refreshed.displayName === 'Provider Matrix User Updated', `${caseId} principal display projection must refresh`);
+  assert(refreshed.roles.includes('admin'), `${caseId} admin group must resolve admin role`);
+
+  const now = new Date();
+  const sessionId = `session-${randomUUID()}`;
+  await container.adminSessions.create({
+    sessionId,
+    principalId: first.principalId,
+    roles: refreshed.roles,
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + 60_000),
+  });
+  const session = await container.adminSessions.resolve(sessionId, now);
+  const expiredSession = await container.adminSessions.resolve(sessionId, new Date(now.getTime() + 60_001));
+  assert(session?.principalId === first.principalId, `${caseId} session must resolve`);
+  assert(expiredSession === null, `${caseId} expired session must fail closed`);
+
+  const state = `state-${randomUUID()}`;
+  await container.oidcLoginTransactions.create({
+    state,
+    nonce: `nonce-${randomUUID()}`,
+    pkceVerifier: `verifier-${randomUUID()}`,
+    redirectUri: 'https://skills.example.test/api/admin/auth/oidc/callback',
+    returnPath: '/frontend/admin',
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + 60_000),
+  });
+  const consumed = await container.oidcLoginTransactions.consume(state, now);
+  const replay = await container.oidcLoginTransactions.consume(state, now);
+  assert(consumed.outcome === 'consumed', `${caseId} OIDC state must be consumed once`);
+  assert(replay.outcome === 'replayed', `${caseId} OIDC state replay must be rejected`);
+
+  return {
+    identityPrincipalStable: true,
+    identityProjectionRefreshesMutableProfile: true,
+    identityAdminGroupRole: true,
+    identitySessionExpiry: true,
+    identityOidcStateReplay: true,
+  };
 }
 
 async function assertMysqlStartupGuidance(): Promise<void> { const restartAll = await readFile('scripts/restart-all.sh', 'utf8'); assert(restartAll.includes('ensure_local_mysql_or_fail'), 'restart-all must include MySQL auto-start preflight'); assert(restartAll.includes('start-mysql-stack.sh') && restartAll.includes(' up'), 'restart-all must start local MySQL stack automatically'); }

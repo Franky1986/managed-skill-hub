@@ -2,10 +2,9 @@
 
 ## Status
 
-This is the normative target guidance for agents after ADR-015 OIDC runtime
-support is implemented. Current deployments advertise only `none` or static
-`bearer` schemes. Agents must follow the scheme returned by `/discover` and
-must not assume OIDC is available.
+This is the normative runtime guidance for agents. Deployments independently
+advertise `none`, static `bearer`, or OIDC schemes per API area. Agents must
+follow the scheme returned by `/discover` and must not assume OIDC is enabled.
 
 ## Goal
 
@@ -52,6 +51,12 @@ must never be returned for the device client.
 11. Do not use the ID token as an API bearer token.
 12. After token expiry, start a new linkout. The first implementation does not
     request or retain `offline_access`.
+
+Use `POST` form encoding for Device Authorization and token polling. Never add
+the access token to a URL. Treat a returned token as usable only after the
+ManagedSkillHub API accepts it; decoding JWT payload locally is not
+authentication and does not replace issuer, audience, signature, `azp`, `uid`,
+scope, time, and human-policy checks performed by the server.
 
 Example user-facing message shape:
 

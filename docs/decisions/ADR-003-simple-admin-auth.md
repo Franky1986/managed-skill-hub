@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Implemented compatibility mode; amended by ADR-015.
 
 ## Context
 
@@ -11,13 +11,14 @@ but it should be integrated later so the MVP can start quickly.
 
 ## Decision
 
-The MVP uses simple HTTP basic auth with a single admin user.
+The MVP uses a simple login form and signed local session with a single admin
+user.
 
 - Username and password are configured through environment variables
   (`ADMIN_USER`, `ADMIN_PASSWORD`).
 - The password is stored hashed in `.env` with BCrypt, not in clear text.
 - The public read path remains unauthenticated.
-- authentik/OIDC follows in a later step.
+- Authentik/OIDC is the multi-user alternative selected by `ADMIN_AUTH_MODE`.
 
 ## Consequences
 
@@ -25,11 +26,12 @@ The MVP uses simple HTTP basic auth with a single admin user.
 - No dependency on authentik in the MVP.
 - Only one admin account, no user management.
 - Acceptable for internal company-network operation.
-- Must later be replaced by authentik.
+- Remains available for local operation and explicit rollback; it is never an
+  implicit fallback while OIDC mode is selected.
 
 ## Open Points
 
-- ADR-015 documents the accepted authentik/OIDC target. This ADR remains the
-  current runtime decision until the ADR-015 implementation gate is complete.
-- Multi-user support, roles, and audit metadata such as `created_by` and
-  `approved_by` are technical strings in the MVP, not verified identities.
+- ADR-015 implements Authentik/OIDC, just-in-time users, and reviewer,
+  publisher, and administrator roles while preserving this explicit mode.
+- Simple-mode audit actors remain technical strings; OIDC actors use stable
+  principal identity and client attribution.

@@ -20,7 +20,7 @@ function includesAll(source: string, fragments: string[], label: string): string
 }
 
 async function main(): Promise<void> {
-  const [router, layout, loginPage, authStore, howTo, proposalDetail, judgementPanel, judgementLib, messages, adminProposals, adminSkillPage, apiClient] = await Promise.all([
+  const [router, layout, loginPage, authStore, howTo, proposalDetail, judgementPanel, judgementLib, messages, adminProposals, adminSkillPage, adminDashboard, apiClient, adminApi] = await Promise.all([
     readFile('apps/web/src/router.tsx', 'utf8'),
     readFile('apps/web/src/components/Layout.tsx', 'utf8'),
     readFile('apps/web/src/pages/admin/AdminLoginPage.tsx', 'utf8'),
@@ -32,7 +32,9 @@ async function main(): Promise<void> {
     readFile('apps/web/src/i18n/messages.ts', 'utf8'),
     readFile('apps/web/src/pages/admin/AdminProposalsPage.tsx', 'utf8'),
     readFile('apps/web/src/pages/admin/AdminSkillPage.tsx', 'utf8'),
+    readFile('apps/web/src/pages/admin/AdminDashboardPage.tsx', 'utf8'),
     readFile('apps/web/src/api/client.ts', 'utf8'),
+    readFile('apps/web/src/api/admin.ts', 'utf8'),
   ]);
 
   const results: CheckResult[] = [];
@@ -46,7 +48,7 @@ async function main(): Promise<void> {
       'path="search" element={<SearchPage />}',
       'path="proposals/status/:id" element={<ProposalStatusPage />}',
       'path="admin" element={<AdminRoute />}',
-      '<Navigate to="/admin/login" replace />',
+      '<Navigate to="/admin/login?reason=session-expired" replace />',
     ], 'router public/admin route contract'),
   });
 
@@ -69,8 +71,51 @@ async function main(): Promise<void> {
     passed: true,
     evidence: [
       ...includesAll(loginPage, ['await login(username, password)', "navigate('/admin')", "t('adminLogin.failed')"], 'admin login page'),
-      ...includesAll(authStore, ['await adminApi.login(username, password)', 'await adminApi.getSession()', 'await adminApi.logout()', 'set({ isAuthenticated: false, username: null })'], 'auth store'),
+      ...includesAll(authStore, ['await adminApi.login(username, password)', 'await adminApi.getSession()', 'await adminApi.logout()', 'set({ isAuthenticated: false, username: null, displayName: null, roles: [], mode: null })'], 'auth store'),
       ...includesAll(layout, ['const handleLogout = () =>', 'void logout()', "navigate('/admin/login', { replace: true })", "t('app.nav.signOut')"], 'layout logout'),
+    ],
+  });
+
+  results.push({
+    id: 'oidc-login-session-and-role-gates',
+    passed: true,
+    evidence: [
+      ...includesAll(loginPage, [
+        "methods?.mode === 'oidc'",
+        'methods.loginStartUrl',
+        "target.searchParams.set('returnTo', methods.adminUiBasePath)",
+        "t('adminLogin.sessionExpired')",
+      ], 'OIDC admin login page'),
+      ...includesAll(authStore, [
+        "roles.includes('admin')",
+        'requiredRoles.some((role) => roles.includes(role))',
+        'roles: session.data.roles',
+      ], 'admin role session state'),
+      ...includesAll(router, [
+        'function AdminRoleRoute',
+        '<AdminRoleRoute required="admin" />',
+        '<AdminRoleRoute required="reviewer" />',
+        "<AdminRoleRoute required={['reviewer', 'publisher']} />",
+      ], 'admin role routes'),
+      ...includesAll(layout, [
+        'const canReview =',
+        '{canReview && <Link',
+        'adminApi',
+        '.proposalNotice()',
+        'if (isLoading || !isAuthenticated || !canReview)',
+      ], 'reviewer navigation and admin notice boundary'),
+      ...includesAll(adminApi, [
+        "apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice')",
+      ], 'admin proposal notice API'),
+      ...includesAll(adminDashboard, ['const canViewOperations =', '{canViewOperations && <section'], 'admin operations visibility'),
+      ...includesAll(adminSkillPage, [
+        "const canAdmin = hasAdminRole(roles, 'admin')",
+        "const canReview = hasAdminRole(roles, 'reviewer')",
+        "const canPublish = hasAdminRole(roles, 'publisher')",
+        '{canPublish && <button',
+        '{canReview && <button',
+      ], 'skill action role visibility'),
+      ...includesAll(proposalDetail, ['{f.extractable && canReview && ('], 'proposal reviewer action visibility'),
     ],
   });
 

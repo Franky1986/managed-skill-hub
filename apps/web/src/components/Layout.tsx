@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { proposalsApi } from '../api/proposals';
-import { useAuthStore } from '../store/auth';
+import { adminApi } from '../api/admin';
+import { hasAdminRole, useAuthStore } from '../store/auth';
 import { useLanguage, type LanguageCode } from '../i18n';
 
 interface LayoutProps {
@@ -12,12 +12,13 @@ export function Layout({ children }: LayoutProps) {
     const [proposalNotice, setProposalNotice] = useState<{ hasNewProposals: boolean; totalPending: number } | null>(null);
     const location = useLocation();
     const navigate = useNavigate();
-    const { isAuthenticated, isLoading, checkSession, logout } = useAuthStore();
+    const { isAuthenticated, isLoading, checkSession, logout, roles } = useAuthStore();
+    const canReview = hasAdminRole(roles, 'reviewer');
     const { language, setLanguage, t } = useLanguage();
 
     const refreshProposalNotice = useCallback(() => {
-        proposalsApi
-            .notice()
+        adminApi
+            .proposalNotice()
             .then((response) => setProposalNotice(response.data))
             .catch(() => {
                 setProposalNotice(null);
@@ -29,16 +30,16 @@ export function Layout({ children }: LayoutProps) {
     }, [checkSession]);
 
     useEffect(() => {
-        if (isLoading || !isAuthenticated) {
+        if (isLoading || !isAuthenticated || !canReview) {
             setProposalNotice(null);
             return;
         }
 
         void refreshProposalNotice();
-    }, [isLoading, isAuthenticated, refreshProposalNotice]);
+    }, [isLoading, isAuthenticated, canReview, refreshProposalNotice]);
 
     useEffect(() => {
-        if (isLoading || !isAuthenticated) {
+        if (isLoading || !isAuthenticated || !canReview) {
             return;
         }
 
@@ -51,7 +52,7 @@ export function Layout({ children }: LayoutProps) {
             clearInterval(timer);
             window.removeEventListener('skillHub:proposalDecision', handleProposalDecisionUpdate);
         };
-    }, [isLoading, isAuthenticated, refreshProposalNotice]);
+    }, [isLoading, isAuthenticated, canReview, refreshProposalNotice]);
 
     const navLinkClass = (path: string) => {
         const active = location.pathname === path;
@@ -121,12 +122,12 @@ export function Layout({ children }: LayoutProps) {
                         {!isLoading &&
                             (isAuthenticated ? (
                                 <>
-                                    <Link
+                                    {canReview && <Link
                                         to="/admin/proposals"
                                         className="bg-surface text-on-surface border border-outline-variant px-3 py-2 rounded-lg font-body text-small font-semibold hover:opacity-90 transition-opacity active:scale-95 duration-150 whitespace-nowrap"
                                     >
                                         {t('app.nav.openProposals', { count: proposalNotice?.hasNewProposals ? proposalNotice.totalPending : 0 })}
-                                    </Link>
+                                    </Link>}
                                     <Link
                                         to="/admin/drafts"
                                         className="bg-surface text-on-surface border border-outline-variant px-3 py-2 rounded-lg font-body text-small font-semibold hover:opacity-90 transition-opacity active:scale-95 duration-150"

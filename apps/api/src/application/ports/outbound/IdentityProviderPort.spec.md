@@ -16,3 +16,7 @@ validation, and code exchange from HTTP controllers and application use cases.
   successful exchange; the result is a provider-neutral verified identity.
 - Discovery and token HTTP calls have bounded time and response sizes and fail
   closed.
+- Discovery must return the exact configured issuer, and authorization, token,
+  and JWKS endpoints must remain on that issuer's trusted origin. Provider HTTP
+  redirects are disabled so metadata cannot move fetches or the browser login
+  to an untrusted origin.

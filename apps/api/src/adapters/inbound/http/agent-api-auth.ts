@@ -51,10 +51,25 @@ export class AgentApiAuth {
     if (areaConfig.mode === 'oidc') {
       const token = readBearerToken(request.headers.authorization);
       if (!token || !this.tokenVerifier) {
+        request.log.warn({
+          event: 'agent_authentication',
+          outcome: 'failure',
+          area,
+          scheme: 'oidc',
+          category: token ? 'verifier_unavailable' : 'credential_missing',
+        }, 'Agent authentication denied');
         throw this.authRequired(area, 'oidc');
       }
       try {
         const principal = await this.tokenVerifier.verifyAccessToken(token, area);
+        request.log.info({
+          event: 'agent_authentication',
+          outcome: 'success',
+          area,
+          scheme: 'oidc',
+          principalKind: principal.kind,
+          clientId: principal.clientId,
+        }, 'Agent authentication succeeded');
         return {
           area,
           actor: principal.principalId,
@@ -62,6 +77,13 @@ export class AgentApiAuth {
           principal,
         };
       } catch {
+        request.log.warn({
+          event: 'agent_authentication',
+          outcome: 'failure',
+          area,
+          scheme: 'oidc',
+          category: 'invalid_or_insufficient',
+        }, 'Agent authentication denied');
         throw this.authRequired(area, 'oidc');
       }
     }

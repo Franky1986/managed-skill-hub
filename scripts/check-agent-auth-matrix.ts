@@ -4,73 +4,36 @@ import { AgentApiAuth } from '../apps/api/src/adapters/inbound/http/agent-api-au
 import { registerApiErrorHandler } from '../apps/api/src/adapters/inbound/http/error-response';
 import { registerProposalRoutes } from '../apps/api/src/adapters/inbound/http/proposal.controller';
 import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/skill-read.controller';
-import type { AppConfig } from '../apps/api/src/infrastructure/config';
+import type { AccessTokenVerifierPort, AgentTokenArea } from '../apps/api/src/application/ports/outbound/access-token-verifier.port';
+import type { AuthenticatedPrincipal } from '../apps/api/src/application/security/authenticated-principal';
+import type { AgentAuthMode, AppConfig } from '../apps/api/src/infrastructure/config';
 import type { Container } from '../apps/api/src/infrastructure/container';
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
 
-type Area = 'read' | 'proposal' | 'discovery';
-type MatrixCase = Record<Area, boolean>;
+type MatrixArea = 'read' | 'proposal' | 'discovery';
+type MatrixCase = Record<MatrixArea, AgentAuthMode>;
 
 interface CaseResult {
   id: string;
-  config: {
-    publicReadAuthMode: 'none' | 'bearer';
-    proposalAuthMode: 'none' | 'bearer';
-    discoveryAuthMode: 'none' | 'bearer';
-  };
-  discover: {
-    unauthenticatedStatus: number;
-    authenticatedStatus: number;
-    readAuthRequired: boolean;
-    proposalAuthRequired: boolean;
-    discoveryAuthRequired: boolean;
-    credentialSetupScriptUrlPresent: boolean;
-  };
-  howToPropose: {
-    firstStepTitle: string;
-    credentialSetupScriptUrlPresent: boolean;
-    authSetupFlowPresent: boolean;
-  };
-  publicRead: {
-    unauthenticatedStatus: number;
-    authenticatedStatus: number | null;
-    unauthorizedArea: string | null;
-  };
-  proposal: {
-    unauthenticatedStatus: number;
-    authenticatedStatus: number | null;
-    unauthorizedArea: string | null;
-  };
-  setupScript: {
-    requireRead: boolean;
-    requireProposal: boolean;
-    containsReadPrompt: boolean;
-    containsProposalPrompt: boolean;
-    persistsReadToken: boolean;
-    persistsProposalToken: boolean;
-  };
+  config: MatrixCase;
+  discoveryStatus: { withoutCredential: number; withCredential: number };
+  readStatus: { withoutCredential: number; withCredential: number | null };
+  proposalStatus: { withoutCredential: number; withCredential: number | null };
+  advertisedSchemes: string[];
+  howToFirstStep: string;
+  bearerSetup: { read: boolean; proposal: boolean };
   result: 'PASS';
 }
 
-const cases: MatrixCase[] = [
-  { read: false, proposal: false, discovery: false },
-  { read: true, proposal: false, discovery: false },
-  { read: false, proposal: true, discovery: false },
-  { read: false, proposal: false, discovery: true },
-  { read: true, proposal: true, discovery: false },
-  { read: true, proposal: false, discovery: true },
-  { read: false, proposal: true, discovery: true },
-  { read: true, proposal: true, discovery: true },
-];
+const modes: AgentAuthMode[] = ['none', 'bearer', 'oidc'];
+const cases: MatrixCase[] = modes.flatMap((read) =>
+  modes.flatMap((proposal) => modes.map((discovery) => ({ read, proposal, discovery })))
+);
 
-function id(testCase: MatrixCase): string {
-  return [
-    testCase.read ? 'read-bearer' : 'read-none',
-    testCase.proposal ? 'proposal-bearer' : 'proposal-none',
-    testCase.discovery ? 'discovery-bearer' : 'discovery-none',
-  ].join('__');
+function caseId(testCase: MatrixCase): string {
+  return `read-${testCase.read}__proposal-${testCase.proposal}__discovery-${testCase.discovery}`;
 }
 
 function config(testCase: MatrixCase): AppConfig {
@@ -78,15 +41,21 @@ function config(testCase: MatrixCase): AppConfig {
     registryId: 'matrix-registry',
     registryName: 'Matrix Registry',
     publicApiBaseUrl: 'https://matrix.example.com/api',
-    publicReadAuthMode: testCase.read ? 'bearer' : 'none',
-    publicReadBearerToken: testCase.read ? 'read-token' : null,
+    publicReadAuthMode: testCase.read,
+    publicReadBearerToken: testCase.read === 'bearer' ? 'read-token' : null,
     publicReadBearerActor: 'read-agent',
-    proposalAuthMode: testCase.proposal ? 'bearer' : 'none',
-    proposalBearerToken: testCase.proposal ? 'proposal-token' : null,
+    proposalAuthMode: testCase.proposal,
+    proposalBearerToken: testCase.proposal === 'bearer' ? 'proposal-token' : null,
     proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: testCase.discovery ? 'bearer' : 'none',
-    discoveryBearerToken: testCase.discovery ? 'discovery-token' : null,
+    discoveryAuthMode: testCase.discovery,
+    discoveryBearerToken: testCase.discovery === 'bearer' ? 'discovery-token' : null,
     discoveryBearerActor: 'discovery-agent',
+    oidcAgentIssuer: 'https://auth.example.test/application/o/agent/',
+    oidcAgentClientId: 'managedskillhub-agent-device',
+    oidcAgentBaseScopes: ['openid', 'profile', 'email'],
+    oidcDiscoveryScope: 'managedskillhub:discovery',
+    oidcPublicReadScope: 'managedskillhub:skills:read',
+    oidcProposalScope: 'managedskillhub:proposals',
     openapiYamlPath: '/nonexistent/openapi.yaml',
     proposalMaxFiles: 30,
     proposalMaxFileSizeBytes: 10 * 1024 * 1024,
@@ -111,186 +80,163 @@ function container(testCase: MatrixCase): Container {
   } as Container;
 }
 
+function verifier(): AccessTokenVerifierPort {
+  return {
+    initialize: async () => undefined,
+    metadata: () => ({
+      issuer: 'https://auth.example.test/application/o/agent/',
+      openIdConfigurationUrl: 'https://auth.example.test/application/o/agent/.well-known/openid-configuration',
+      authorizationEndpoint: 'https://auth.example.test/application/o/authorize/',
+      deviceAuthorizationEndpoint: 'https://auth.example.test/application/o/device/',
+      tokenEndpoint: 'https://auth.example.test/application/o/token/',
+      jwksUri: 'https://auth.example.test/application/o/agent/jwks/',
+      clientId: 'managedskillhub-agent-device',
+    }),
+    verifyAccessToken: async (token, area) => {
+      assert(token === `oidc-${area}`, `unexpected OIDC token for ${area}`);
+      return oidcPrincipal(area);
+    },
+  };
+}
+
+function oidcPrincipal(area: AgentTokenArea): AuthenticatedPrincipal {
+  return {
+    principalId: 'matrix-principal',
+    kind: 'human',
+    externalSubject: 'matrix-user-uuid',
+    issuer: 'https://auth.example.test/application/o/agent/',
+    clientId: 'managedskillhub-agent-device',
+    displayName: 'Matrix User',
+    email: null,
+    groups: [],
+    roles: area === 'proposal' ? ['submitter'] : area === 'public-read' ? ['reader'] : [],
+    scheme: 'oidc',
+  };
+}
+
 async function buildApp(testCase: MatrixCase) {
   const app = Fastify({ logger: false });
   const c = container(testCase);
-  const auth = new AgentApiAuth(c.config);
+  const auth = new AgentApiAuth(c.config, verifier());
   registerSkillReadRoutes(app, c, auth);
   registerProposalRoutes(app, c, auth);
   registerApiErrorHandler(app);
   return app;
 }
 
-function authHeader(area: Area): Record<string, string> {
-  return { authorization: 'Bearer ' + area + '-token' };
+function authHeader(area: MatrixArea, mode: AgentAuthMode): Record<string, string> | undefined {
+  if (mode === 'none') return undefined;
+  if (mode === 'bearer') return { authorization: `Bearer ${area}-token` };
+  return { authorization: `Bearer oidc-${area === 'read' ? 'public-read' : area}` };
 }
 
-function parseJson(payload: string): any {
-  return payload ? JSON.parse(payload) : null;
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
 }
 
-function assertEqual<T>(actual: T, expected: T, message: string): void {
-  if (actual !== expected) {
-    throw new Error(message + ". Expected " + JSON.stringify(expected) + ", got " + JSON.stringify(actual));
-  }
+function assertEqual(actual: unknown, expected: unknown, message: string): void {
+  assert(actual === expected, `${message}. Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+}
+
+async function runArea(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  testCase: MatrixCase,
+  area: 'read' | 'proposal',
+  url: string
+): Promise<{ withoutCredential: number; withCredential: number | null }> {
+  const mode = testCase[area];
+  const withoutCredential = await app.inject({ method: 'GET', url });
+  assertEqual(withoutCredential.statusCode, mode === 'none' ? 200 : 401, `${caseId(testCase)} ${area} unauthenticated`);
+  if (mode === 'none') return { withoutCredential: 200, withCredential: null };
+  const details = withoutCredential.json().details;
+  assertEqual(details.authArea, area === 'read' ? 'public-read' : 'proposal', `${caseId(testCase)} ${area} auth area`);
+  assertEqual(details.authScheme, mode, `${caseId(testCase)} ${area} auth scheme`);
+  const withCredential = await app.inject({ method: 'GET', url, headers: authHeader(area, mode) });
+  assertEqual(withCredential.statusCode, 200, `${caseId(testCase)} ${area} authenticated`);
+  return { withoutCredential: 401, withCredential: 200 };
 }
 
 async function runCase(testCase: MatrixCase): Promise<CaseResult> {
   const app = await buildApp(testCase);
-  const anyAuth = testCase.read || testCase.proposal || testCase.discovery;
-  const caseId = id(testCase);
+  const id = caseId(testCase);
+  const anyBearer = Object.values(testCase).includes('bearer');
+  const anyOidc = Object.values(testCase).includes('oidc');
+  const anyAuth = anyBearer || anyOidc;
 
-  const discoverWithoutAuth = await app.inject({ method: 'GET', url: '/discover' });
-  const discoverWithAuth = testCase.discovery
-    ? await app.inject({ method: 'GET', url: '/discover', headers: authHeader('discovery') })
-    : discoverWithoutAuth;
-
-  if (testCase.discovery) {
-    assertEqual(discoverWithoutAuth.statusCode, 401, caseId + ' discovery without token status');
-    assertEqual(parseJson(discoverWithoutAuth.payload).details.authArea, 'discovery', caseId + ' discovery authArea');
-  }
-  assertEqual(discoverWithAuth.statusCode, 200, caseId + ' discovery with expected auth status');
-  const discoverPayload = parseJson(discoverWithAuth.payload);
-  assertEqual(discoverPayload.readAuthRequired, testCase.read, caseId + ' discover readAuthRequired');
-  assertEqual(discoverPayload.proposalAuthRequired, testCase.proposal, caseId + ' discover proposalAuthRequired');
-  assertEqual(discoverPayload.discoveryAuthRequired, testCase.discovery, caseId + ' discover discoveryAuthRequired');
-  assertEqual(Object.prototype.hasOwnProperty.call(discoverPayload, 'credentialSetupScriptUrl'), anyAuth, caseId + ' discover setup URL presence');
-
-  const howTo = await app.inject({
-    method: 'GET',
-    url: '/howToPropose',
-    headers: testCase.discovery ? authHeader('discovery') : undefined,
-  });
-  assertEqual(howTo.statusCode, 200, caseId + ' howToPropose status');
-  const howToPayload = parseJson(howTo.payload);
-  assertEqual(
-    howToPayload.requiredSteps[0].title,
-    anyAuth ? 'Handle registry authentication outside chat' : 'Read this workflow first',
-    caseId + ' how-to first step'
-  );
-  assertEqual(Boolean(howToPayload.apiNotes.credentialSetupScriptUrl), anyAuth, caseId + ' how-to setup URL presence');
-  assertEqual(Boolean(howToPayload.apiNotes.authSetupFlow), anyAuth, caseId + ' how-to setup flow presence');
-
-  const publicReadWithoutAuth = await app.inject({ method: 'GET', url: '/categories' });
-  let publicReadWithAuthStatus: number | null = null;
-  let publicReadUnauthorizedArea: string | null = null;
-  if (testCase.read) {
-    assertEqual(publicReadWithoutAuth.statusCode, 401, caseId + ' public read without token status');
-    publicReadUnauthorizedArea = parseJson(publicReadWithoutAuth.payload).details.authArea;
-    assertEqual(publicReadUnauthorizedArea, 'public-read', caseId + ' public read authArea');
-    const publicReadWithAuth = await app.inject({ method: 'GET', url: '/categories', headers: authHeader('read') });
-    publicReadWithAuthStatus = publicReadWithAuth.statusCode;
-    assertEqual(publicReadWithAuth.statusCode, 200, caseId + ' public read with token status');
-  } else {
-    assertEqual(publicReadWithoutAuth.statusCode, 200, caseId + ' public read open status');
+  const discoveryWithoutCredential = await app.inject({ method: 'GET', url: '/discover' });
+  assertEqual(discoveryWithoutCredential.statusCode, testCase.discovery === 'none' ? 200 : 401, `${id} discovery unauthenticated`);
+  const discoveryWithCredential = testCase.discovery === 'none'
+    ? discoveryWithoutCredential
+    : await app.inject({ method: 'GET', url: '/discover', headers: authHeader('discovery', testCase.discovery) });
+  assertEqual(discoveryWithCredential.statusCode, 200, `${id} discovery authenticated`);
+  const discovery = discoveryWithCredential.json();
+  assertEqual(discovery.readAuthRequired, testCase.read !== 'none', `${id} readAuthRequired`);
+  assertEqual(discovery.proposalAuthRequired, testCase.proposal !== 'none', `${id} proposalAuthRequired`);
+  assertEqual(discovery.discoveryAuthRequired, testCase.discovery !== 'none', `${id} discoveryAuthRequired`);
+  assertEqual(Boolean(discovery.credentialSetupScriptUrl), anyBearer, `${id} bearer setup URL`);
+  const oidcScheme = discovery.authSchemes.find((scheme: { type: string }) => scheme.type === 'oauth2');
+  assertEqual(Boolean(oidcScheme), anyOidc, `${id} OIDC scheme`);
+  if (oidcScheme) {
+    assertEqual(oidcScheme.deviceAuthorizationEndpoint, 'https://auth.example.test/application/o/device/', `${id} device endpoint`);
+    assertEqual(oidcScheme.tokenEndpoint, 'https://auth.example.test/application/o/token/', `${id} token endpoint`);
   }
 
-  const proposalWithoutAuth = await app.inject({ method: 'GET', url: '/proposals/notice' });
-  let proposalWithAuthStatus: number | null = null;
-  let proposalUnauthorizedArea: string | null = null;
-  if (testCase.proposal) {
-    assertEqual(proposalWithoutAuth.statusCode, 401, caseId + ' proposal without token status');
-    proposalUnauthorizedArea = parseJson(proposalWithoutAuth.payload).details.authArea;
-    assertEqual(proposalUnauthorizedArea, 'proposal', caseId + ' proposal authArea');
-    const proposalWithAuth = await app.inject({ method: 'GET', url: '/proposals/notice', headers: authHeader('proposal') });
-    proposalWithAuthStatus = proposalWithAuth.statusCode;
-    assertEqual(proposalWithAuth.statusCode, 200, caseId + ' proposal with token status');
-  } else {
-    assertEqual(proposalWithoutAuth.statusCode, 200, caseId + ' proposal open status');
-  }
+  const howTo = await app.inject({ method: 'GET', url: '/howToPropose', headers: authHeader('discovery', testCase.discovery) });
+  assertEqual(howTo.statusCode, 200, `${id} how-to status`);
+  const howToPayload = howTo.json();
+  const expectedFirstStep = anyOidc
+    ? 'Authorize the agent through the human login link'
+    : anyBearer
+      ? 'Handle registry authentication outside chat'
+      : 'Read this workflow first';
+  assertEqual(howToPayload.requiredSteps[0].title, expectedFirstStep, `${id} how-to first step`);
+  assertEqual(Boolean(howToPayload.apiNotes.authSetupFlow), anyAuth, `${id} auth setup guidance`);
 
-  const setupScript = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
-  assertEqual(setupScript.statusCode, 200, caseId + ' setup script status');
-  const setupPayload = setupScript.payload;
-  const setup = {
-    requireRead: setupPayload.includes("MSH_REQUIRE_READ='true'"),
-    requireProposal: setupPayload.includes("MSH_REQUIRE_PROPOSAL='true'"),
-    containsReadPrompt: setupPayload.includes('Read bearer token'),
-    containsProposalPrompt: setupPayload.includes('Proposal bearer token'),
-    persistsReadToken: setupPayload.includes('entry.readToken'),
-    persistsProposalToken: setupPayload.includes('entry.proposalToken'),
-  };
-  assertEqual(setup.requireRead, testCase.read, caseId + ' setup requireRead');
-  assertEqual(setup.requireProposal, testCase.proposal, caseId + ' setup requireProposal');
-  assertEqual(setup.containsReadPrompt, testCase.read, caseId + ' setup read prompt');
-  assertEqual(setup.containsProposalPrompt, testCase.proposal, caseId + ' setup proposal prompt');
-  assertEqual(setup.persistsReadToken, testCase.read, caseId + ' setup read persistence');
-  assertEqual(setup.persistsProposalToken, testCase.proposal, caseId + ' setup proposal persistence');
+  const readStatus = await runArea(app, testCase, 'read', '/categories');
+  const proposalStatus = await runArea(app, testCase, 'proposal', '/proposals/notice');
+  const setup = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
+  assertEqual(setup.statusCode, 200, `${id} setup script status`);
+  const setupRead = setup.payload.includes("MSH_REQUIRE_READ='true'");
+  const setupProposal = setup.payload.includes("MSH_REQUIRE_PROPOSAL='true'");
+  assertEqual(setupRead, testCase.read === 'bearer', `${id} setup read bearer`);
+  assertEqual(setupProposal, testCase.proposal === 'bearer', `${id} setup proposal bearer`);
 
   await app.close();
-
   return {
-    id: caseId,
-    config: {
-      publicReadAuthMode: testCase.read ? 'bearer' : 'none',
-      proposalAuthMode: testCase.proposal ? 'bearer' : 'none',
-      discoveryAuthMode: testCase.discovery ? 'bearer' : 'none',
+    id,
+    config: testCase,
+    discoveryStatus: {
+      withoutCredential: discoveryWithoutCredential.statusCode,
+      withCredential: discoveryWithCredential.statusCode,
     },
-    discover: {
-      unauthenticatedStatus: discoverWithoutAuth.statusCode,
-      authenticatedStatus: discoverWithAuth.statusCode,
-      readAuthRequired: discoverPayload.readAuthRequired,
-      proposalAuthRequired: discoverPayload.proposalAuthRequired,
-      discoveryAuthRequired: discoverPayload.discoveryAuthRequired,
-      credentialSetupScriptUrlPresent: Object.prototype.hasOwnProperty.call(discoverPayload, 'credentialSetupScriptUrl'),
-    },
-    howToPropose: {
-      firstStepTitle: howToPayload.requiredSteps[0].title,
-      credentialSetupScriptUrlPresent: Boolean(howToPayload.apiNotes.credentialSetupScriptUrl),
-      authSetupFlowPresent: Boolean(howToPayload.apiNotes.authSetupFlow),
-    },
-    publicRead: {
-      unauthenticatedStatus: publicReadWithoutAuth.statusCode,
-      authenticatedStatus: publicReadWithAuthStatus,
-      unauthorizedArea: publicReadUnauthorizedArea,
-    },
-    proposal: {
-      unauthenticatedStatus: proposalWithoutAuth.statusCode,
-      authenticatedStatus: proposalWithAuthStatus,
-      unauthorizedArea: proposalUnauthorizedArea,
-    },
-    setupScript: setup,
+    readStatus,
+    proposalStatus,
+    advertisedSchemes: discovery.authSchemes.map((scheme: { id: string }) => scheme.id),
+    howToFirstStep: expectedFirstStep,
+    bearerSetup: { read: setupRead, proposal: setupProposal },
     result: 'PASS',
   };
 }
 
 async function main(): Promise<void> {
+  assertEqual(cases.length, 27, 'matrix case count');
   const results: CaseResult[] = [];
-  for (const testCase of cases) {
-    results.push(await runCase(testCase));
-  }
-
-  await mkdir('.tmp', { recursive: true });
-  const report = {
-    name: 'agent-api-auth-matrix',
-    totalPermutations: cases.length,
-    passedPermutations: results.length,
-    failedPermutations: 0,
-    results,
-  };
-
+  for (const testCase of cases) results.push(await runCase(testCase));
+  const report = { name: 'agent-auth-matrix', total: results.length, passed: results.length, failed: 0, results };
   const lines = [
-    'agent-api-auth-matrix',
-    'totalPermutations=' + report.totalPermutations,
-    'passedPermutations=' + report.passedPermutations,
-    'failedPermutations=' + report.failedPermutations,
-    ...results.map((result) => [
-      'PASS',
-      result.id,
-      'discover=' + result.discover.unauthenticatedStatus + '/' + result.discover.authenticatedStatus,
-      'read=' + result.publicRead.unauthenticatedStatus + '/' + (result.publicRead.authenticatedStatus ?? '-'),
-      'proposal=' + result.proposal.unauthenticatedStatus + '/' + (result.proposal.authenticatedStatus ?? '-'),
-      'setupRead=' + result.setupScript.requireRead,
-      'setupProposal=' + result.setupScript.requireProposal,
-      'howToFirstStep=' + JSON.stringify(result.howToPropose.firstStepTitle),
-    ].join(' ')),
+    'agent-auth-matrix',
+    `total=${report.total}`,
+    `passed=${report.passed}`,
+    `failed=${report.failed}`,
+    ...results.map((result) => `PASS ${result.id}`),
     'RESULT=PASS',
   ];
-
+  await mkdir('.tmp', { recursive: true });
   await writeFile('.tmp/agent-auth-matrix.json', JSON.stringify(report, null, 2) + '\n');
   await writeFile('.tmp/agent-auth-matrix.log', lines.join('\n') + '\n');
   console.log(lines.join('\n'));
 }
+
 main().catch((error) => {
   console.error('RESULT=FAIL');
   console.error(error instanceof Error ? error.stack ?? error.message : error);

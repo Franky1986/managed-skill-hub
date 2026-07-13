@@ -14,7 +14,8 @@ import { AdminSkillPage } from './pages/admin/AdminSkillPage';
 import { AdminProposalsPage } from './pages/admin/AdminProposalsPage';
 import { ProposalDetailPage } from './pages/ProposalDetailPage';
 import { ProposalStatusPage } from './pages/ProposalStatusPage';
-import { useAuthStore } from './store/auth';
+import { hasAdminRole, useAuthStore } from './store/auth';
+import type { AdminRole } from './api/admin';
 import { LanguageProvider, useLanguage } from './i18n';
 
 function AdminRoute() {
@@ -30,10 +31,15 @@ function AdminRoute() {
     }
 
     if (!isAuthenticated) {
-        return <Navigate to="/admin/login" replace />;
+        return <Navigate to="/admin/login?reason=session-expired" replace />;
     }
 
     return <Outlet />;
+}
+
+function AdminRoleRoute({ required }: { required: AdminRole | AdminRole[] }) {
+    const roles = useAuthStore((state) => state.roles);
+    return hasAdminRole(roles, required) ? <Outlet /> : <Navigate to="/admin" replace />;
 }
 
 export function AppRouter() {
@@ -52,10 +58,16 @@ export function AppRouter() {
                             <Route index element={<AdminDashboardPage />} />
                             <Route path="drafts" element={<AdminDraftSkillsPage />} />
                             <Route path="review" element={<AdminReviewQueuePage />} />
-                            <Route path="skills/new" element={<AdminSkillCreatePage />} />
+                            <Route element={<AdminRoleRoute required="admin" />}>
+                                <Route path="skills/new" element={<AdminSkillCreatePage />} />
+                            </Route>
                             <Route path="skills/:id" element={<AdminSkillPage />} />
-                            <Route path="proposals" element={<AdminProposalsPage />} />
-                            <Route path="proposals/:id" element={<ProposalDetailPage />} />
+                            <Route element={<AdminRoleRoute required="reviewer" />}>
+                                <Route path="proposals" element={<AdminProposalsPage />} />
+                            </Route>
+                            <Route element={<AdminRoleRoute required={['reviewer', 'publisher']} />}>
+                                <Route path="proposals/:id" element={<ProposalDetailPage />} />
+                            </Route>
                         </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>

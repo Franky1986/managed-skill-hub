@@ -11,6 +11,7 @@ from `.env`.
 ## Scope
 
 - Login endpoint `POST /admin/login`
+- Bounded per-client-address login attempt limiter
 - Session endpoint `GET /admin/session`
 - Session cookie with JWT
 - Middleware for admin routes
@@ -56,6 +57,7 @@ from `.env`.
 ## Failure Modes
 
 - Wrong credentials -> 401
+- Too many login attempts in the configured window -> 429 with `Retry-After`
 - Missing cookie -> 401
 - Invalid/expired JWT -> 401
 - Authenticated admin mutation from an unexpected browser origin -> 401
@@ -72,6 +74,8 @@ from `.env`.
 - Session cookie uses `path: '/'`.
 - Mutating admin requests with unexpected browser origins are rejected after
   session validation.
+- Login attempts are limited in-process even when the API is reachable without
+  the documented reverse proxy.
 - Web frontend checks session through `GET /admin/session` before rendering each
   admin page and redirects to `/admin/login` without valid session.
 

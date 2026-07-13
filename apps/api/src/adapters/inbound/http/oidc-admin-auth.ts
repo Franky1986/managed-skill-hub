@@ -5,9 +5,9 @@ import { PrincipalRepositoryPort } from '../../../application/ports/outbound/pri
 import { AuthenticatedPrincipal } from '../../../application/security/authenticated-principal';
 import { AppConfig } from '../../../infrastructure/config';
 import { ADMIN_COOKIE } from './simple-admin-auth';
-import { AdminAuth, AdminAuthSession, validateAdminMutationOrigin } from './admin-auth';
+import { AdminAuthSession, OidcModeAdminAuth, validateAdminMutationOrigin } from './admin-auth';
 
-export class OidcAdminAuth implements AdminAuth {
+export class OidcAdminAuth implements OidcModeAdminAuth {
   readonly mode = 'oidc' as const;
   readonly cookiePath: string;
 

@@ -30,11 +30,10 @@ English-first docs, specs, UI localization, and agent-facing contracts.
 - SQLite FTS5 search index in `data/index/`.
 - SQLite metadata projection as domain truth and read layer for large parts of
   retrieval and review.
-- Simple session-protected admin path today; accepted authentik/OIDC target in
-  ADR-015 with Authorization Code admin login and human-delegated agent Device
-  Authorization.
-- Public read and proposal paths are open by default, with implemented
-  `none`/`bearer` agent API auth and accepted OIDC expansion in ADR-015.
+- Simple or Authentik/OIDC admin sessions with server-side Authorization Code
+  plus PKCE and human-delegated agent Device Authorization.
+- Discovery, public read, and proposal paths independently support `none`,
+  static `bearer`, or verified OIDC access tokens.
 - Ports for storage, search, audit, and auth to enable later migration.
 
 ## Major Epics
@@ -89,7 +88,7 @@ English-first docs, specs, UI localization, and agent-facing contracts.
    - Optional bearer authentication for published-skill consumption.
    - Optional bearer authentication for proposal submission and status polling.
    - Discovery/OpenAPI contracts that tell agents which auth mode is active.
-   - Accepted follow-up: independently configurable Authentik OIDC modes,
+   - Implemented follow-up: independently configurable Authentik OIDC modes,
      just-in-time principals, and Device Authorization linkout for agents acting
      on behalf of humans.
 

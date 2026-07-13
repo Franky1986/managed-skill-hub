@@ -4,7 +4,7 @@ import cookie from '@fastify/cookie';
 import { describe, expect, it, vi } from 'vitest';
 import { type FastifyInstance, type FastifyReply } from 'fastify';
 import { SimpleAdminAuth, adminGuard } from './simple-admin-auth';
-import { registerAdminAuthRoutes } from './admin-auth.controller';
+import { createAdminLoginRateLimiter, registerAdminAuthRoutes } from './admin-auth.controller';
 import { type AppConfig } from '../../../infrastructure/config';
 import { UnauthorizedError } from '../../../domain/errors';
 import { registerApiErrorHandler } from './error-response';
@@ -89,7 +89,8 @@ async function buildAuthApp(overrides: Partial<AppConfig> = {}): Promise<{ app: 
   await app.register(cookie);
   const auth = new SimpleAdminAuth(config(overrides));
   registerApiErrorHandler(app);
-  registerAdminAuthRoutes(app, auth);
+  const appConfig = config(overrides);
+  registerAdminAuthRoutes(app, auth, undefined, createAdminLoginRateLimiter(appConfig));
   return { app, auth };
 }
 
@@ -112,7 +113,7 @@ describe('SimpleAdminAuth', () => {
     expect(setCookie).toHaveBeenCalledWith(
       'skill_hub_session',
       expect.any(String),
-      expect.objectContaining({ path: '/' })
+      expect.objectContaining({ path: '/', maxAge: 3600 })
     );
   });
 
@@ -259,5 +260,27 @@ describe('SimpleAdminAuth', () => {
       mode: 'simple',
       roles: expect.arrayContaining(['admin', 'reviewer', 'publisher']),
     });
+  });
+
+  it('rate limits repeated password login attempts by client address', async () => {
+    const { app } = await buildAuthApp({
+      adminPassword: 'admin',
+      adminLoginRateLimitMaxRequests: 2,
+      adminLoginRateLimitWindowMs: 60_000,
+      adminLoginRateLimitMaxBuckets: 100,
+    });
+
+    expect((await app.inject({ method: 'POST', url: '/admin/login', payload: {
+      username: 'admin', password: 'wrong',
+    } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/admin/login', payload: {
+      username: 'admin', password: 'wrong',
+    } })).statusCode).toBe(401);
+    const limited = await app.inject({ method: 'POST', url: '/admin/login', payload: {
+      username: 'admin', password: 'admin',
+    } });
+
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers['retry-after']).toBeDefined();
   });
 });

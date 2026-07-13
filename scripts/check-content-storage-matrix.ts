@@ -123,7 +123,40 @@ async function runCase(testCase: MatrixCase, skillId: string): Promise<CaseResul
     await container.reviewSkill.approve(skillId, '1.0.0', 'storage-proof-admin');
     await container.reviewSkill.publish(skillId, '1.0.0', 'storage-proof-admin');
 
+    const proposal = await container.proposalCommand.submitProposal({
+      title: 'OIDC attribution storage proof',
+      description: 'Preserves stable human and agent-client attribution across content storage adapters.',
+      category: 'operations',
+      tags: ['identity', 'proof'],
+      capabilities: ['attribution'],
+      entrypoint: 'SKILL.md',
+    }, {
+      label: 'Storage Proof User',
+      principalId: 'principal-storage-proof',
+      clientId: 'managedskillhub-agent-device',
+    });
+    const rehydratedProposal = await container.skillRepository.findProposalById(proposal.id);
+    const proposalAudit = await container.auditLog.findByProposalId(proposal.id);
+    assert(
+      rehydratedProposal?.submittedByPrincipalId === 'principal-storage-proof',
+      mode + ' proposal principal attribution must survive rehydration'
+    );
+    assert(
+      rehydratedProposal?.submittedViaClientId === 'managedskillhub-agent-device',
+      mode + ' proposal client attribution must survive rehydration'
+    );
+    assert(
+      proposalAudit.some((entry) => (
+        entry.actorPrincipalId === 'principal-storage-proof'
+        && entry.actorClientId === 'managedskillhub-agent-device'
+      )),
+      mode + ' audit principal/client attribution must survive persistence'
+    );
+
     const checks: Record<string, unknown> = {};
+    checks.proposalPrincipalAttribution = true;
+    checks.proposalClientAttribution = true;
+    checks.auditPrincipalClientAttribution = true;
     for (const [id, url] of Object.entries({
       list: '/skills',
       search: '/skills/search?q=storage&mode=keyword',

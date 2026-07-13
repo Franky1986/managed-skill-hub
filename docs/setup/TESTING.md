@@ -37,6 +37,12 @@ RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh
 The API workspace declares `mysql2`; no undeclared local package is required by
 the MySQL checks after a clean `npm ci`.
 
+For configuration-profile acceptance against a real deployment, execute and
+record the scenarios in
+[`AUTHENTICATION_ACCEPTANCE_CHECKLIST.md`](./AUTHENTICATION_ACCEPTANCE_CHECKLIST.md).
+It separates deterministic coverage from browser, multi-user, reverse-proxy,
+real Authentik, and rollback evidence.
+
 ## 3. Configure Environment
 
 ### Root `.env` (single source of truth)
@@ -180,6 +186,7 @@ The lightweight deterministic proof scripts run as part of `./scripts/check.sh` 
 | Script | Proof artifacts | Purpose |
 |---|---|---|
 | `scripts/check-agent-auth-matrix.ts` | `.tmp/agent-auth-matrix.log/json` | Auth route-group permutations |
+| `scripts/check-oidc-provider.ts` | `.tmp/oidc-provider.log/json` | Real local discovery/JWKS, access-token, rotation, and outage behavior |
 | `scripts/check-judger-autopublish-matrix.ts` | `.tmp/judger-autopublish-matrix.log/json` | Judger availability and auto-publish safety permutations |
 | `scripts/check-agent-contract.ts` | `.tmp/agent-contract.log/json` | Discovery, how-to-propose, setup-script contract consistency |
 | `scripts/check-admin-ui-smoke.ts` | `.tmp/admin-ui-smoke.log/json` | Lightweight source-contract proof for admin/public UI wiring |
@@ -203,15 +210,35 @@ Optional gates:
 ```bash
 RUN_SMOKE_TEST=true ./scripts/full-check.sh
 RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh
+RUN_AUTHENTIK_STAGING_CHECK=true AUTHENTIK_STAGING_ACCESS_TOKEN='...' AUTHENTIK_STAGING_ID_TOKEN='...' AUTHENTIK_STAGING_EVIDENCE_FILE=/secure/path/evidence.json ./scripts/full-check.sh
 ```
 
-The full check always runs the isolated backup/restore proof after the baseline check. With `RUN_MYSQL_FULL_CHECK=true`, it also starts the repository MySQL/phpMyAdmin stack, runs the provider matrix across `sqlite/sqlite`, `mysql/mysql`, `sqlite/mysql`, and `mysql/sqlite`, and runs the SQLite-to-MySQL-to-SQLite provider cutover proof.
+The full check always runs the isolated backup/restore proof after the baseline
+check. `RUN_MYSQL_FULL_CHECK=true` adds all SQLite/MySQL provider combinations.
+`RUN_AUTHENTIK_STAGING_CHECK=true` adds the live provider/token checks and
+requires the fresh manual evidence contract from `docs/setup/AUTHENTIK.md`.
 
 ### Agent API Auth Matrix
 
-The static bearer auth permutations are documented and covered in
+The `none`, static bearer, and OIDC permutations are documented and covered in
 [`docs/setup/AGENT_API_AUTH_TEST_MATRIX.md`](./AGENT_API_AUTH_TEST_MATRIX.md).
-Run `./scripts/check.sh` to execute the automated matrix tests and generate `.tmp/agent-auth-matrix.log` plus `.tmp/agent-auth-matrix.json` as deterministic proof artifacts.
+Run `./scripts/check.sh` to execute all 27 independent discovery/read/proposal
+combinations and generate `.tmp/agent-auth-matrix.log` plus
+`.tmp/agent-auth-matrix.json`.
+
+### Deterministic And Real OIDC Proofs
+
+`scripts/check-oidc-provider.ts` binds a local loopback provider and runs the
+production verifier against real `openid-client` discovery and `jose` remote
+JWKS behavior. It proves Authentik-shaped access tokens, independently validates
+a realistic `typ=JWT` ID token with `at_hash`, rejects that valid ID token as an
+API access token, and proves key rotation, stable ownership, and fail-closed
+outage behavior without an external dependency.
+
+This does not activate production. The optional real Authentik gate additionally
+requires a short-lived token obtained through Device Authorization and a fresh,
+anonymous schema-v2 staging evidence file. The access and ID tokens must come
+from one Token Endpoint response. See `docs/setup/AUTHENTIK.md`.
 
 ### Judger And Auto-Publish Matrix
 
@@ -221,7 +248,11 @@ Successful runs generate `.tmp/judger-autopublish-matrix.log` and `.tmp/judger-a
 
 ### Admin UI Smoke Proof
 
-`./scripts/check.sh` runs `scripts/check-admin-ui-smoke.ts` as a lightweight source-contract proof. It validates public routes outside the admin guard, admin route guarding, authenticated-only admin navigation, login/logout wiring, config-aware setup-script UI, not-judged proposal display, and reachable proposal review/draft flows.
+`./scripts/check.sh` runs `scripts/check-admin-ui-smoke.ts` as a lightweight
+source-contract proof. It validates public routes outside the admin guard,
+simple/OIDC login wiring, session-expiry guidance, role routes and actions,
+authenticated-only navigation, config-aware setup UI, not-judged proposal
+display, and reachable proposal review/draft flows.
 Successful runs generate `.tmp/admin-ui-smoke.log` and `.tmp/admin-ui-smoke.json`.
 
 #
@@ -638,11 +669,15 @@ is not a problem. When in doubt, check the port:
 lsof -nP -iTCP:3002 -sTCP:LISTEN
 ```
 
-### `ADMIN_PASSWORD` Or `ADMIN_PASSWORD_HASH` Is Missing
+### Simple Admin Credentials Are Missing
 
 ```bash
 echo "ADMIN_PASSWORD=admin" >> .env
 ```
+
+This applies only to `ADMIN_AUTH_MODE=simple`. OIDC mode must leave simple
+credentials and `JWT_SECRET` absent and instead configure both Authentik
+provider boundaries.
 
 ### Database Lock Or FTS5 Error
 
@@ -671,7 +706,8 @@ npm run build:prod
 
 ## 13. What Does Not Work Yet: MVP Boundaries
 
-- authentik integration is not active yet; simple auth via `.env` is used.
+- Authentik runtime support exists, but production activation remains dependent
+  on the target deployment's real staging gate.
 - Real LLM judgements are missing; by default `JUDGER_PROVIDER=noop` blocks
   auto-publish because judgements are treated as not-judged unless
   `AUTO_APPROVE_WITHOUT_JUDGER=true`.

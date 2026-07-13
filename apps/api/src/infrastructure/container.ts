@@ -105,7 +105,14 @@ export interface Container {
   shutdown(): Promise<void>;
 }
 
-export async function buildContainer(config: AppConfig): Promise<Container> {
+export interface ContainerBuildOptions {
+  recordPrincipalProjectionEvent?: import('../application/security/principal-projection.service').PrincipalProjectionEventSink;
+}
+
+export async function buildContainer(
+  config: AppConfig,
+  options: ContainerBuildOptions = {}
+): Promise<Container> {
   await validateDataDir(config.dataDir);
 
   const mysqlClient = needsMysqlClient(config) ? new MysqlClient(config) : null;
@@ -124,7 +131,8 @@ export async function buildContainer(config: AppConfig): Promise<Container> {
   const principalProjection = new PrincipalProjectionService(
     identityPersistence,
     authorizationPolicy,
-    config
+    config,
+    options.recordPrincipalProjectionEvent
   );
   const search = buildSearchAdapter(config.searchProvider, path.join(config.dataDir, 'index', 'search.db'), mysqlClient);
   const contentDb = buildContentDb(config, mysqlClient);

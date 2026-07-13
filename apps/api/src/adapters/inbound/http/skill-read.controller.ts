@@ -367,6 +367,12 @@ function buildDiscoveryResponse(request: import('fastify').FastifyRequest, conta
 
 function buildCredentialSetupScript(agentAuth: AgentApiAuth): string {
   const metadata = agentAuth.metadata();
+  const requiresReadBearer = metadata.authSchemes.some(
+    (scheme) => scheme.type === 'bearer' && scheme.appliesTo.includes('public-read')
+  );
+  const requiresProposalBearer = metadata.authSchemes.some(
+    (scheme) => scheme.type === 'bearer' && scheme.appliesTo.includes('proposal')
+  );
   const script = [
     '#!/usr/bin/env bash',
     'set -euo pipefail',
@@ -376,8 +382,8 @@ function buildCredentialSetupScript(agentAuth: AgentApiAuth): string {
     'export MSH_REGISTRY_ID=' + shellQuote(metadata.registryId),
     'export MSH_REGISTRY_NAME=' + shellQuote(metadata.registryName),
     'export MSH_REGISTRY_URL=' + shellQuote(metadata.apiBaseUrl),
-    'export MSH_REQUIRE_READ=' + shellQuote(metadata.readAuthRequired ? 'true' : 'false'),
-    'export MSH_REQUIRE_PROPOSAL=' + shellQuote(metadata.proposalAuthRequired ? 'true' : 'false'),
+    'export MSH_REQUIRE_READ=' + shellQuote(requiresReadBearer ? 'true' : 'false'),
+    'export MSH_REQUIRE_PROPOSAL=' + shellQuote(requiresProposalBearer ? 'true' : 'false'),
     '',
     'node - \"$@\" <<\'NODE\'',
     'const fs = require(\"fs\");',
@@ -501,14 +507,14 @@ function buildCredentialSetupScript(agentAuth: AgentApiAuth): string {
   ];
   let output = script.join('\n') + '\n';
   const browserTokenEntries: string[] = [];
-  if (metadata.readAuthRequired) {
+  if (requiresReadBearer) {
     browserTokenEntries.push('readToken: params.get(\"readToken\") || \"\"');
   } else {
     output = output.replace('  if (requireRead) fields.push(\"<label>Read bearer token<input name=\\\"readToken\\\" type=\\\"password\\\" autocomplete=\\\"off\\\" required /></label>\");\n', '');
     output = output.replace('  if (requireRead && tokens.readToken) entry.readToken = tokens.readToken;\n', '');
     output = output.replace('  if (requireRead) tokens.readToken = process.env.MANAGED_SKILL_HUB_READ_TOKEN || await askHidden(rl, \"Read bearer token\");\n', '');
   }
-  if (metadata.proposalAuthRequired) {
+  if (requiresProposalBearer) {
     browserTokenEntries.push('proposalToken: params.get(\"proposalToken\") || \"\"');
   } else {
     output = output.replace('  if (requireProposal) fields.push(\"<label>Proposal bearer token<input name=\\\"proposalToken\\\" type=\\\"password\\\" autocomplete=\\\"off\\\" required /></label>\");\n', '');
@@ -832,12 +838,18 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
       proposalAuthRequired: authMetadata.proposalAuthRequired,
       discoveryAuthRequired: authMetadata.discoveryAuthRequired,
       credentialSetupScriptUrl: authMetadata.credentialSetupScriptUrl ?? undefined,
-      authorizationHeader: authMetadata.proposalAuthRequired ? 'Authorization: Bearer <proposal token>' : null,
-      authSetupFlow: authMetadata.credentialSetupScriptUrl
-        ? 'If auth is required, ask the user for permission to download and run credentialSetupScriptUrl. The setup script opens a local browser form by default and only shows the token fields required by the current registry config; --terminal is available as fallback. Then read ~/.managed-skill-hub/credentials.json by registry alias or apiBaseUrl. Never request tokens in chat.'
-        : undefined,
+      authorizationHeader: authMetadata.proposalAuthRequired
+        ? oidcScheme
+          ? 'Authorization: Bearer <OIDC access token>'
+          : 'Authorization: Bearer <proposal token>'
+        : null,
+      authSetupFlow: oidcScheme
+        ? 'Use the OIDC Device Authorization metadata from /discover. Show only verification_uri_complete to the human, keep device_code and all tokens out of chat, poll the trusted token endpoint according to the provider interval, and send only the access token in the Authorization header.'
+        : authMetadata.credentialSetupScriptUrl
+          ? 'If auth is required, ask the user for permission to download and run credentialSetupScriptUrl. The setup script opens a local browser form by default and only shows the token fields required by the current registry config; --terminal is available as fallback. Then read ~/.managed-skill-hub/credentials.json by registry alias or apiBaseUrl. Never request tokens in chat.'
+          : undefined,
       checkDuplicateNote: authMetadata.proposalAuthRequired
-        ? 'This endpoint follows PROPOSAL_AUTH_MODE and requires the proposal token. Local upload agents should still stop for explicit confirmation on strong matches.'
+        ? 'This endpoint follows PROPOSAL_AUTH_MODE and requires the configured proposal credential. Local upload agents should still stop for explicit confirmation on strong matches.'
         : 'This endpoint is available to all submitters and is informational on the API contract, but local upload agents should still stop for explicit confirmation on strong matches.',
     },
   };

@@ -9,10 +9,10 @@ root `/.env`.
 
 Available templates:
 
-- `.env.example`: current provider-neutral development template.
-- `.env.example.simple`: complete current-runtime simple-auth profile.
-- `.env.example.authentik`: accepted ADR-015 target profile; OIDC runtime
-  support is not implemented yet.
+- `.env.example`: provider-neutral development template.
+- `.env.example.simple`: complete simple-auth profile.
+- `.env.example.authentik`: OIDC staging profile; production activation
+  requires the real Authentik gate.
 
 ## Root `.env` (copy this first)
 
@@ -46,55 +46,86 @@ cp .env.example.simple .env
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
-| `ADMIN_USER` | yes | Admin username for login. | `admin` |
+| `ADMIN_AUTH_MODE` | no | Select `simple` or `oidc`. | `simple` |
+| `ADMIN_USER` | simple mode | Admin username for local login. | `admin` |
 | `ADMIN_PASSWORD` | no | Plaintext admin password (local/dev). Takes precedence over hash. | `admin` |
 | `ADMIN_PASSWORD_HASH` | no | BCrypt hash fallback when `ADMIN_PASSWORD` is not set. | `$2b$10$...` |
-| `JWT_SECRET` | yes | Session signing key. | `change-me-in-production` |
+| `JWT_SECRET` | simple mode | Simple-session signing key; unused in OIDC mode. | `change-me-in-production` |
 | `SESSION_TTL_SECONDS` | no | Admin session lifetime in seconds. | `86400` |
+| `ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS` | no | In-process simple-login attempt window per trusted client address. | `300000` |
+| `ADMIN_LOGIN_RATE_LIMIT_MAX_REQUESTS` | no | Maximum simple-login attempts per window. | `10` |
+| `ADMIN_LOGIN_RATE_LIMIT_MAX_BUCKETS` | no | Maximum tracked client-address buckets. | `10000` |
 | `ADMIN_CSRF_ORIGIN_CHECK` | no | When enabled, authenticated admin mutations reject unexpected browser `Origin`/`Referer` origins. | `true` |
+| `ADMIN_UI_BASE_PATH` | no | Relative path prefix accepted for post-OIDC-login redirects. | `/frontend/admin` |
 
-When `NODE_ENV=production`, startup fails if `JWT_SECRET` is still the default
-or shorter than 32 characters, if `ADMIN_PASSWORD` is set directly, if
-`ADMIN_PASSWORD_HASH` is missing, if `CORS_ALLOWED_ORIGINS` contains `*`, or if
+When `NODE_ENV=production` and simple admin auth is active, startup fails if
+`JWT_SECRET` is still the default or shorter than 32 characters, if
+`ADMIN_PASSWORD` is set directly, or if `ADMIN_PASSWORD_HASH` is missing.
+OIDC admin mode instead rejects any explicitly configured simple credentials
+and requires its confidential client settings. All modes reject
+`CORS_ALLOWED_ORIGINS=*` and reject
 `PROPOSAL_AUTH_MODE=none` without explicitly setting
 `ALLOW_OPEN_PROPOSALS_IN_PRODUCTION=true`. Use `ADMIN_PASSWORD` only for
 local/dev-like setups.
 
+`SESSION_TTL_SECONDS` is bounded to 5 minutes through 7 days. Simple password
+login is also protected by the in-process
+`ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS`, `ADMIN_LOGIN_RATE_LIMIT_MAX_REQUESTS`, and
+`ADMIN_LOGIN_RATE_LIMIT_MAX_BUCKETS` limits. The reverse-proxy limiter remains a
+second, deployment-level layer.
+
 ## Agent API Auth
 
-Agent-facing auth is separate from admin session auth. Supported modes are `none` and `bearer`. Defaults keep local development open.
+Agent-facing auth is separate from admin session auth. Supported modes are
+`none`, `bearer`, and `oidc`, independently per area. Defaults keep local
+development open.
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
-| `PUBLIC_READ_AUTH_MODE` | no | Auth for published-skill read/search/download endpoints. | `none` or `bearer` |
-| `PUBLIC_READ_BEARER_TOKEN` | when bearer | Read token for agents/clients. | `read-token` |
+| `PUBLIC_READ_AUTH_MODE` | no | Auth for published-skill read/search/download endpoints. | `none`, `bearer`, or `oidc` |
+| `PUBLIC_READ_BEARER_TOKEN` | when bearer | Read token for agents/clients; production requires at least 32 random bytes. | generated secret |
 | `PUBLIC_READ_BEARER_ACTOR` | no | Audit/display actor for read bearer token. | `agent-read-token` |
-| `PROPOSAL_AUTH_MODE` | no | Auth for duplicate check, proposal submit, upload, finalize, notice, and status. | `none` or `bearer` |
-| `PROPOSAL_BEARER_TOKEN` | when bearer | Proposal workflow token. | `proposal-token` |
+| `PROPOSAL_AUTH_MODE` | no | Auth for duplicate check, proposal submit, upload, finalize, notice, and status. | `none`, `bearer`, or `oidc` |
+| `PROPOSAL_BEARER_TOKEN` | when bearer | Proposal workflow token; production requires at least 32 random bytes. | generated secret |
 | `PROPOSAL_BEARER_ACTOR` | no | Authoritative actor for proposal bearer token. | `agent-proposal-token` |
 | `ALLOW_OPEN_PROPOSALS_IN_PRODUCTION` | no | Explicit override that permits `PROPOSAL_AUTH_MODE=none` in production. Keep `false` unless the deployment is intentionally open and protected by network/proxy controls. | `false` |
-| `DISCOVERY_AUTH_MODE` | no | Auth for `/discover`, `/howToPropose`, and `/openapi.yaml`. | `none` or `bearer` |
-| `DISCOVERY_BEARER_TOKEN` | when bearer | Discovery token. | `discovery-token` |
+| `DISCOVERY_AUTH_MODE` | no | Auth for `/discover`, `/howToPropose`, and `/openapi.yaml`. | `none`, `bearer`, or `oidc` |
+| `DISCOVERY_BEARER_TOKEN` | when bearer | Discovery token; production requires at least 32 random bytes. | generated secret |
 | `DISCOVERY_BEARER_ACTOR` | no | Actor label for discovery bearer token. | `agent-discovery-token` |
 
 When `PROPOSAL_AUTH_MODE=bearer`, the authenticated bearer actor is used for proposal submission/upload/finalization instead of trusting `X-Actor`. Proposal status uses the same proposal auth mode; there is no separate status token.
 
-Consumer credentials should be stored per registry alias/base URL outside agent conversations, for example in `~/.managed-skill-hub/credentials.json`. When any agent auth is enabled, `/discover` points to `/agent-credentials/setup.sh`, which generates a no-secret local setup script for this registry.
+Static bearer credentials should be stored per registry alias/base URL outside
+agent conversations, for example in `~/.managed-skill-hub/credentials.json`.
+The generated setup script configures only areas that actually use bearer mode.
+OIDC areas use the advertised Device Authorization linkout and do not write
+tokens into this credential file.
+
+Generate static production tokens from a cryptographic random source, for
+example `openssl rand -base64 32`. `none` trusts the caller-provided `X-Actor`
+label and therefore provides no verified identity or owner isolation. A static
+bearer token provides one shared actor for every holder. Per-human ownership is
+available only with OIDC.
+
+The public React catalog does not store agent bearer/OIDC tokens. Keep
+`PUBLIC_READ_AUTH_MODE=none` for an anonymously browsable catalog, or treat a
+protected public-read mode as an agent/API-only deployment until a separate
+browser OIDC flow is introduced. The administrator workbench uses only admin
+session endpoints; its proposal badge uses `/admin/proposals/notice`.
 
 Protected agent routes return `401` with machine-readable `details.authRequired`, `details.authArea`, `details.authScheme`, `details.discoverUrl`, and `details.credentialSetupScriptUrl` so agents can ask the user for setup-script confirmation instead of requesting tokens in chat.
 
-## Planned Authentik/OIDC Profile
+## Authentik/OIDC Profile
 
 [ADR-015](../decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md)
-accepts `oidc` as a future third mode for discovery, published reads, and
-proposals, plus `ADMIN_AUTH_MODE=simple|oidc`. This is a target contract, not a
-current runtime feature. The current config parser rejects `oidc` for agent API
-areas and still requires simple admin credentials in production.
+defines `oidc` for discovery, published reads, and proposals, plus
+`ADMIN_AUTH_MODE=simple|oidc`. The runtime validates these combinations and
+fails closed when selected OIDC settings are incomplete or unsafe.
 
 The target profile is documented in `.env.example.authentik` and
 [`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md). Its principal settings are:
 
-| Variable | Target purpose |
+| Variable | Purpose |
 |---|---|
 | `ADMIN_AUTH_MODE` | Select `simple` or OIDC admin login. |
 | `OIDC_AGENT_ISSUER` | Exact issuer for the public authentik Device Authorization provider. |
@@ -115,8 +146,24 @@ The target profile is documented in `.env.example.authentik` and
 | `OIDC_ADMIN_GROUPS` | Admin group names, normally `managedskillhub-admins`. |
 | `OIDC_REVIEWER_GROUPS` | Reviewer group names. |
 | `OIDC_PUBLISHER_GROUPS` | Publisher group names. |
+| `OIDC_HUMAN_CLAIM` | Boolean Authentik access-token claim proving an interactive human. |
+| `OIDC_LOGIN_TRANSACTION_TTL_SECONDS` | One-time admin callback transaction lifetime. |
+| `OIDC_CLOCK_TOLERANCE_SECONDS` | Bounded JWT time-claim tolerance. |
+| `OIDC_JWKS_CACHE_TTL_SECONDS` | Successful JWKS cache lifetime. |
+| `OIDC_HTTP_TIMEOUT_MS` | Provider discovery/JWKS timeout. |
+| `OIDC_MAX_TOKEN_BYTES` | Maximum accepted bearer token size. |
+| `OIDC_MAX_GROUPS` | Maximum accepted group-claim cardinality. |
+| `OIDC_ACCESS_TOKEN_VALIDATION_MODE` | `jwt_profile` requires RFC 9068 `at+jwt`; `authentik_introspection` additionally verifies Authentik `JWT` access tokens through authenticated introspection. |
+| `OIDC_INTROSPECTION_CLIENT_ID` | Confidential checker client used only in Authentik introspection mode. |
+| `OIDC_INTROSPECTION_CLIENT_SECRET` | Checker secret supplied through deployment secret management. |
 
-When implemented, `OIDC_PROPOSAL_ACCESS=all_authenticated_users` allows every
+Security-sensitive values have finite startup ranges: login transaction TTL
+60-900 seconds, clock tolerance 0-300 seconds, JWKS cache 60-86400 seconds,
+provider timeout 250-30000 ms, token size 1024-65536 bytes, and group count
+1-500. Production admin and introspection client secrets must contain at least
+32 bytes and must not be example values.
+
+`OIDC_PROPOSAL_ACCESS=all_authenticated_users` allows every
 active interactive human accepted by the configured authentik application to
 submit proposals and read status by a known proposal UUID. It does not expose a
 proposal list and does not permit cross-owner mutation.
@@ -198,9 +245,9 @@ When switching environments, copy the template and update the required keys:
 cp .env.example .env
 ```
 
-Do not copy `.env.example.authentik` into an active deployment until the
-ADR-015 implementation gate is complete. Follow
-[`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md) for staging proof and cutover.
+Use `.env.example.authentik` in staging first. Do not activate it in production
+until the real Authentik gate and rollback rehearsal in
+[`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md) have current evidence.
 
 Then restart the stack and check relevant endpoints (`/health`, `/discover`, `/skills`,
 `/skills/search`) to validate the active provider, auth, and judger setup.

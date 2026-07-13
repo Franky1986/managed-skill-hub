@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { adminApi } from '../api/admin';
 import type { AdminAuthMode, AdminRole } from '../api/admin';
 
+export function hasAdminRole(roles: AdminRole[], required: AdminRole | AdminRole[]): boolean {
+    const requiredRoles = Array.isArray(required) ? required : [required];
+    return roles.includes('admin') || requiredRoles.some((role) => roles.includes(role));
+}
+
 interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;

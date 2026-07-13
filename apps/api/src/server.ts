@@ -11,7 +11,7 @@ import { registerSkillReadRoutes } from './adapters/inbound/http/skill-read.cont
 import { registerAdminSkillRoutes } from './adapters/inbound/http/admin-skill.controller';
 import { createProposalRateLimiter, registerProposalRoutes } from './adapters/inbound/http/proposal.controller';
 import { registerJudgementRoutes } from './adapters/inbound/http/judgement.controller';
-import { registerAdminAuthRoutes } from './adapters/inbound/http/admin-auth.controller';
+import { createAdminLoginRateLimiter, registerAdminAuthRoutes } from './adapters/inbound/http/admin-auth.controller';
 import { registerAdminProposalRoutes } from './adapters/inbound/http/admin-proposal.controller';
 import { registerApiErrorHandler } from './adapters/inbound/http/error-response';
 import { registerAdminObservabilityRoutes } from './adapters/inbound/http/admin-observability.controller';
@@ -23,7 +23,20 @@ import { AuthentikAccessTokenVerifier } from './adapters/outbound/identity/authe
 
 async function start() {
   const config = loadConfig();
-  const container = await buildContainer(config);
+  const app = Fastify({
+    logger: true,
+    trustProxy: config.apiTrustedProxies.length > 0 ? config.apiTrustedProxies : false,
+  });
+  app.log.info({
+    event: 'authentication_modes_configured',
+    admin: config.adminAuthMode,
+    discovery: config.discoveryAuthMode,
+    publicRead: config.publicReadAuthMode,
+    proposal: config.proposalAuthMode,
+  }, 'Authentication modes configured');
+  const container = await buildContainer(config, {
+    recordPrincipalProjectionEvent: (event) => app.log.info(event, 'OIDC security event'),
+  });
   const auth: AdminAuth = config.adminAuthMode === 'oidc'
     ? new OidcAdminAuth(config, container.adminSessions, container.principalRepository)
     : new SimpleAdminAuth(config);
@@ -47,17 +60,20 @@ async function start() {
     ? new AuthentikAccessTokenVerifier(
       config,
       container.principalProjection,
-      container.authorizationPolicy
+      container.authorizationPolicy,
+      undefined,
+      undefined,
+      (event) => {
+        const log = event.outcome === 'failure' ? app.log.warn.bind(app.log) : app.log.info.bind(app.log);
+        log(event, 'OIDC security event');
+      }
     )
     : undefined;
   await agentTokenVerifier?.initialize();
   const agentAuth = new AgentApiAuth(config, agentTokenVerifier);
   const proposalRateLimiter = createProposalRateLimiter(config);
+  const adminLoginRateLimiter = createAdminLoginRateLimiter(config);
 
-  const app = Fastify({
-    logger: true,
-    trustProxy: config.apiTrustedProxies.length > 0 ? config.apiTrustedProxies : false,
-  });
   app.log.info(
     {
       provider: config.judgerProvider,
@@ -89,7 +105,7 @@ async function start() {
       registerSkillReadRoutes(apiApp, container, agentAuth);
       registerProposalRoutes(apiApp, container, agentAuth, proposalRateLimiter);
       registerJudgementRoutes(apiApp, container, auth);
-      registerAdminAuthRoutes(apiApp, auth, oidcAdminRoutes);
+      registerAdminAuthRoutes(apiApp, auth, oidcAdminRoutes, adminLoginRateLimiter);
       registerAdminSkillRoutes(apiApp, container, auth);
       registerAdminProposalRoutes(apiApp, container, auth);
       registerAdminObservabilityRoutes(apiApp, container, auth);
@@ -101,7 +117,7 @@ async function start() {
   registerSkillReadRoutes(app, container, agentAuth);
   registerProposalRoutes(app, container, agentAuth, proposalRateLimiter);
   registerJudgementRoutes(app, container, auth);
-  registerAdminAuthRoutes(app, auth, oidcAdminRoutes);
+  registerAdminAuthRoutes(app, auth, oidcAdminRoutes, adminLoginRateLimiter);
   registerAdminSkillRoutes(app, container, auth);
   registerAdminProposalRoutes(app, container, auth);
   registerAdminObservabilityRoutes(app, container, auth);

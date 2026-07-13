@@ -10,6 +10,7 @@ import { SkillFileTree } from '../components/SkillFileTree';
 import { isTextLikeArtifact } from '../utils/artifact-utils';
 import { formatLocalDateTime } from '../lib/formatLocalDateTime';
 import { formatOverallRiskLabel, isNoJudgeAvailable, noJudgeHint } from '../lib/judgement';
+import { hasAdminRole, useAuthStore } from '../store/auth';
 
 function renderJudgementFlags(judgement: JudgementRecord): JSX.Element[] {
     return Object.entries(judgement.dimensions).map(([name, dimension]: [string, { risk: string; reason: string }]) => (
@@ -73,6 +74,8 @@ export function ProposalDetailPage() {
     const [probeLoadingByFileId, setProbeLoadingByFileId] = useState<Record<string, boolean>>({});
     const [probeErrorByFileId, setProbeErrorByFileId] = useState<Record<string, string | null>>({});
     const [expandedProbeFileId, setExpandedProbeFileId] = useState<string | null>(null);
+    const roles = useAuthStore((state) => state.roles);
+    const canReview = hasAdminRole(roles, 'reviewer');
 
     useEffect(() => {
         if (!id) {
@@ -516,7 +519,7 @@ export function ProposalDetailPage() {
                                             >
                                                 {t('proposalDetail.open')}
                                             </a>
-                                            {f.extractable && (
+                                            {f.extractable && canReview && (
                                                 <button
                                                     type="button"
                                                     onClick={() => void handleReextract(f.id)}

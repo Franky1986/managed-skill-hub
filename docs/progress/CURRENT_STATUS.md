@@ -21,7 +21,7 @@ and restore archive member validation. Proposal writes have production fail-fast
 auth defaults, per-process rate limits, and submitter ownership checks. The
 locked dependency graph currently audits with zero known vulnerabilities.
 Remaining production concerns include gateway-level distributed rate limits and
-a stronger identity provider beyond the static bearer/admin-login baseline.
+completion of the environment-specific real Authentik activation gate.
 
 ## EPIC-009 Database-Backed Content Storage
 
@@ -29,31 +29,70 @@ EPIC-009 is implemented for the first relational storage stage. `CONTENT_STORAGE
 
 ## EPIC-007 Configurable Agent API Authentication
 
-EPIC-007 static bearer phase is implemented:
+EPIC-007 static bearer compatibility remains implemented:
 
 - Agent/public auth is separate from admin session auth.
-- `PUBLIC_READ_AUTH_MODE`, `PROPOSAL_AUTH_MODE`, and `DISCOVERY_AUTH_MODE` support `none` and `bearer`.
+- `PUBLIC_READ_AUTH_MODE`, `PROPOSAL_AUTH_MODE`, and `DISCOVERY_AUTH_MODE` retain
+  `none` and `bearer` alongside the EPIC-011 OIDC expansion.
 - Public read endpoints remain open by default and can be protected with a read bearer token.
 - Proposal duplicate check, submit, upload, finalize, notice, and status routes remain open by default and can be protected with one proposal bearer token.
 - Proposal status intentionally follows `PROPOSAL_AUTH_MODE`; there is no separate status token.
 - Discovery/contract endpoints can be protected with a discovery bearer token.
-- `/discover` exposes non-secret registry identity, canonical API base URL, auth flags, auth schemes, and a setup-script URL when agent auth is enabled.
+- `/discover` exposes non-secret registry identity, canonical API base URL, auth
+  flags, and auth schemes. A setup-script URL appears only when static bearer
+  auth is active.
 - `/agent-credentials/setup.sh` generates a no-secret local setup script that stores user credentials per registry alias/base URL outside agent conversation.
 - Proposal bearer auth uses the configured bearer actor as authoritative proposal actor instead of trusting `X-Actor`.
 
-Runtime auth expansion remains open for multi-token stores, API gateways,
-OAuth/OIDC, and richer per-consumer identity.
+API-gateway and multi-token static credential stores remain optional future
+extensions; verified per-human identity is now provided by EPIC-011 OIDC.
 
-The Authentik/OIDC target is now specified in ADR-015, with separate complete
-environment profiles and operator/agent playbooks. The accepted target keeps
-auth modes independent, allows all active interactive Authentik users to submit
-and read proposal status by known UUID by default, uses Device Authorization
-for human-delegated agent work, and supports `managedskillhub-*` groups plus
-stable subject UUIDs for privileged access. This is documentation and target
-architecture only; runtime OIDC support has not been implemented yet.
-EPIC-011 now defines the implementation sequence, provider-neutral identity and
-session boundaries, additive proposal/audit migration, protocol and role test
-matrix, staged rollout, rollback, and production acceptance gate.
+## EPIC-011 Authentik OIDC And Delegated Agent Authentication
+
+The repository runtime implementation is complete and deterministic gates pass:
+
+- Admin auth independently selects simple login or server-side Authentik
+  Authorization Code with PKCE, one-time state/nonce transactions, opaque local
+  sessions, strict cookies, bounded expiry, revocation, and no SPA provider
+  tokens.
+- Discovery, published read, and proposal areas independently compose all 27
+  `none|bearer|oidc` combinations. OIDC advertises public Device Authorization
+  metadata while static credential setup remains bearer-only.
+- Access tokens are verified with `openid-client` and `jose` against exact
+  issuer, audience, `azp`, Authentik `uid`, asymmetric signature, time, area
+  scope, human policy, token/group bounds, and trusted-origin JWKS. Token class
+  is either strict RFC 9068 `at+jwt` or Authentik `JWT` plus mandatory
+  authenticated active/client/subject introspection.
+- Unknown signing keys trigger one bounded reload; deterministic rotation and
+  provider-outage tests fail closed. The deterministic proof first validates a
+  realistic OIDC ID token and its `at_hash`, then proves that the API access-token
+  verifier rejects it.
+- Existing Authentik humans are projected just in time without passwords.
+  Proposal/audit persistence records stable principal and public client IDs;
+  another accepted human may read a known UUID but cannot mutate the proposal.
+  Simultaneous first logins through admin and agent issuers converge on one
+  deterministic tenant/subject principal ID.
+- Admin subject bootstrap and `managedskillhub-*` reviewer, publisher, and admin
+  groups map to server-enforced routes and role-aware UI actions.
+- SQLite/MySQL, mixed catalog/search, and filesystem/database-content proofs
+  preserve identity/session/transaction fields. The full MySQL gate passes.
+- Normal `./scripts/check.sh`, production build, OpenAPI parity, UI source smoke,
+  and dependency audit pass without external Authentik.
+- Production static bearer secrets require at least 32 bytes; protocol/session
+  settings have hard upper bounds, provider bodies are stream-bounded, simple
+  login has in-process throttling, and the proposal badge uses admin auth.
+
+Production activation is intentionally still pending the target tenant's live
+Device Flow, reverse-proxy callback, two-human browser/ownership, role, key
+rotation/outage, session-expiry, logout, and rollback evidence. The optional
+`RUN_AUTHENTIK_STAGING_CHECK=true` full-check gate validates this evidence and a
+short-lived real human access/ID token pair. The gate independently validates
+the ID token, requires the same subject, validates `at_hash` when present, and
+otherwise requires schema-v2 same-response operator evidence.
+`docs/setup/AUTHENTICATION_ACCEPTANCE_CHECKLIST.md` provides the corresponding
+profile-by-profile manual run record and sanitized result handoff for follow-up
+agents.
+`.env.example.authentik` keeps its activation warning until that gate passes.
 
 ## EPIC-006 MySQL Support and Relational Provider Decoupling
 

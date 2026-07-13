@@ -90,6 +90,7 @@ export type AdminAuthMode = 'simple' | 'oidc';
 export interface AdminAuthMethodsResponse {
     mode: AdminAuthMode;
     loginStartUrl: string | null;
+    adminUiBasePath: string;
 }
 
 export const adminApi = {
@@ -208,6 +209,8 @@ export const adminApi = {
         apiClient.post<JudgementRecord>(`/admin/proposals/${proposalId}/judge`, {}, { headers: { 'Content-Type': 'application/json' } }),
     listProposals: (skillId?: string, status?: string) =>
         apiClient.get<{ items: ProposalSummary[]; total: number }>('/admin/proposals', { params: { skillId, status } }),
+    proposalNotice: () =>
+        apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice'),
     getProposal: (proposalId: string) =>
         apiClient.get<ProposalDetail>(`/admin/proposals/${proposalId}`),
     updateProposal: (proposalId: string, data: ProposalUpdatePayload) =>

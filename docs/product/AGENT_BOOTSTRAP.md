@@ -78,15 +78,17 @@ Before any proposal upload, the agent must read `GET /howToPropose`. This is not
 
 ## Authenticated registries
 
-Some deployments protect read, proposal, or discovery endpoints with bearer auth. Agents must not ask users to paste bearer tokens into normal chat. Prefer credentials that were already saved by the user through the generated setup script or another local setup UI.
+Deployments can protect read, proposal, or discovery endpoints with static
+bearer auth or OIDC. Agents must not ask users to paste credentials or tokens
+into normal chat. Use the generated setup path only for static bearer modes.
+In particular, agents must never ask users to paste bearer tokens into chat.
 
-The accepted future OIDC mode uses Authentik Device Authorization. When
+The OIDC mode uses Authentik Device Authorization. When
 `/discover` advertises an OIDC device scheme, agents must follow
 [`AGENT_OIDC_DEVICE_FLOW.md`](./AGENT_OIDC_DEVICE_FLOW.md): show the human only
 the trusted `verification_uri_complete` link, keep `device_code` secret, poll at
-the advertised interval, and never request credentials or tokens in chat. OIDC
-is not implemented by the current runtime, so agents must use only schemes that
-the live discovery response actually advertises.
+the advertised interval, and never request credentials or tokens in chat.
+Agents must use only schemes that the live discovery response advertises.
 
 Recommended lookup order for clients:
 

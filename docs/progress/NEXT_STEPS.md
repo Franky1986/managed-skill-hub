@@ -18,18 +18,32 @@ Before closing future language work, run the German-text search checklist and
 
 ## Product Follow-Ups Outside EPIC-003
 
-- Execute
-  [`EPIC-011`](../roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md)
-  phase by phase; do not activate `.env.example.authentik` before its
-  implementation and staging gates pass.
+- Run the EPIC-011 real Authentik staging gate against the target tenant and
+  reverse proxy. Obtain fresh anonymous evidence for admin browser login,
+  Device Authorization, two-human status/ownership, same-human continuation,
+  reviewer/publisher/admin boundaries, expiry/logout, key rotation/outage, and
+  rollback before production activation. Capture one access/ID token pair from
+  the same Token Endpoint response. Prove that the access token passes, the ID
+  token is independently valid with the same subject, any present `at_hash`
+  matches, and that valid ID token fails as an API credential, without storing
+  either token in evidence.
+- Execute the profile-by-profile scenarios in
+  [`AUTHENTICATION_ACCEPTANCE_CHECKLIST.md`](../setup/AUTHENTICATION_ACCEPTANCE_CHECKLIST.md),
+  post sanitized result blocks, and have a follow-up agent update the checklist
+  and track retests against the exact commit.
+- After that gate passes, remove the activation warning from
+  `.env.example.authentik`, record the sanitized proof artifact, and close
+  [`EPIC-011`](../roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md).
+- Decide whether protected published reads also require a dedicated browser
+  OIDC session flow. The current public React catalog intentionally stores no
+  agent credentials and is anonymously usable only with
+  `PUBLIC_READ_AUTH_MODE=none`; this must remain separate from admin sessions.
 
 - EPIC-009 follow-up: decide whether production-specific MySQL dump/restore automation should be added beyond the current explicit fail-fast guard and documentation.
 - Improve judgement consistency across proposal overview, proposal detail, and
   skill context views.
 - EPIC-004: continue implementation of the `vercel-ai-sdk` judger provider in
   parallel to existing public/internal provider options.
-- Improve proposal detail UX for unauthorized sessions, for example by routing
-  expired admin sessions back to login after showing a clear error.
 - Expand end-to-end coverage for the auto-publish path, including controller
   tests for finalize-upload responses and UI tests for `in_upload` and
   auto-publish visibility.
@@ -55,24 +69,6 @@ Before closing future language work, run the German-text search checklist and
 - Evaluate a shared gateway or datastore-backed proposal limiter before running
   multiple API instances; the built-in limiter intentionally remains
   process-local.
-- EPIC-007 Authentik follow-up: implement ADR-015 config parsing and fail-fast
-  validation for independent admin, discovery, public-read, and proposal auth
-  modes.
-- Add OIDC identity/session ports plus Authentik adapters for admin
-  Authorization Code with PKCE and public agent Device Authorization.
-- Add just-in-time principal projection, stable Authentik user UUID ownership,
-  agent-client attribution, and migration handling for existing technical
-  actor strings.
-- Update OpenAPI and `/discover` with OIDC device metadata, scopes, and
-  machine-readable authorization errors; implement the agent linkout contract
-  from `docs/product/AGENT_OIDC_DEVICE_FLOW.md`.
-- Add role checks for `managedskillhub-*` groups and subject UUID bootstrap,
-  with all authenticated interactive humans allowed to submit by default.
-- Remove personal and linked-proposal identifiers from non-admin proposal
-  status before exposing per-user OIDC identity.
-- Add deterministic mode-matrix, token-validation, Device Flow, login/logout,
-  role, ownership, privacy, expiry, replay, and JWKS-rotation tests before
-  enabling `.env.example.authentik` in deployment.
 - Continue productionization with CI/CD, dependency consolidation, and
   operational integrity checks after Authentik staging proof.
 - Evaluate web chunk splitting if the current Vite production bundle warning

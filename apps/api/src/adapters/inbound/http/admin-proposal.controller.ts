@@ -17,6 +17,10 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
     return reply.send(await container.proposalRead.listSummaries(skillId, status));
   });
 
+  app.get('/admin/proposals/notice', reviewGuard, async (_request, reply) => {
+    return reply.send(await container.proposalRead.getNotice());
+  });
+
   app.get('/admin/proposals/:proposalId', detailGuard, async (request, reply) => {
     const { proposalId } = request.params as { proposalId: string };
     const proposal = await container.proposalRead.getDetail(proposalId);

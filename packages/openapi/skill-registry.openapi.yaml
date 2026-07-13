@@ -6,6 +6,18 @@ info:
 servers:
   - url: http://localhost:3040
     description: Local API server
+x-managed-skill-hub-runtime-auth:
+  description: >-
+    Agent-facing operation security is selected at runtime. The static security arrays enumerate credentialed modes
+    only; anonymous access is enabled only when the corresponding environment selector is `none`.
+  selectors:
+    discovery: DISCOVERY_AUTH_MODE
+    publicRead: PUBLIC_READ_AUTH_MODE
+    proposal: PROPOSAL_AUTH_MODE
+  supportedModes:
+    - none
+    - bearer
+    - oidc
 paths:
   /api/health:
     get:
@@ -31,7 +43,6 @@ paths:
         discoveryBearer when DISCOVERY_AUTH_MODE=bearer or an Authentik access token with the advertised discovery
         scope when DISCOVERY_AUTH_MODE=oidc.
       security:
-        - {}
         - discoveryBearer: []
         - agentOidc:
             - managedskillhub:discovery
@@ -54,7 +65,6 @@ paths:
         Returns proposal workflow and runtime proposal auth guidance. May require discoveryBearer when
         DISCOVERY_AUTH_MODE=bearer or agentOidc when DISCOVERY_AUTH_MODE=oidc.
       security:
-        - {}
         - discoveryBearer: []
         - agentOidc:
             - managedskillhub:discovery
@@ -245,6 +255,10 @@ paths:
   /skills/suggest-name:
     get:
       operationId: suggestSkillName
+      security: &publicReadSecurity
+        - publicReadBearer: []
+        - agentOidc:
+            - managedskillhub:skills:read
       tags:
         - Skills
       summary: Suggest a valid Skill ID
@@ -274,6 +288,7 @@ paths:
   /skills:
     get:
       operationId: listSkills
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: List published skills
@@ -313,6 +328,7 @@ paths:
   /skills/search:
     get:
       operationId: searchSkills
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Search published skills
@@ -366,6 +382,7 @@ paths:
   /categories:
     get:
       operationId: listCategories
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: List known skill categories
@@ -381,6 +398,7 @@ paths:
   /tags:
     get:
       operationId: listTags
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: List known skill tags
@@ -396,6 +414,7 @@ paths:
   /skills/{skillId}:
     get:
       operationId: getSkill
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Get published skill
@@ -419,6 +438,7 @@ paths:
   /skills/{skillId}/manifest:
     get:
       operationId: getSkillManifest
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Get skill manifest
@@ -446,6 +466,7 @@ paths:
   /skills/{skillId}/package:
     get:
       operationId: downloadSkillPackage
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Download a published skill package
@@ -483,6 +504,7 @@ paths:
   /skills/{skillId}/files:
     get:
       operationId: listSkillFiles
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: List skill files
@@ -508,6 +530,7 @@ paths:
   /skills/{skillId}/files/{fileId}:
     get:
       operationId: getSkillFile
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Download a skill file
@@ -541,6 +564,7 @@ paths:
   /skills/{skillId}/files/{fileId}/extracted-content:
     get:
       operationId: getSkillFileExtractedContent
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Get extracted text for an extractable published skill file
@@ -575,6 +599,7 @@ paths:
   /skills/{skillId}/files/{fileId}/probe:
     get:
       operationId: getSkillFileProbe
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Probe a published skill file with ffprobe
@@ -609,6 +634,7 @@ paths:
   /skills/{skillId}/deprecation:
     get:
       operationId: getSkillDeprecation
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Public deprecation info for a published skill version
@@ -636,6 +662,7 @@ paths:
   /skills/{skillId}/versions:
     get:
       operationId: listSkillVersions
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: List versions of a skill
@@ -657,6 +684,7 @@ paths:
   /skills/{skillId}/history:
     get:
       operationId: getSkillHistory
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: Get audit history of a skill
@@ -687,7 +715,6 @@ paths:
         Agents should call this endpoint before submitting. Submission is not blocked by matches;
         the response only provides transparency about existing content and skill id collisions.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -718,7 +745,6 @@ paths:
       summary: Submit a new proposal
       description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -747,7 +773,6 @@ paths:
       summary: Show whether new proposals are waiting for admin review
       description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -772,7 +797,6 @@ paths:
         May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or any allowed agentOidc proposal principal when
         PROPOSAL_AUTH_MODE=oidc. Knowing the UUID is insufficient without the configured authentication.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -806,7 +830,6 @@ paths:
         updated through this public submitter path. Agents should use this after submitter-side post-checks when title,
         description, category, tags, capabilities, or entrypoint need correction before finalization.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -848,7 +871,6 @@ paths:
         May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Only proposals still in `in_upload` can be deleted
         through this submitter path. After finalize-upload, public proposal deletion is blocked.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -883,7 +905,6 @@ paths:
         While the proposal is still `in_upload`, sending the same relative path again replaces that file so agents can
         apply post-check corrections without creating another proposal.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -938,7 +959,6 @@ paths:
         extraction, run judgement, or change proposal status. Agents should call this before finalize-upload and apply
         corrections through PATCH /proposals/{proposalId} or POST /proposals/{proposalId}/files upserts.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -973,7 +993,6 @@ paths:
       summary: Finalize an open proposal upload and start judgement
       description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc.
       security:
-        - {}
         - proposalBearer: []
         - agentOidc:
             - managedskillhub:proposals
@@ -2043,6 +2062,25 @@ paths:
                 $ref: '#/components/schemas/ProposalListResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+  /admin/proposals/notice:
+    get:
+      operationId: adminGetProposalNotice
+      tags:
+        - Admin Proposals
+      summary: Get the review proposal count for the administrator navigation
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Proposal review notice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalNoticeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
   /admin/proposals/{proposalId}:
     get:
       operationId: adminGetProposal
@@ -2255,10 +2293,14 @@ paths:
   /openapi.yaml:
     get:
       operationId: getOpenApiYaml
+      security:
+        - discoveryBearer: []
+        - agentOidc:
+            - managedskillhub:discovery
       tags:
         - Discovery
       summary: Download OpenAPI specification
-      description: Returns the OpenAPI YAML contract. May require discoveryBearer when DISCOVERY_AUTH_MODE=bearer.
+      description: Returns the OpenAPI YAML contract. It follows DISCOVERY_AUTH_MODE and may require discoveryBearer or agentOidc.
       responses:
         '200':
           description: OpenAPI YAML
@@ -2273,6 +2315,7 @@ paths:
   /skills/{skillId}/judgements:
     get:
       operationId: listSkillPublicJudgements
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: List public judgements for a published skill version
@@ -2300,6 +2343,7 @@ paths:
   /skills/{skillId}/files/{fileId}/judgements:
     get:
       operationId: listSkillFilePublicJudgements
+      security: *publicReadSecurity
       tags:
         - Skills
       summary: List public judgements for a published skill file
@@ -4523,6 +4567,7 @@ components:
       required:
         - mode
         - loginStartUrl
+        - adminUiBasePath
       properties:
         mode:
           type: string
@@ -4533,6 +4578,10 @@ components:
           type:
             - string
             - 'null'
+        adminUiBasePath:
+          type: string
+          description: Absolute-path prefix accepted as the post-login administrator return target.
+          example: /frontend/admin
     AdminCreateSkillRequest:
       type: object
       required:

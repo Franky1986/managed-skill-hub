@@ -8,6 +8,7 @@ import {
   parseContentStorageProvider,
   parseJudgerProvider,
   parseOidcAccessPolicy,
+  parseOidcAccessTokenValidationMode,
   parseSearchProvider,
   resolveDataDir,
 } from './config';
@@ -326,6 +327,24 @@ describe('agent api auth config', () => {
     expect(config.publicReadAuthMode).toBe('bearer');
     expect(config.proposalAuthMode).toBe('oidc');
     expect(config.oidcAgentBaseScopes).toEqual(['openid', 'profile', 'email']);
+    expect(config.oidcAccessTokenValidationMode).toBe('jwt_profile');
+  });
+
+  it('requires confidential introspection credentials for Authentik JWT compatibility mode', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_AGENT_ISSUER', 'https://auth.example.test/application/o/agent/');
+    vi.stubEnv('OIDC_AGENT_CLIENT_ID', 'managedskillhub-agent-device');
+    vi.stubEnv('OIDC_PROPOSAL_SCOPE', 'managedskillhub:proposals');
+    vi.stubEnv('OIDC_ACCESS_TOKEN_VALIDATION_MODE', 'authentik_introspection');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/OIDC_INTROSPECTION_CLIENT_ID/);
+    vi.stubEnv('OIDC_INTROSPECTION_CLIENT_ID', 'managedskillhub-token-checker');
+    expect(() => loadConfig()).toThrow(/OIDC_INTROSPECTION_CLIENT_SECRET/);
+    vi.stubEnv('OIDC_INTROSPECTION_CLIENT_SECRET', 'checker-secret');
+    expect(loadConfig().oidcAccessTokenValidationMode).toBe('authentik_introspection');
+    expect(() => parseOidcAccessTokenValidationMode('permissive')).toThrow(ConfigurationError);
   });
 
   it('requires issuer, client, and area scope for each OIDC agent area', () => {
@@ -479,7 +498,7 @@ describe('security config', () => {
     vi.stubEnv('ADMIN_PASSWORD_HASH', '$2b$10$012345678901234567890u01234567890123456789012345678901234');
     vi.stubEnv('JWT_SECRET', 'production-secret-with-at-least-32-characters');
     vi.stubEnv('PROPOSAL_AUTH_MODE', 'bearer');
-    vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'production-proposal-token');
+    vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'J6f8mB3wQ2rN9xK4pT7vC5sL1hD0zA8u');
     vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
 
     const config = loadConfig();
@@ -487,6 +506,57 @@ describe('security config', () => {
     expect(config.adminPassword).toBeNull();
     expect(config.adminPasswordHash).toContain('$2b$10$');
     expect(config.proposalAuthMode).toBe('bearer');
+  });
+
+  it('does not require local admin credentials or JWT_SECRET in production OIDC mode', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('ADMIN_USER', '');
+    vi.stubEnv('ADMIN_PASSWORD', '');
+    vi.stubEnv('ADMIN_PASSWORD_HASH', '');
+    vi.stubEnv('JWT_SECRET', '');
+    vi.stubEnv('ADMIN_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_ADMIN_ISSUER', 'https://auth.company.test/application/o/admin/');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_ID', 'managedskillhub-admin-web');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_SECRET', 'production-client-secret-with-sufficient-entropy');
+    vi.stubEnv('OIDC_ADMIN_REDIRECT_URI', 'https://skills.company.test/api/admin/auth/oidc/callback');
+    vi.stubEnv('OIDC_ADMIN_SUBJECTS', 'authentik-user-uuid-1');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'bearer');
+    vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'J6f8mB3wQ2rN9xK4pT7vC5sL1hD0zA8u');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    const config = loadConfig();
+
+    expect(config.adminAuthMode).toBe('oidc');
+    expect(config.adminPassword).toBeNull();
+    expect(config.adminPasswordHash).toBe('');
+    expect(config.jwtSecret).toBe('');
+  });
+
+  it('requires strong confidential OIDC secrets in production introspection mode', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('ADMIN_USER', '');
+    vi.stubEnv('ADMIN_PASSWORD', '');
+    vi.stubEnv('ADMIN_PASSWORD_HASH', '');
+    vi.stubEnv('ADMIN_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_ADMIN_ISSUER', 'https://auth.company.test/application/o/admin/');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_ID', 'managedskillhub-admin-web');
+    vi.stubEnv('OIDC_ADMIN_CLIENT_SECRET', 'uP8fN2xR6qT9mK4wC7zA5sD1hJ3vL0bE');
+    vi.stubEnv('OIDC_ADMIN_REDIRECT_URI', 'https://skills.company.test/api/admin/auth/oidc/callback');
+    vi.stubEnv('OIDC_ADMIN_SUBJECTS', 'authentik-user-uuid-1');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'oidc');
+    vi.stubEnv('OIDC_AGENT_ISSUER', 'https://auth.company.test/application/o/agent/');
+    vi.stubEnv('OIDC_AGENT_CLIENT_ID', 'managedskillhub-agent-device');
+    vi.stubEnv('OIDC_PROPOSAL_SCOPE', 'managedskillhub:proposals');
+    vi.stubEnv('OIDC_ACCESS_TOKEN_VALIDATION_MODE', 'authentik_introspection');
+    vi.stubEnv('OIDC_INTROSPECTION_CLIENT_ID', 'managedskillhub-token-checker');
+    vi.stubEnv('OIDC_INTROSPECTION_CLIENT_SECRET', 'short');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/OIDC_INTROSPECTION_CLIENT_SECRET.*32 bytes/);
+    vi.stubEnv('OIDC_INTROSPECTION_CLIENT_SECRET', 'rQ7mV2zK8pL4sN1xC9dF5hJ3wT6bA0uE');
+    expect(loadConfig().oidcAccessTokenValidationMode).toBe('authentik_introspection');
   });
 
   it('rejects open proposal APIs in production unless explicitly allowed', () => {
@@ -499,6 +569,25 @@ describe('security config', () => {
     vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
 
     expect(() => loadConfig()).toThrow(/PROPOSAL_AUTH_MODE=bearer/);
+  });
+
+  it('rejects weak static bearer tokens and out-of-range security limits in production', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('ADMIN_PASSWORD', '');
+    vi.stubEnv('ADMIN_PASSWORD_HASH', '$2b$10$012345678901234567890u01234567890123456789012345678901234');
+    vi.stubEnv('JWT_SECRET', 'production-secret-with-at-least-32-characters');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'bearer');
+    vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'x');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/32 random bytes/);
+    vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'J6f8mB3wQ2rN9xK4pT7vC5sL1hD0zA8u');
+    vi.stubEnv('OIDC_CLOCK_TOLERANCE_SECONDS', '301');
+    expect(() => loadConfig()).toThrow(/OIDC_CLOCK_TOLERANCE_SECONDS/);
+    vi.stubEnv('OIDC_CLOCK_TOLERANCE_SECONDS', '30');
+    vi.stubEnv('SESSION_TTL_SECONDS', '604801');
+    expect(() => loadConfig()).toThrow(/SESSION_TTL_SECONDS/);
   });
 
   it('allows explicitly open proposal APIs in production for internal deployments', () => {

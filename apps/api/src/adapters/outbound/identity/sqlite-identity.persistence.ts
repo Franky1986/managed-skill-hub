@@ -68,7 +68,10 @@ implements PrincipalRepositoryPort, AdminSessionPort, OidcLoginTransactionPort {
           JOIN identity_principals p ON p.id = e.principal_id
           WHERE e.issuer = ? AND e.external_subject = ?
         `).get(input.issuer, input.externalSubject) as PrincipalRow | undefined;
-        const principalId = existing?.id ?? input.linkToPrincipalId ?? crypto.randomUUID();
+        const principalId = existing?.id
+          ?? input.linkToPrincipalId
+          ?? input.stablePrincipalId
+          ?? crypto.randomUUID();
 
         if (!existing && input.linkToPrincipalId) {
           const linked = this.db.prepare('SELECT id FROM identity_principals WHERE id = ?')
@@ -84,6 +87,24 @@ implements PrincipalRepositoryPort, AdminSessionPort, OidcLoginTransactionPort {
             SET kind = ?, display_name = ?, email = ?, last_seen_at = ?
             WHERE id = ?
           `).run(input.kind, input.displayName, input.email, input.seenAt.toISOString(), principalId);
+        } else if (input.stablePrincipalId) {
+          this.db.prepare(`
+            INSERT INTO identity_principals (
+              id, kind, display_name, email, first_seen_at, last_seen_at, disabled_at
+            ) VALUES (?, ?, ?, ?, ?, ?, NULL)
+            ON CONFLICT(id) DO UPDATE SET
+              kind = excluded.kind,
+              display_name = excluded.display_name,
+              email = excluded.email,
+              last_seen_at = excluded.last_seen_at
+          `).run(
+            principalId,
+            input.kind,
+            input.displayName,
+            input.email,
+            input.seenAt.toISOString(),
+            input.seenAt.toISOString()
+          );
         } else {
           this.db.prepare(`
             INSERT INTO identity_principals (

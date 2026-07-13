@@ -1,5 +1,66 @@
 # CHANGELOG_INTERNAL
 
+## 2026-07-13: Authentik Security Review Remediation
+
+- Added an agent-handoff authentication acceptance checklist covering the
+  automated 27-mode baseline plus simple, bearer, OIDC, mixed-mode, role,
+  ownership, token-class, provider-outage, and rollback staging scenarios.
+- Replaced the staging gate's reject-only ID-token check with independent OIDC
+  signature, issuer, audience, expiry, issued-at, type, authorized-party, and
+  same-subject validation before testing access-token rejection.
+- Added constant-time `at_hash` verification and schema-v2 operator evidence for
+  same-Token-Endpoint-response provenance when OIDC-valid ID tokens omit that
+  optional claim.
+- Corrected the deterministic provider proof to select `jwt_profile` explicitly
+  and validate a realistic `typ=JWT` ID token with `at_hash` before rejecting it
+  as an API credential.
+- Replaced permissive Authentik `typ=JWT` acceptance with two explicit modes:
+  strict RFC 9068 `at+jwt`, or local JWT validation plus authenticated
+  Authentik introspection with exact active/client/subject checks.
+- Enforced strong production static bearer lengths and rejected example
+  secrets; bounded session, clock, transaction, JWKS, timeout, token, group,
+  and password-login limiter settings.
+- Replaced post-buffer provider response checks with incremental stream limits
+  that cancel discovery, JWKS, token, and introspection bodies immediately on
+  overflow.
+- Moved the administrator proposal badge to a reviewer-protected admin endpoint
+  and added in-process simple-login throttling with bounded client buckets.
+- Removed unconditional anonymous `{}` entries from OpenAPI security arrays and
+  documented runtime `none|bearer|oidc` selection through a root extension.
+- Made trusted cross-issuer first-login projection converge on a deterministic
+  tenant/subject principal ID, including simultaneous-login regression tests.
+- Documented that `none` has no verified owner identity, static bearer has one
+  shared actor, and protected public catalog browsing needs a distinct future
+  browser OIDC flow.
+
+## 2026-07-13: Authentik/OIDC Runtime And Deterministic Gates
+
+- Implemented independent `simple|oidc` admin auth and all 27
+  `none|bearer|oidc` discovery/read/proposal combinations without removing
+  open or static bearer compatibility.
+- Added server-side Authorization Code plus PKCE, one-time state/nonce
+  transactions, opaque local sessions, role snapshots, revocation, strict
+  cookies, safe return paths, and role-aware admin UI commands.
+- Added strict Authentik access-token validation with exact issuer, audience,
+  `azp`, `uid`, scopes, time, asymmetric JWKS signatures, human policy, bounds,
+  unknown-key rotation, fail-closed outage handling, and ID-token rejection.
+- Added JIT principals, stable proposal owner/client attribution, additive audit
+  fields, privacy-safe status, two-human access rules, and stable-principal rate
+  limiting across SQLite/MySQL and filesystem/database-content modes.
+- Added redacted auth/security events, explicit OpenAPI security alternatives,
+  Device Authorization discovery/how-to guidance, configurable UI return paths,
+  session-expiry messaging, and reviewer/publisher/admin action visibility.
+- Removed concrete-class `instanceof` coupling from admin route registration,
+  constrained admin discovery endpoints to the trusted issuer origin, and
+  corrected simple-session cookie `Max-Age` units.
+- Added deterministic local OIDC/JWKS, 27-mode, OpenAPI, UI-role, provider,
+  content, ownership, rotation, and outage proofs. Full SQLite/MySQL, cutover,
+  rollback, build, test, and dependency-audit gates pass.
+- Added the optional real Authentik staging gate with short-lived live token
+  validation and fresh anonymous evidence for browser, two-human, role,
+  rotation/outage, and rollback checks. Production activation remains pending
+  that deployment-specific gate, so the Authentik profile warning remains.
+
 ## 2026-07-13: Authentik/OIDC Target Playbooks
 
 - Accepted ADR-015 for independently configurable Authentik OIDC admin,

@@ -26,6 +26,8 @@ changing domain or use-case logic.
   anonymous principal and static `bearer` creates a technical legacy principal.
 - An OIDC-selected area fails closed until its access-token verifier succeeds;
   it is never interpreted as a static bearer mode.
+- Successful OIDC authentication uses the verified stable principal ID as the
+  actor and keeps the public client ID in the principal context.
 - Token comparison uses constant-time comparison.
 - Missing, malformed, or invalid bearer tokens produce normalized `401` errors
   with `details.authRequired`, `details.authArea`, `details.authScheme`,
@@ -37,7 +39,9 @@ changing domain or use-case logic.
 - Open proposal mutations and package validation require the authoritative actor
   to match the proposal's recorded `submittedBy` actor. With the initial single
   static token this is primarily a future-compatible ownership boundary; true
-  per-consumer isolation requires the planned multi-token/OIDC phase.
+  per-consumer isolation is provided by OIDC principal ownership.
+- OIDC success and denial produce structured, redacted operational events with
+  area and coarse category. Authorization headers and tokens are never logged.
 
 ## Runtime Metadata
 
@@ -52,8 +56,10 @@ The adapter exposes non-secret metadata for discovery:
 - `authSchemes`
 - `credentialSetupScriptUrl`
 
-`credentialSetupScriptUrl` is present only when at least one agent-facing auth
-mode is enabled.
+`credentialSetupScriptUrl` is present only when at least one agent-facing area
+uses static bearer auth. OIDC metadata includes the trusted issuer, public
+client ID, OpenID configuration URL, Device Authorization and token endpoints,
+scopes, and applicable areas, never a client secret.
 
 ## Guardrails
 

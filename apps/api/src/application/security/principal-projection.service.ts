@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { PrincipalRepositoryPort } from '../ports/outbound/principal-repository.port';
 import { AppConfig } from '../../infrastructure/config';
 import { ForbiddenError, ValidationError } from '../../domain/errors';
@@ -14,17 +15,29 @@ export interface VerifiedExternalIdentity {
   groups: string[];
 }
 
+export interface PrincipalProjectionEvent {
+  event: 'identity_principal_projection';
+  outcome: 'created' | 'updated' | 'linked';
+  principalKind: PrincipalKind;
+}
+
+export type PrincipalProjectionEventSink = (event: PrincipalProjectionEvent) => void;
+
 export class PrincipalProjectionService {
   constructor(
     private readonly repository: PrincipalRepositoryPort,
     private readonly policy: AuthorizationPolicy,
-    private readonly config: AppConfig
+    private readonly config: AppConfig,
+    private readonly recordSecurityEvent: PrincipalProjectionEventSink = () => undefined
   ) {}
 
   async project(identity: VerifiedExternalIdentity, seenAt = new Date()): Promise<AuthenticatedPrincipal> {
     validateIdentity(identity, this.config.oidcMaxGroups);
     const exact = await this.repository.findByExternalSubject(identity.issuer, identity.subject);
     const linked = exact ?? await this.findConfiguredCounterpart(identity.issuer, identity.subject);
+    const stablePrincipalId = linked
+      ? undefined
+      : this.stableCrossIssuerPrincipalId(identity.issuer, identity.subject);
     const record = await this.repository.upsertExternalPrincipal({
       issuer: identity.issuer,
       externalSubject: identity.subject,
@@ -34,10 +47,16 @@ export class PrincipalProjectionService {
       email: identity.email,
       seenAt,
       linkToPrincipalId: linked?.id,
+      stablePrincipalId,
     });
     if (record.disabledAt) {
       throw new ForbiddenError('The authenticated principal is disabled.');
     }
+    this.recordSecurityEvent({
+      event: 'identity_principal_projection',
+      outcome: exact ? 'updated' : linked ? 'linked' : 'created',
+      principalKind: record.kind,
+    });
 
     return this.policy.withResolvedRoles({
       principalId: record.id,
@@ -69,6 +88,27 @@ export class PrincipalProjectionService {
       return this.repository.findByExternalSubject(agentIssuer, subject);
     }
     return null;
+  }
+
+  private stableCrossIssuerPrincipalId(issuer: string, subject: string): string | undefined {
+    const agentIssuer = this.config.oidcAgentIssuer;
+    const adminIssuer = this.config.oidcAdminIssuer;
+    if (
+      !agentIssuer
+      || !adminIssuer
+      || !sameTenantOrigin(agentIssuer, adminIssuer)
+      || (issuer !== agentIssuer && issuer !== adminIssuer)
+    ) {
+      return undefined;
+    }
+    const digest = crypto
+      .createHash('sha256')
+      .update('managed-skill-hub:authentik-principal:v1\0')
+      .update(new URL(issuer).origin)
+      .update('\0')
+      .update(subject)
+      .digest('hex');
+    return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
   }
 }
 

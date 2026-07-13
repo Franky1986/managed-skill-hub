@@ -252,7 +252,7 @@ async function main(): Promise<void> {
   results.push({ id: 'proposal-finalized', status: finalized.statusCode, passed: true });
 
   const login = await app.inject({ method: 'POST', url: '/admin/login', payload: { username: 'admin', password: 'admin' } });
-  assert(login.statusCode === 200, 'admin login status');
+  assert(login.statusCode === 200, `admin login status ${login.statusCode}: ${login.payload}`);
   const adminCookie = cookieHeader(login.headers['set-cookie']);
   results.push({ id: 'admin-login-recorded', status: login.statusCode, passed: true });
 

@@ -31,6 +31,10 @@ admin pages render only for users with a valid admin session.
 - Unsupported languages fall back to English.
 - The provider sets `document.documentElement.lang`.
 - `AdminRoute` checks the admin session asynchronously on mount.
+- Missing, expired, or revoked sessions redirect to the login route with a
+  non-sensitive reason marker so the UI can explain that a new login is needed.
+- `AdminRoleRoute` treats `admin` as a super-role and otherwise permits only the
+  explicitly configured reviewer or publisher roles.
 - While the session is being checked, a localized loading state is shown.
 - Missing, invalid, or expired sessions redirect to `/admin/login`.
 - Valid sessions render nested admin pages through `<Outlet />`.

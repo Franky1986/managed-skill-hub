@@ -9,6 +9,7 @@ import { ProposalDetail } from '../../api/proposals';
 import { useLanguage } from '../../i18n';
 import { formatLocalDateTime } from '../../lib/formatLocalDateTime';
 import { formatOverallRiskLabel, isNoJudgeAvailable, noJudgeHint } from '../../lib/judgement';
+import { hasAdminRole, useAuthStore } from '../../store/auth';
 import {
     buildReferenceToCurrentDiff,
     hasSelectedFileSource,
@@ -23,6 +24,10 @@ import {
 
 export function AdminSkillPage() {
     const { language, t } = useLanguage();
+    const roles = useAuthStore((state) => state.roles);
+    const canAdmin = hasAdminRole(roles, 'admin');
+    const canReview = hasAdminRole(roles, 'reviewer');
+    const canPublish = hasAdminRole(roles, 'publisher');
     const location = useLocation();
     const { id } = useParams<{ id: string }>();
     const locationState =
@@ -35,7 +40,7 @@ export function AdminSkillPage() {
         proposalIdFromSearch != null;
     const proposalModeFromSearch = locationSearch.get('mode');
     const proposalMode = locationState?.mode ?? proposalModeFromSearch;
-    const initialEditable = !(
+    const initialEditable = canAdmin && !(
         fromProposal &&
         (proposalMode === 'view' || proposalMode == null)
     );
@@ -83,7 +88,7 @@ export function AdminSkillPage() {
     const [proposalDetail, setProposalDetail] = useState<ProposalDetail | null>(null);
     const [proposalFinalizeComment, setProposalFinalizeComment] = useState('');
     const [showSelectedFileJudgements, setShowSelectedFileJudgements] = useState(false);
-    const isReadOnlyProposalView = fromProposal && !isEditMode;
+    const isReadOnlyProposalView = fromProposal && (!isEditMode || !canAdmin);
     const sortedShownJudgements = useMemo(
         () => [...judgements].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
         [judgements]
@@ -688,7 +693,7 @@ export function AdminSkillPage() {
     }
 
     function renderProposalJudgePanel() {
-        if (!fromProposal || !proposalDetail) {
+        if (!fromProposal || !proposalDetail || !canReview) {
             return null;
         }
 
@@ -699,7 +704,7 @@ export function AdminSkillPage() {
                         <h3 className="text-sm font-medium text-indigo-950">
                             {t('adminSkill.proposalJudge', { id: proposalDetail.id })}
                         </h3>
-                        {proposalDetail.status !== 'converted' && proposalDetail.status !== 'rejected' && (
+                        {canReview && proposalDetail.status !== 'converted' && proposalDetail.status !== 'rejected' && (
                             <button
                                 type="button"
                                 onClick={() => void handleRejudgeProposal()}
@@ -813,7 +818,7 @@ export function AdminSkillPage() {
                         </Link>
                     </div>
                 )}
-                {fromProposal && (
+                {fromProposal && canAdmin && (
                     <div className="mt-2">
                         <button
                             type="button"
@@ -859,7 +864,7 @@ export function AdminSkillPage() {
                 )}
             </section>
 
-            {fromProposal && proposalDetail && canFinalizeProposal && (
+            {fromProposal && proposalDetail && canFinalizeProposal && (canPublish || canReview) && (
                 <section className="rounded border bg-white p-4">
                     <h2 className="mb-3 text-lg font-medium">{t('adminSkill.finalizeProposal')}</h2>
                     <p className="text-sm text-gray-600">
@@ -877,31 +882,31 @@ export function AdminSkillPage() {
                         placeholder={t('adminSkill.finalizePlaceholder')}
                     />
                     <div className="mt-3 flex flex-wrap gap-2">
-                        <button
+                        {canPublish && <button
                             type="button"
                             onClick={() => void handleFinalizeProposalFromContext('draft')}
                             disabled={Boolean(actionLoading)}
                             className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 disabled:opacity-50"
                         >
                             {t('adminSkill.finalizeProposal')}
-                        </button>
-                        <button
+                        </button>}
+                        {canAdmin && <button
                             type="button"
                             onClick={() => void handleFinalizeProposalFromContext('review')}
                             disabled={Boolean(actionLoading)}
                             className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 disabled:opacity-50"
                         >
                             {t('adminSkill.finalizeAndReview')}
-                        </button>
-                        <button
+                        </button>}
+                        {canAdmin && <button
                             type="button"
                             onClick={() => void handleFinalizeProposalFromContext('publish')}
                             disabled={Boolean(actionLoading)}
                             className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900 disabled:opacity-50"
                         >
                             {t('adminSkill.finalizeAndPublish')}
-                        </button>
-                        <button
+                        </button>}
+                        {canReview && <button
                             type="button"
                             onClick={() => void handleRejectProposalFromContext()}
                             disabled={Boolean(actionLoading)}
@@ -910,7 +915,7 @@ export function AdminSkillPage() {
                             {actionLoading === 'reject-proposal'
                                 ? t('adminSkill.rejectingProposal')
                                 : t('adminSkill.rejectProposal')}
-                        </button>
+                        </button>}
                     </div>
                     <p className="mt-2 text-xs text-gray-500">
                         {t('common.status')}: {proposalDetail.status}
@@ -958,7 +963,7 @@ export function AdminSkillPage() {
                         )}
                         {!isProposalFlowBlocked && (
                             <>
-                                {selectedVersionRecord?.status === 'draft' && (
+                                {canAdmin && selectedVersionRecord?.status === 'draft' && (
                                     <button
                                         type="button"
                                         onClick={() => void handleVersionAction('submit-review')}
@@ -968,7 +973,7 @@ export function AdminSkillPage() {
                                         Submit Review
                                     </button>
                                 )}
-                                {canRejectSelectedVersion && (
+                                {canReview && canRejectSelectedVersion && (
                                     <button
                                         type="button"
                                         onClick={() => setShowRejectDialog(true)}
@@ -978,7 +983,7 @@ export function AdminSkillPage() {
                                         {t('adminSkill.rejectVersion')}
                                     </button>
                                 )}
-                                {selectedVersionRecord?.status === 'in_review' && (
+                                {canReview && selectedVersionRecord?.status === 'in_review' && (
                                     <button
                                         type="button"
                                         onClick={() => void handleVersionAction('approve')}
@@ -988,7 +993,7 @@ export function AdminSkillPage() {
                                         {t('adminSkill.approveVersion')}
                                     </button>
                                 )}
-                                {selectedVersionRecord?.status === 'approved' && (
+                                {canPublish && selectedVersionRecord?.status === 'approved' && (
                                     <button
                                         type="button"
                                         onClick={() => void handleVersionAction('publish')}
@@ -998,7 +1003,7 @@ export function AdminSkillPage() {
                                         {t('adminSkill.publishVersion')}
                                     </button>
                                 )}
-                                {selectedVersionRecord?.status === 'published' && (
+                                {canPublish && selectedVersionRecord?.status === 'published' && (
                                     <button
                                         type="button"
                                         onClick={() => setShowDeprecateDialog(true)}
@@ -1010,7 +1015,7 @@ export function AdminSkillPage() {
                                 )}
                             </>
                         )}
-                        {selectedVersionRecord && (
+                        {canAdmin && selectedVersionRecord && (
                             <button
                                 type="button"
                                 onClick={() => void handleRejudge()}
@@ -1113,7 +1118,7 @@ export function AdminSkillPage() {
                                 <h3 className="text-sm font-medium text-indigo-950">
                                     {t('adminSkill.proposalJudge', { id: proposalDetail.id })}
                                 </h3>
-                                {proposalDetail.status !== 'converted' && proposalDetail.status !== 'rejected' && (
+                                {canReview && proposalDetail.status !== 'converted' && proposalDetail.status !== 'rejected' && (
                                     <button
                                         type="button"
                                         onClick={() => void handleRejudgeProposal()}
@@ -1198,7 +1203,7 @@ export function AdminSkillPage() {
             </section>
             )}
 
-            {!isReadOnlyProposalView && (
+            {canAdmin && !isReadOnlyProposalView && (
                 <section className="rounded border bg-white p-4">
                     <h2 className="mb-3 text-lg font-medium">{t('adminSkill.updateMetadata')}</h2>
                     <form
@@ -1269,7 +1274,7 @@ export function AdminSkillPage() {
                 </section>
             )}
 
-            {!fromProposal && (
+            {canAdmin && !fromProposal && (
                 <section className="rounded border bg-white p-4">
                     <h2 className="mb-3 text-lg font-medium">{t('adminSkill.addFile')}</h2>
                     <form
@@ -1393,7 +1398,7 @@ export function AdminSkillPage() {
                                 <p>{t('adminSkill.directEntries')}: {selectedDirectorySummary.directChildren}</p>
                                 <p>{t('adminSkill.extractable')}: {selectedDirectorySummary.extractableFiles}</p>
                             </div>
-                            {(!isReadOnlyProposalView && !fromProposal && !selectedFileIsInternal) && (
+                            {(canAdmin && !isReadOnlyProposalView && !fromProposal && !selectedFileIsInternal) && (
                                 <div className="mt-3 flex flex-wrap gap-2">
                                     <button
                                         type="button"
@@ -1435,7 +1440,7 @@ export function AdminSkillPage() {
                                         </p>
                                     </div>
                                     <div className="flex gap-2">
-                                        {!isReadOnlyProposalView && !selectedFileIsInternal && (
+                                        {canAdmin && !isReadOnlyProposalView && !selectedFileIsInternal && (
                                             <button
                                                 type="button"
                                                 onClick={() => void handleReextract()}
@@ -1535,7 +1540,7 @@ export function AdminSkillPage() {
                                     />
                                 )}
 
-                                {!isReadOnlyProposalView && !selectedFileIsInternal && (
+                                {canAdmin && !isReadOnlyProposalView && !selectedFileIsInternal && (
                                     <div className="rounded border border-gray-200 p-4">
                                         <h3 className="text-sm font-medium text-gray-900">{t('adminSkill.moveRenameFile')}</h3>
                                         {selectedDirectoryPath && (
@@ -1562,7 +1567,7 @@ export function AdminSkillPage() {
                                     </div>
                                 )}
 
-                                {!isReadOnlyProposalView && !selectedFileIsInternal && (
+                                {canAdmin && !isReadOnlyProposalView && !selectedFileIsInternal && (
                                     <div className="rounded border border-red-200 bg-red-50 p-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3">
                                             <div>
@@ -1596,7 +1601,7 @@ export function AdminSkillPage() {
                                                     <h3 className="text-sm font-medium text-gray-900">
                                                         {isReadOnlyProposalView ? t('adminSkill.textContent') : t('adminSkill.editTextContent')}
                                                     </h3>
-                                                    {!isReadOnlyProposalView && (
+                                                    {canAdmin && !isReadOnlyProposalView && (
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleSaveFileContent()}

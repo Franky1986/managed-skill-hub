@@ -74,6 +74,35 @@ describe('SqliteIdentityPersistence', () => {
     expect(admin.id).toBe(agent.id);
   });
 
+  it('atomically converges simultaneous issuer projections on a stable principal ID', async () => {
+    const stablePrincipalId = 'f30ff58d-70c7-5b2e-a2f4-5aaad341d845';
+    const [agent, admin] = await Promise.all([
+      persistence.upsertExternalPrincipal({
+        issuer: 'https://auth.example/application/o/agent/',
+        externalSubject: 'user-uuid-race',
+        providerClientId: 'managedskillhub-agent-device',
+        kind: 'human',
+        displayName: null,
+        email: null,
+        seenAt: new Date(),
+        stablePrincipalId,
+      }),
+      persistence.upsertExternalPrincipal({
+        issuer: 'https://auth.example/application/o/admin/',
+        externalSubject: 'user-uuid-race',
+        providerClientId: 'managedskillhub-admin-web',
+        kind: 'human',
+        displayName: null,
+        email: null,
+        seenAt: new Date(),
+        stablePrincipalId,
+      }),
+    ]);
+
+    expect(agent.id).toBe(stablePrincipalId);
+    expect(admin.id).toBe(stablePrincipalId);
+  });
+
   it('stores only hashed opaque session IDs and enforces expiry and revocation', async () => {
     const principal = await createPrincipal(persistence);
     const now = new Date('2026-01-01T00:00:00.000Z');

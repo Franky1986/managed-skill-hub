@@ -8,6 +8,7 @@ import { VerifiedExternalIdentity } from '../../../application/security/principa
 import { ConfigurationError, UnauthorizedError } from '../../../domain/errors';
 import { AppConfig } from '../../../infrastructure/config';
 import { loadOpenIdClient } from './openid-client-loader';
+import { boundedProviderFetch as fetchBoundedProviderResponse } from './bounded-provider-fetch';
 
 type OpenIdClientModule = typeof import('openid-client');
 type OpenIdConfiguration = import('openid-client').Configuration;
@@ -92,8 +93,9 @@ export class AdminOidcIdentityProvider implements IdentityProviderPort {
   }
 
   private async getConfiguration(client: OpenIdClientModule): Promise<OpenIdConfiguration> {
+    const issuerUrl = new URL(this.requireAdminIssuer());
     this.configurationPromise ??= client.discovery(
-      new URL(this.requireAdminIssuer()),
+      issuerUrl,
       this.requireAdminClientId(),
       {
         client_secret: this.requireAdminClientSecret(),
@@ -104,12 +106,15 @@ export class AdminOidcIdentityProvider implements IdentityProviderPort {
       {
         timeout: Math.max(1, Math.ceil(this.config.oidcHttpTimeoutMs / 1000)),
         [client.customFetch]: boundedProviderFetch(
-          new URL(this.requireAdminIssuer()).origin,
+          issuerUrl.origin,
           MAX_PROVIDER_RESPONSE_BYTES
         ),
+        execute: issuerUrl.protocol === 'http:' ? [client.allowInsecureRequests] : undefined,
       }
     );
-    return this.configurationPromise;
+    const configuration = await this.configurationPromise;
+    validateAdminProviderMetadata(configuration.serverMetadata(), issuerUrl);
+    return configuration;
   }
 
   private requireAdminIssuer(): string {
@@ -129,26 +134,36 @@ export class AdminOidcIdentityProvider implements IdentityProviderPort {
   }
 }
 
+function validateAdminProviderMetadata(
+  metadata: import('openid-client').ServerMetadata,
+  issuerUrl: URL
+): void {
+  if (metadata.issuer !== issuerUrl.toString()) {
+    throw new ConfigurationError('OIDC discovery issuer does not match OIDC_ADMIN_ISSUER.');
+  }
+  trustedProviderEndpoint(metadata.authorization_endpoint, issuerUrl.origin, 'authorization_endpoint');
+  trustedProviderEndpoint(metadata.token_endpoint, issuerUrl.origin, 'token_endpoint');
+  trustedProviderEndpoint(metadata.jwks_uri, issuerUrl.origin, 'jwks_uri');
+}
+
+function trustedProviderEndpoint(value: string | undefined, origin: string, name: string): void {
+  if (!value) {
+    throw new ConfigurationError(`OIDC discovery is missing ${name}.`);
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new ConfigurationError(`OIDC discovery ${name} is not a valid URL.`);
+  }
+  if (parsed.origin !== origin || parsed.username || parsed.password || parsed.hash) {
+    throw new ConfigurationError(`OIDC discovery ${name} is outside the trusted provider origin.`);
+  }
+}
+
 function boundedProviderFetch(trustedOrigin: string, maxBytes: number) {
   return async (url: string, options: import('openid-client').CustomFetchOptions): Promise<Response> => {
-    const target = new URL(url);
-    if (target.origin !== trustedOrigin || target.protocol !== 'https:') {
-      throw new Error('OIDC provider endpoint left the configured trusted HTTPS origin.');
-    }
-    const response = await fetch(target, options as RequestInit);
-    const declaredLength = Number(response.headers.get('content-length') ?? 0);
-    if (declaredLength > maxBytes) {
-      throw new Error('OIDC provider response exceeded the configured size limit.');
-    }
-    const body = new Uint8Array(await response.arrayBuffer());
-    if (body.byteLength > maxBytes) {
-      throw new Error('OIDC provider response exceeded the configured size limit.');
-    }
-    return new Response(body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
+    return fetchBoundedProviderResponse(url, options as RequestInit, { trustedOrigin, maxBytes });
   };
 }
 

@@ -1,7 +1,7 @@
 # Agent API Auth Test Matrix
 
-This document defines the expected behavior for every static bearer auth
-permutation in EPIC-007.
+This document defines the expected behavior for all independent agent auth
+permutations from EPIC-007 and EPIC-011.
 
 ## Variables Under Test
 
@@ -11,7 +11,7 @@ permutation in EPIC-007.
 | Proposal | `PROPOSAL_AUTH_MODE` | duplicate check, submit, upload, finalize, notice, status |
 | Discovery | `DISCOVERY_AUTH_MODE` | `/discover`, `/howToPropose`, `/openapi.yaml` |
 
-Supported values are `none` and `bearer`.
+Supported values are `none`, `bearer`, and `oidc`, producing 27 combinations.
 
 ## Automated Coverage
 
@@ -52,24 +52,33 @@ Successful runs write stable artifacts for agent review:
 The expected success footer is:
 
 ```text
-totalPermutations=8
-passedPermutations=8
+totalPermutations=27
+passedPermutations=27
 failedPermutations=0
 RESULT=PASS
 ```
 
-## Expected Matrix
+## Expected Matrix Rules
 
-| Public read | Proposal | Discovery | Consumer read | Proposal actions | Discovery/how-to | Setup URL in `/discover` | How-to auth step | Generated setup fields |
-|---|---|---|---|---|---|---|---|---|
-| none | none | none | open | open | open | omitted | omitted | none; script stores alias/URL only if called directly |
-| bearer | none | none | 401 without read token | open | open | present | present | read token only |
-| none | bearer | none | open | 401 without proposal token | open | present | present | proposal token only |
-| none | none | bearer | open | open | 401 without discovery token | present after authenticated discovery | present after authenticated how-to | no read/proposal token fields; script stores alias/URL only |
-| bearer | bearer | none | 401 without read token | 401 without proposal token | open | present | present | read token and proposal token |
-| bearer | none | bearer | 401 without read token | open | 401 without discovery token | present after authenticated discovery | present after authenticated how-to | read token only |
-| none | bearer | bearer | open | 401 without proposal token | 401 without discovery token | present after authenticated discovery | present after authenticated how-to | proposal token only |
-| bearer | bearer | bearer | 401 without read token | 401 without proposal token | 401 without discovery token | present after authenticated discovery | present after authenticated how-to | read token and proposal token |
+The automated matrix evaluates the Cartesian product. Each area follows only
+its selected mode:
+
+| Mode | Request behavior | Discovery metadata | Static setup field |
+|---|---|---|---|
+| `none` | open with anonymous principal | no scheme for that area | none |
+| `bearer` | `401` until the exact static token is supplied | bearer scheme | read/proposal field only for that bearer area |
+| `oidc` | `401` until the verifier accepts an access token for that area | one Device Authorization scheme with accumulated scopes/areas | none |
+
+`credentialSetupScriptUrl` is present if and only if at least one area uses
+`bearer`. OIDC-only deployments never prompt for or persist a static token.
+Discovery OIDC remains valid but requires issuer/client bootstrap out of band;
+normal Device Flow deployments keep discovery open.
+
+The canonical OpenAPI security arrays enumerate only the credentialed bearer
+and OIDC alternatives. They intentionally do not include `{}`, because that
+would claim unconditional anonymous support. The root
+`x-managed-skill-hub-runtime-auth` extension maps each area to its environment
+selector; anonymous access exists only when that selector is `none`.
 
 ## 401 Contract
 
@@ -82,7 +91,7 @@ details:
   "details": {
     "authRequired": true,
     "authArea": "public-read | proposal | discovery",
-    "authScheme": "bearer",
+    "authScheme": "bearer | oidc",
     "discoverUrl": "https://example/api/discover",
     "credentialSetupScriptUrl": "https://example/api/agent-credentials/setup.sh",
     "recommendation": "Do not paste bearer tokens into agent chat..."
@@ -90,7 +99,7 @@ details:
 }
 ```
 
-Agent behavior:
+Bearer agent behavior:
 
 1. Do not ask the user to paste bearer tokens into chat.
 2. Explain which area is blocked from `details.authArea`.
@@ -101,6 +110,10 @@ Agent behavior:
    API base URL.
 6. Retry the blocked call with the matching bearer token.
 
+OIDC responses omit `credentialSetupScriptUrl` unless another area uses bearer
+and direct the agent to `/discover` and the Device Authorization guide. The
+agent starts a new trusted linkout and never asks for a token in chat.
+
 ## UI Expectations
 
 When no agent-facing auth is enabled:
@@ -109,7 +122,7 @@ When no agent-facing auth is enabled:
 - `/howToPropose.requiredSteps[0]` is `Read this workflow first`.
 - `/discover` omits `credentialSetupScriptUrl`.
 
-When any agent-facing auth is enabled:
+When static bearer auth is enabled:
 
 - How-to UI shows the auth/setup panel.
 - The panel shows read/proposal auth status from `apiNotes`.
@@ -118,13 +131,18 @@ When any agent-facing auth is enabled:
 - `/howToPropose.requiredSteps[0]` is
   `Handle registry authentication outside chat`.
 
+When any OIDC area is enabled, the first how-to step is `Authorize the agent
+through the human login link`, and the payload uses `Authorization: Bearer
+<OIDC access token>` guidance rather than the static credential-file flow.
+
 ## Setup Script Expectations
 
 The generated script is deployment-specific and contains no secrets.
 
 - Default mode opens a local browser form on `127.0.0.1:<port>`.
 - `--terminal` uses hidden terminal prompts.
-- Only token fields required by the current config are rendered and persisted.
+- Only static bearer token fields required by the current config are rendered
+  and persisted. OIDC areas never create setup fields.
 - If public read is open, no read-token field or persistence code is generated.
 - If proposal is open, no proposal-token field or persistence code is generated.
 - Tokens are saved to `~/.managed-skill-hub/credentials.json` under the registry
@@ -157,3 +175,7 @@ Expected result:
 - `/categories` is `200`
 - proposal notice is `401` without token and `200` with token
 - setup script contains proposal-token fields only
+
+The short literal above is a development-only matrix fixture. Production
+startup rejects static bearer values shorter than 32 bytes and known example
+placeholders; generate production values with a cryptographic random source.

@@ -2,16 +2,15 @@
 
 ## Status
 
-This playbook describes the accepted target architecture from
-[ADR-015](../decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md).
-The implementation work is specified in
-[EPIC-011](../roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md).
-The current runtime still supports only simple admin auth and `none`/`bearer`
-agent API auth. Do not switch production configuration to `oidc` until the
-ADR-015 implementation gate is complete.
+The runtime implements the architecture from
+[ADR-015](../decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md),
+including OIDC admin login and independent `none`, `bearer`, or `oidc` agent
+areas. Normal CI uses a deterministic local OIDC/JWKS provider.
 
-Use `.env.example.authentik` as the target profile and
-`.env.example.simple` as the currently runnable simple-auth profile.
+Production activation remains gated on a real Authentik staging proof for the
+target tenant and reverse proxy. Use `.env.example.authentik` for staging and
+`.env.example.simple` for local or rollback operation. Do not remove the
+activation warning from the Authentik profile until the real gate passes.
 
 ## Target Outcome
 
@@ -32,6 +31,7 @@ Create these application/provider pairs:
 |---|---|---|---|
 | `managedskillhub-admin-web` | confidential | Authorization Code with PKCE | Admin browser login |
 | `managedskillhub-agent-device` | public | Device Authorization | Human-delegated agent access |
+| `managedskillhub-token-checker` | confidential | Token Introspection | Distinguish Authentik JWT access tokens from ID tokens |
 
 Both providers must:
 
@@ -42,8 +42,10 @@ Both providers must:
 - use exact issuer values in ManagedSkillHub configuration;
 - avoid Implicit and Password grants.
 
-The agent provider has no client secret. The admin provider secret belongs in a
-deployment secret manager and must never be committed.
+The agent provider has no client secret. Configure the token-checker provider
+as a federated OAuth2/OpenID provider allowed to introspect tokens issued by
+`managedskillhub-agent-device`. Admin and checker secrets belong in a deployment
+secret manager and must never be committed.
 
 ## Groups
 
@@ -67,6 +69,43 @@ known UUID.
 Bind an authentik application policy that requires an active authenticated
 human and rejects service accounts for the agent Device Flow. This preserves
 the rule that an agent always submits on behalf of a human.
+
+## Claims And Human Policy
+
+Keep Authentik's default `profile` mapping or provide an equivalent Scope
+Mapping that emits group names. Add a selected Scope Mapping to both providers
+that returns at least:
+
+```python
+return {
+    "managedskillhub_human": (
+        request.user.is_active
+        and request.user.type in ["internal", "external"]
+    ),
+    "groups": [group.name for group in request.user.ak_groups.all()],
+}
+```
+
+Bind an application Expression Policy with the same active, non-service-account
+condition. The policy is the provider-side authorization boundary; the boolean
+claim is the API-side proof consumed through `OIDC_HUMAN_CLAIM`.
+
+Verify the **access token** and ID token from one Token Endpoint response after
+configuration. Scope mappings can add overlapping claims to both token classes,
+so `aud`, `azp`, scopes, and custom claims alone do not distinguish them.
+
+ManagedSkillHub supports two explicit validation modes:
+
+- `OIDC_ACCESS_TOKEN_VALIDATION_MODE=jwt_profile` requires RFC 9068
+  `typ=at+jwt` and rejects Authentik-style `typ=JWT`.
+- `OIDC_ACCESS_TOKEN_VALIDATION_MODE=authentik_introspection` retains local
+  signature, issuer, audience, `azp`, `uid`, time, scope, and human checks, then
+  requires authenticated introspection to return `active=true`, the original
+  device client ID, and the same subject. Use this mode when the target
+  Authentik release emits `typ=JWT` for access tokens.
+
+An ID token must fail both modes. Never switch to permissive `JWT` acceptance
+without introspection.
 
 ## Existing User Population
 
@@ -95,6 +134,9 @@ installation. Configure it before creating the agent provider:
    Authentik policies so each scope is granted only under its configured access
    policy. The first implementation does not request `offline_access`.
 7. Bind the active-human application policy.
+8. Create `managedskillhub-token-checker` as a confidential provider, federate
+   it for introspection of the device provider, and store its secret in
+   `OIDC_INTROSPECTION_CLIENT_SECRET`.
 
 Authentik's device endpoint returns `verification_uri_complete`. Agents show
 that URL to the human and keep `device_code` secret. See the official
@@ -168,12 +210,15 @@ OIDC_PUBLISHER_GROUPS=managedskillhub-publishers
 ```
 
 Do not use usernames or email addresses for privileged allowlists. Environment
-changes require a ManagedSkillHub restart. Authentik group changes take effect
-when a fresh token or refreshed admin authorization is evaluated.
+changes require a ManagedSkillHub restart. Agent group changes take effect with
+the next access token. Admin roles are a snapshot in the local session and
+therefore remain valid for at most `SESSION_TTL_SECONDS`; logout and login apply
+changes immediately. Keep this TTL bounded for publisher and administrator
+operations.
 
 ## ManagedSkillHub Configuration
 
-After runtime support is implemented:
+For staging:
 
 ```bash
 cp .env.example.authentik .env
@@ -184,8 +229,16 @@ the configured issuers exactly match the `issuer` values in each provider's
 OpenID configuration document.
 
 The API must validate signature, issuer, audience, expiry, not-before time,
-allowed algorithm, scopes, and client identity. JWKS retrieval and rotation
-fail closed. Never weaken TLS verification to work around certificate errors.
+allowed algorithm, scopes, client identity, and token class. JWKS retrieval,
+stream-bounded provider responses, introspection, and rotation fail closed.
+Never weaken TLS verification to work around certificate errors.
+
+`ADMIN_USER`, `ADMIN_PASSWORD`, `ADMIN_PASSWORD_HASH`, and `JWT_SECRET` are not
+used in OIDC mode and must be absent. `OIDC_ADMIN_CLIENT_SECRET` remains required
+because the admin web client is confidential. Agent Device Authorization uses
+the public client and has no client secret. Authentik JWT compatibility requires
+the separate confidential introspection checker; its credential is never
+returned to agents.
 
 ## Cutover Checklist
 
@@ -204,6 +257,41 @@ fail closed. Never weaken TLS verification to work around certificate errors.
 10. Verify that another user can read status but cannot mutate the proposal.
 11. Verify reviewer, publisher, and admin boundaries independently.
 12. Remove obsolete local password secrets after the rollback window closes.
+
+## Real Staging Gate
+
+Create an evidence file from
+`docs/setup/authentik-staging-evidence.example.json`. Use only a deployment
+label and booleans; do not record identities, proposal UUIDs, tokens, or
+secrets. Obtain a short-lived access token through the real Device Flow and run:
+
+```bash
+RUN_AUTHENTIK_STAGING_CHECK=true \
+AUTHENTIK_STAGING_ACCESS_TOKEN='<short-lived-token>' \
+AUTHENTIK_STAGING_ID_TOKEN='<matching-id-token>' \
+AUTHENTIK_STAGING_EVIDENCE_FILE=/secure/path/authentik-staging-evidence.json \
+./scripts/full-check.sh
+```
+
+The gate performs live admin and agent discovery, verifies Device Authorization
+metadata, and validates the real access token with the production verifier. It
+then independently validates the ID-token signature, issuer, client audience,
+expiry, issued-at time, type, and subject before proving that this valid ID token
+is rejected as an API access token. Both tokens must have the same subject.
+
+If Authentik emits `at_hash`, the gate validates its cryptographic binding to
+the access token. OIDC permits ID tokens returned by the Token Endpoint to omit
+`at_hash`; in that case the operator must confirm
+`tokensFromSameTokenResponse=true` in schema-v2 evidence. That confirmation is
+provenance evidence, not a cryptographic binding. The evidence additionally
+covers browser token absence, callback proxying, role boundaries, two-human
+status/ownership behavior, session expiry, logout, key rotation, provider
+outage, and rollback. Evidence expires after 30 days.
+
+For activation, retain only the sanitized gate result: the access token must
+pass, the independently valid same-subject ID token must fail as an access
+token, and the result records `at_hash` or `same_subject` binding strength.
+Never place either token in the evidence file.
 
 ## Rollback
 

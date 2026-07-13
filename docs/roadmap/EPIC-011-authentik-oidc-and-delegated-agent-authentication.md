@@ -2,8 +2,12 @@
 
 ## Status
 
-Planned. ADR-015, environment target profiles, and operator/agent playbooks are
-accepted. Runtime implementation has not started.
+Repository implementation complete; production activation pending the real
+Authentik staging gate. Deterministic CI, all 27 agent auth combinations,
+SQLite/MySQL and content-provider parity, build, OpenAPI, UI source-contract,
+and dependency gates pass. The target tenant still must provide fresh browser,
+Device Flow, two-human, role, rotation/outage, and rollback evidence before the
+activation warning can be removed.
 
 ## Objective
 
@@ -33,8 +37,9 @@ It must stay aligned with:
 - [EPIC-007 static bearer baseline](./EPIC-007-configurable-agent-api-auth.md)
 - [ADR-003 current simple admin auth](../decisions/ADR-003-simple-admin-auth.md)
 
-ADR-003 remains the current runtime behavior until the OIDC implementation gate
-and rollout proof in this epic are complete.
+ADR-003 remains an explicit simple-mode and rollback option. It is never an
+implicit fallback while OIDC is selected. Production OIDC remains inactive
+until the environment-specific rollout proof in this epic is complete.
 
 ## User Outcomes
 
@@ -536,6 +541,12 @@ IDs, client secret, cookies, full claims, or email addresses in routine logs.
 - exact callback and blocked open redirect;
 - wrong issuer, audience, client, scope, algorithm, signature, key, token type,
   expiry, and not-before;
+- real access/ID token pair from one Token Endpoint response: access accepted;
+  ID token independently validated for signature, issuer, audience, expiry,
+  type, and the same subject; `at_hash` validated when present; and that valid
+  ID token rejected as an API credential;
+- RFC 9068 `at+jwt` strict mode and Authentik `JWT` plus authenticated
+  introspection mode;
 - missing subject, service account, excessive groups, and oversized token;
 - JWKS cache hit, unknown-key refresh, rotation, timeout, malformed response,
   and outage;
@@ -560,6 +571,8 @@ IDs, client secret, cookies, full claims, or email addresses in routine logs.
 - password login is unreachable in OIDC mode;
 - all existing `none` and static `bearer` route semantics remain intact;
 - SQLite/MySQL and filesystem/database-content modes preserve identity fields;
+- simultaneous first login through the admin and agent issuers converges on one
+  principal in SQLite and MySQL;
 - root and `/api` aliases apply the same auth and rate-limit context;
 - proposal rate limiting keys OIDC requests by stable principal/client without
   unbounded cardinality;

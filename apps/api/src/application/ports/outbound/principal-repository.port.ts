@@ -28,6 +28,7 @@ export interface UpsertExternalPrincipalInput {
   email: string | null;
   seenAt: Date;
   linkToPrincipalId?: string;
+  stablePrincipalId?: string;
 }
 
 export interface PrincipalRepositoryPort {

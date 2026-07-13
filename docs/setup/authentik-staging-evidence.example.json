@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "environment": "staging-eu",
+  "testedAt": "2026-07-13T12:00:00.000Z",
+  "checks": {
+    "adminLogin": true,
+    "adminRoleBoundaries": true,
+    "sessionExpiry": true,
+    "logout": true,
+    "noBrowserTokens": true,
+    "reverseProxyCallback": true,
+    "deviceFlow": true,
+    "tokensFromSameTokenResponse": true,
+    "accessIdTokenSeparation": true,
+    "twoHumanStatusRead": true,
+    "ownerMutationDenied": true,
+    "sameHumanContinuation": true,
+    "jwksRotation": true,
+    "jwksOutageFailClosed": true,
+    "rollbackRehearsed": true
+  }
+}

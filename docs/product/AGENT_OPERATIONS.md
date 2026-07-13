@@ -14,25 +14,28 @@ Use this guide when you need a deterministic local setup for:
 
 Prerequisites:
 
-- Root `/.env` contains admin/auth and runtime settings (`ADMIN_PASSWORD` or
-  `ADMIN_PASSWORD_HASH`, `JWT_SECRET`).
+- Root `/.env` contains one complete admin/auth profile. Simple mode needs
+  `ADMIN_PASSWORD` locally or `ADMIN_PASSWORD_HASH` plus `JWT_SECRET` in
+  production; OIDC mode needs the Authentik admin provider settings instead.
 - Optional shared options in root `.env`: `JUDGER_PROVIDER`, auto-publish flags, etc.
 - Build output exists (`npm run build:prod`) when using `node apps/api/dist/server.js`.
 
 ## Authentication Profiles
 
-- `.env.example.simple` is the explicit currently runnable simple-admin profile.
-- `.env.example` remains the provider-neutral current development template.
-- `.env.example.authentik` is the accepted ADR-015 target profile and is not
-  supported by the current runtime.
+- `.env.example.simple` is the runnable simple-admin profile.
+- `.env.example` remains the provider-neutral development template.
+- `.env.example.authentik` is the runnable OIDC staging profile; production
+  activation requires the real Authentik gate in the setup playbook.
 
 For Authentik operator setup, cutover, and rollback, use
 [`docs/setup/AUTHENTIK.md`](../setup/AUTHENTIK.md). For agent Device
 Authorization behavior, use
 [`docs/product/AGENT_OIDC_DEVICE_FLOW.md`](./AGENT_OIDC_DEVICE_FLOW.md).
 
-Do not test OIDC by placing authentik credentials or tokens into agent prompts.
-The target flow requires a trusted clickable link and server-defined polling.
+Do not test OIDC by placing Authentik credentials or tokens into agent prompts.
+Use the trusted clickable link and provider-defined polling. Normal CI uses
+`scripts/check-oidc-provider.ts`; real staging uses the explicit gate described
+in the setup playbook.
 
 ## Provider Profiles
 

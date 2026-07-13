@@ -57,9 +57,15 @@ else
   log_info "Skipping MySQL full checks (set RUN_MYSQL_FULL_CHECK=true to enable)."
 fi
 
+if [ "${RUN_AUTHENTIK_STAGING_CHECK:-false}" = "true" ]; then
+  run_step "real Authentik staging gate" ".tmp/full-check-authentik-staging.log" ./node_modules/.bin/tsx scripts/check-authentik-staging.ts
+else
+  log_info "Skipping real Authentik staging gate (set RUN_AUTHENTIK_STAGING_CHECK=true with a staging profile, token, and evidence file to enable)."
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
   echo "[FAIL] $ERRORS full-check errors found."
   exit 1
 fi
 
-echo "[OK] Full check completed for implemented gates. Optional Docker/MySQL gates are controlled by RUN_MYSQL_FULL_CHECK=true."
+echo "[OK] Full check completed for implemented gates. Optional MySQL and real Authentik gates are controlled by RUN_MYSQL_FULL_CHECK=true and RUN_AUTHENTIK_STAGING_CHECK=true."

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { AppConfig } from '../../../infrastructure/config';
-import { AdminAuth, AdminAuthSession, validateAdminMutationOrigin } from './admin-auth';
+import { AdminAuthSession, SimpleModeAdminAuth, validateAdminMutationOrigin } from './admin-auth';
 import { AuthenticatedPrincipal } from '../../../application/security/authenticated-principal';
 
 export const ADMIN_COOKIE = 'skill_hub_session';
@@ -16,7 +16,7 @@ interface SimpleAdminToken {
   exp: number;
 }
 
-export class SimpleAdminAuth implements AdminAuth {
+export class SimpleAdminAuth implements SimpleModeAdminAuth {
   readonly mode = 'simple' as const;
 
   constructor(private readonly config: AppConfig) {}
@@ -41,7 +41,7 @@ export class SimpleAdminAuth implements AdminAuth {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       path: ADMIN_COOKIE_PATH,
-      maxAge: this.config.sessionTtlSeconds * 1000,
+      maxAge: this.config.sessionTtlSeconds,
     });
 
     return true;

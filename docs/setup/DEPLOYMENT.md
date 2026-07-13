@@ -142,9 +142,9 @@ REGISTRY_NAME=Company Production Skill Registry
 PUBLIC_API_BASE_URL=https://skills.example.com/api
 API_TRUSTED_PROXIES=127.0.0.1,::1
 PUBLIC_READ_AUTH_MODE=bearer
-PUBLIC_READ_BEARER_TOKEN=replace-with-read-token
+PUBLIC_READ_BEARER_TOKEN=<secret-manager-32-byte-random-value>
 PROPOSAL_AUTH_MODE=bearer
-PROPOSAL_BEARER_TOKEN=replace-with-proposal-token
+PROPOSAL_BEARER_TOKEN=<secret-manager-32-byte-random-value>
 DISCOVERY_AUTH_MODE=none
 PROPOSAL_RATE_LIMIT_WINDOW_MS=60000
 PROPOSAL_RATE_LIMIT_MAX_REQUESTS=120
@@ -157,21 +157,25 @@ in-process proposal limiter is a defense-in-depth control; every public or
 multi-instance deployment must also enforce request, connection, and body-size
 limits at nginx or the API gateway.
 
-After deployment, validate `/discover`. It should return the expected `registryId`, `apiBaseUrl`, auth flags, and `credentialSetupScriptUrl` when auth is enabled. Consumers can then download `/agent-credentials/setup.sh` and store credentials locally per registry alias/URL.
+After deployment, validate `/discover`. It should return the expected
+`registryId`, `apiBaseUrl`, auth flags, and active auth schemes. A
+`credentialSetupScriptUrl` is present only when at least one area uses static
+bearer auth. OIDC consumers use the advertised Device Authorization metadata.
 
-## Planned Authentik/OIDC Deployment
+## Authentik/OIDC Deployment
 
-The accepted Authentik target is documented in
+The Authentik runtime profile is documented in
 [`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md) and
-`.env.example.authentik`. It preserves independent `none`, `bearer`, and future
+`.env.example.authentik`. It preserves independent `none`, `bearer`, and
 `oidc` choices for discovery, published reads, and proposals. It also replaces
 the password admin form with server-side Authorization Code login when
 `ADMIN_AUTH_MODE=oidc`.
 
-The current runtime does not implement this mode. Do not deploy the Authentik
-template until the ADR-015 implementation gate and staging cutover checklist
-have passed. Continue using the current simple/bearer production baseline until
-then.
+Run it in staging first. Production activation requires the real Authentik
+gate, reverse-proxy callback proof, two-human ownership proof, key rotation,
+provider-outage validation, and rollback rehearsal from
+[`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md). Keep the last proven simple/bearer
+profile in the secret manager during the rollback window.
 
 ## nginx
 

@@ -17,6 +17,26 @@ export interface AdminAuth {
   logout(request: FastifyRequest, reply: FastifyReply): Promise<void>;
 }
 
+export interface SimpleModeAdminAuth extends AdminAuth {
+  readonly mode: 'simple';
+  login(username: string, password: string, reply: FastifyReply): Promise<boolean>;
+}
+
+export interface OidcModeAdminAuth extends AdminAuth {
+  readonly mode: 'oidc';
+  establish(principal: AuthenticatedPrincipal, reply: FastifyReply): Promise<AdminAuthSession>;
+}
+
+export function isSimpleModeAdminAuth(auth: AdminAuth): auth is SimpleModeAdminAuth {
+  return auth.mode === 'simple'
+    && typeof (auth as Partial<SimpleModeAdminAuth>).login === 'function';
+}
+
+export function isOidcModeAdminAuth(auth: AdminAuth): auth is OidcModeAdminAuth {
+  return auth.mode === 'oidc'
+    && typeof (auth as Partial<OidcModeAdminAuth>).establish === 'function';
+}
+
 export interface AdminAuthContext {
   session: AdminAuthSession;
 }
@@ -28,10 +48,24 @@ export function adminGuard(
   return async (request: FastifyRequest, _reply: FastifyReply) => {
     const session = await auth.validate(request);
     if (!session) {
+      request.log?.warn?.({
+        event: 'admin_authorization',
+        outcome: 'failure',
+        category: 'session_missing_or_expired',
+        requiredRoles: Array.isArray(requiredRole) ? requiredRole : [requiredRole],
+        route: request.routeOptions.url,
+      }, 'Administrator authorization denied');
       throw new UnauthorizedError('Unauthorized');
     }
     const acceptedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     if (!session.roles.includes('admin') && !acceptedRoles.some((role) => session.roles.includes(role))) {
+      request.log?.warn?.({
+        event: 'admin_authorization',
+        outcome: 'failure',
+        category: 'role_missing',
+        requiredRoles: acceptedRoles,
+        route: request.routeOptions.url,
+      }, 'Administrator authorization denied');
       throw new ForbiddenError(`One of the administrator roles '${acceptedRoles.join(', ')}' is required.`);
     }
     auth.validateMutationOrigin(request);

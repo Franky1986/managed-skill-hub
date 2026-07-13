@@ -109,12 +109,20 @@ HTTP adapter for proposal operations.
   status auth mode.
 - `GET /proposals/:proposalId/status` returns public status snapshot: title,
   status, upload-finalized state, auto-publish state, latest risk, rejection
-  reason, converted skill ID, contentDigest, duplicate IDs.
+  reason, converted published skill ID, and contentDigest. It excludes email,
+  principal/subject identifiers, audit entries, uploader fields, and linked
+  private proposal UUIDs.
+- Under OIDC, any principal accepted by the proposal policy may read a known
+  proposal UUID. Only the stable owning principal may upload, validate,
+  finalize, patch, or delete an open proposal; a new token for the same human
+  preserves ownership.
 - `POST /proposals/check-duplicate` returns exact duplicates, similarity
   matches, and skill-ID collisions.
 - Proposal route bursts beyond the configured rate-limit window return `429`
   and do not reach the command use case.
 - In-memory proposal rate-limit state remains within the configured bucket cap.
+- OIDC rate-limit identity uses the bounded stable principal/client pair, so a
+  refreshed token does not reset the request budget.
 
 ## Tests / Checks
 

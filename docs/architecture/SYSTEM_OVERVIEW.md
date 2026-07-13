@@ -2,25 +2,28 @@
 
 ## In One Sentence
 
-A self-hosted, agent-facing skill registry with configurable filesystem or database-backed managed content storage, configurable relational metadata/search providers, an OpenAPI-first REST API, and a simple session-based admin path as a precursor to later OAuth/OIDC integration.
+A self-hosted, agent-facing skill registry with configurable filesystem or
+database-backed managed content storage, configurable relational metadata and
+search providers, an OpenAPI-first REST API, and independently configurable
+simple, bearer, or OIDC authentication boundaries.
 
 ## Context
 
 - Users: product managers, developers, AI agents such as Codex, Claude,
   OpenCode, Gemini, and Cursor.
-- Public read, proposal, and discovery paths can be open or protected with
-  configured bearer authentication.
-- Admin path currently uses a session cookie and simple admin auth; later it
-  should use authentik/OIDC.
+- Public read, proposal, and discovery paths independently use `none`, static
+  `bearer`, or verified OIDC access tokens.
+- Admin login independently uses simple signed sessions or server-side OIDC
+  Authorization Code with PKCE and opaque local sessions.
 - Managed skill/proposal content is stored through `CONTENT_STORAGE_PROVIDER`.
   - `filesystem` stores artifacts, aggregate state, extracts, and audit entries under `DATA_DIR`.
   - `database` stores managed content in database-backed adapters following `CATALOG_PROVIDER` (`sqlite` or `mysql`).
   - Categories, skill/version/file metadata, proposal metadata, judgements, and history are projected into configurable relational providers (`sqlite` or `mysql`) and read from there.
 
-## Accepted Authentik Target
+## Authentik Identity Runtime
 
 [ADR-015](../decisions/ADR-015-authentik-oidc-and-delegated-agent-identity.md)
-defines the accepted but not yet implemented identity target:
+defines the implemented identity boundary:
 
 - admin login uses server-side OIDC Authorization Code with PKCE and a local
   `HttpOnly` session;
@@ -33,9 +36,14 @@ defines the accepted but not yet implemented identity target:
 - proposal ownership uses a stable human principal, not email, username, or a
   shared bearer label;
 - privileged roles use stable subject UUIDs and `managedskillhub-*` groups.
+- identity projections, admin sessions, and one-time login transactions follow
+  the selected SQLite or MySQL catalog provider;
+- proposal ownership and audit attribution persist stable principal and agent
+  client identifiers across filesystem and database-content modes.
 
-Current runtime behavior remains simple admin auth plus `none`/`bearer` agent
-API auth until the ADR implementation gate is complete.
+Normal CI proves protocol behavior through a deterministic local provider.
+Production activation still requires the real Authentik staging gate for the
+target tenant and reverse proxy.
 
 ## Components
 
@@ -66,7 +74,7 @@ API auth until the ADR implementation gate is complete.
         │
 ┌───────▼───────────────────────────────────────────────┐
 │ Adapters: Storage (FS/DB), Search (sqlite/mysql), Audit (FS/DB) │
-│           Identity (simple auth today, authentik later)      │
+│           Identity (simple sessions, OIDC, JWKS, principals) │
 └─────────────────────────────────────────────────────────┘
         │
         │

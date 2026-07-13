@@ -50,11 +50,13 @@ describe('OIDC administrator routes', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     persistence.close();
     await rm(directory, { recursive: true, force: true });
   });
 
   it('advertises OIDC, disables password login, and completes a one-time callback', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
     const appConfig = config();
     const provider = fakeProvider();
     const policy = new AuthorizationPolicy(appConfig);
@@ -84,6 +86,7 @@ describe('OIDC administrator routes', () => {
     expect(methods.json()).toEqual({
       mode: 'oidc',
       loginStartUrl: 'https://skills.example.test/api/admin/auth/oidc/start',
+      adminUiBasePath: '/admin',
     });
     expect(passwordLogin.statusCode).toBe(404);
     expect(start.statusCode).toBe(302);
@@ -96,6 +99,13 @@ describe('OIDC administrator routes', () => {
     expect(callback.statusCode).toBe(302);
     expect(callback.headers.location).toBe('/admin/proposals');
     expect(callback.headers['set-cookie']).not.toContain('authorization-code');
+    const cookieHeaders = Array.isArray(callback.headers['set-cookie'])
+      ? callback.headers['set-cookie'].join('\n')
+      : callback.headers['set-cookie'] ?? '';
+    expect(cookieHeaders).toContain('HttpOnly');
+    expect(cookieHeaders).toContain('Secure');
+    expect(cookieHeaders).toContain('SameSite=Strict');
+    expect(cookieHeaders).toContain('Path=/');
     const sessionCookie = extractSessionCookie(callback.headers['set-cookie']);
 
     const session = await app.inject({

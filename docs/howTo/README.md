@@ -18,11 +18,10 @@ This folder points agents and operators to task-oriented setup guides.
 
 ## Authentication Profiles
 
-- Use `.env.example.simple` for the currently runnable local/simple profile.
-- Use `docs/setup/AUTHENTIK.md` and `.env.example.authentik` for the accepted
-  authentik/OIDC target configuration. OIDC runtime support is not implemented
-  yet.
-- Use `docs/product/AGENT_OIDC_DEVICE_FLOW.md` for the target agent linkout,
+- Use `.env.example.simple` for the local/simple profile.
+- Use `docs/setup/AUTHENTIK.md` and `.env.example.authentik` for Authentik OIDC
+  staging and the production activation gate.
+- Use `docs/product/AGENT_OIDC_DEVICE_FLOW.md` for the runtime agent linkout,
   polling, token handling, and failure behavior.
 
 ## Judger Adapters

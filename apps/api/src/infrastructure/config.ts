@@ -9,6 +9,7 @@ export type ContentStorageProvider = 'filesystem' | 'database';
 export type AgentAuthMode = 'none' | 'bearer' | 'oidc';
 export type AdminAuthMode = 'simple' | 'oidc';
 export type OidcAccessPolicy = 'all_authenticated_users' | 'required_groups';
+export type OidcAccessTokenValidationMode = 'jwt_profile' | 'authentik_introspection';
 type MySqlSslMode = 'preferred' | 'required' | 'disabled' | 'verify_ca' | 'verify_identity';
 
 export interface AppConfig {
@@ -29,6 +30,9 @@ export interface AppConfig {
   adminPasswordHash: string;
   jwtSecret: string;
   sessionTtlSeconds: number;
+  adminLoginRateLimitWindowMs: number;
+  adminLoginRateLimitMaxRequests: number;
+  adminLoginRateLimitMaxBuckets: number;
   judgerProvider: JudgerProvider;
   judgerAdapterPath: string | null;
   vercelAiSdkModel: string | null;
@@ -91,6 +95,9 @@ export interface AppConfig {
   oidcMaxTokenBytes: number;
   oidcMaxGroups: number;
   oidcHumanClaim: string;
+  oidcAccessTokenValidationMode: OidcAccessTokenValidationMode;
+  oidcIntrospectionClientId: string | null;
+  oidcIntrospectionClientSecret: string | null;
 }
 
 export function loadConfig(): AppConfig {
@@ -162,7 +169,34 @@ export function loadConfig(): AppConfig {
     adminPassword: valueOrNull(process.env.ADMIN_PASSWORD),
     adminPasswordHash: process.env.ADMIN_PASSWORD_HASH ?? '',
     jwtSecret: process.env.JWT_SECRET ?? 'change-me-in-production',
-    sessionTtlSeconds: Number(process.env.SESSION_TTL_SECONDS ?? 86400),
+    sessionTtlSeconds: parseBoundedInteger(
+      process.env.SESSION_TTL_SECONDS,
+      86_400,
+      'SESSION_TTL_SECONDS',
+      300,
+      604_800
+    ),
+    adminLoginRateLimitWindowMs: parseBoundedInteger(
+      process.env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS,
+      300_000,
+      'ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS',
+      10_000,
+      3_600_000
+    ),
+    adminLoginRateLimitMaxRequests: parseBoundedInteger(
+      process.env.ADMIN_LOGIN_RATE_LIMIT_MAX_REQUESTS,
+      10,
+      'ADMIN_LOGIN_RATE_LIMIT_MAX_REQUESTS',
+      1,
+      1_000
+    ),
+    adminLoginRateLimitMaxBuckets: parseBoundedInteger(
+      process.env.ADMIN_LOGIN_RATE_LIMIT_MAX_BUCKETS,
+      10_000,
+      'ADMIN_LOGIN_RATE_LIMIT_MAX_BUCKETS',
+      100,
+      100_000
+    ),
     judgerProvider: parseJudgerProvider(process.env.JUDGER_PROVIDER),
     judgerAdapterPath: valueOrNull(process.env.JUDGER_ADAPTER_PATH),
     vercelAiSdkModel: valueOrNull(process.env.VERCEL_AI_SDK_MODEL),
@@ -260,25 +294,48 @@ export function loadConfig(): AppConfig {
     oidcAdminGroups: parseCsvList(process.env.OIDC_ADMIN_GROUPS, ['managedskillhub-admins']),
     oidcReviewerGroups: parseCsvList(process.env.OIDC_REVIEWER_GROUPS, ['managedskillhub-reviewers']),
     oidcPublisherGroups: parseCsvList(process.env.OIDC_PUBLISHER_GROUPS, ['managedskillhub-publishers']),
-    oidcLoginTransactionTtlSeconds: parsePositiveInteger(
+    oidcLoginTransactionTtlSeconds: parseBoundedInteger(
       process.env.OIDC_LOGIN_TRANSACTION_TTL_SECONDS,
       600,
-      'OIDC_LOGIN_TRANSACTION_TTL_SECONDS'
+      'OIDC_LOGIN_TRANSACTION_TTL_SECONDS',
+      60,
+      900
     ),
-    oidcClockToleranceSeconds: parsePositiveInteger(
+    oidcClockToleranceSeconds: parseBoundedInteger(
       process.env.OIDC_CLOCK_TOLERANCE_SECONDS,
       30,
-      'OIDC_CLOCK_TOLERANCE_SECONDS'
+      'OIDC_CLOCK_TOLERANCE_SECONDS',
+      0,
+      300
     ),
-    oidcJwksCacheTtlSeconds: parsePositiveInteger(
+    oidcJwksCacheTtlSeconds: parseBoundedInteger(
       process.env.OIDC_JWKS_CACHE_TTL_SECONDS,
       3600,
-      'OIDC_JWKS_CACHE_TTL_SECONDS'
+      'OIDC_JWKS_CACHE_TTL_SECONDS',
+      60,
+      86_400
     ),
-    oidcHttpTimeoutMs: parsePositiveInteger(process.env.OIDC_HTTP_TIMEOUT_MS, 5000, 'OIDC_HTTP_TIMEOUT_MS'),
-    oidcMaxTokenBytes: parsePositiveInteger(process.env.OIDC_MAX_TOKEN_BYTES, 16_384, 'OIDC_MAX_TOKEN_BYTES'),
-    oidcMaxGroups: parsePositiveInteger(process.env.OIDC_MAX_GROUPS, 100, 'OIDC_MAX_GROUPS'),
+    oidcHttpTimeoutMs: parseBoundedInteger(
+      process.env.OIDC_HTTP_TIMEOUT_MS,
+      5000,
+      'OIDC_HTTP_TIMEOUT_MS',
+      250,
+      30_000
+    ),
+    oidcMaxTokenBytes: parseBoundedInteger(
+      process.env.OIDC_MAX_TOKEN_BYTES,
+      16_384,
+      'OIDC_MAX_TOKEN_BYTES',
+      1024,
+      65_536
+    ),
+    oidcMaxGroups: parseBoundedInteger(process.env.OIDC_MAX_GROUPS, 100, 'OIDC_MAX_GROUPS', 1, 500),
     oidcHumanClaim: valueOrDefault(process.env.OIDC_HUMAN_CLAIM, 'managedskillhub_human'),
+    oidcAccessTokenValidationMode: parseOidcAccessTokenValidationMode(
+      process.env.OIDC_ACCESS_TOKEN_VALIDATION_MODE
+    ),
+    oidcIntrospectionClientId: valueOrNull(process.env.OIDC_INTROSPECTION_CLIENT_ID),
+    oidcIntrospectionClientSecret: valueOrNull(process.env.OIDC_INTROSPECTION_CLIENT_SECRET),
   };
 
   validateOidcConfiguration(config);
@@ -437,6 +494,18 @@ function parseBearerToken(
   return token;
 }
 
+export function parseOidcAccessTokenValidationMode(
+  value: string | undefined
+): OidcAccessTokenValidationMode {
+  const normalized = value?.trim() || 'jwt_profile';
+  if (normalized === 'jwt_profile' || normalized === 'authentik_introspection') {
+    return normalized;
+  }
+  throw new ConfigurationError(
+    'OIDC_ACCESS_TOKEN_VALIDATION_MODE must be jwt_profile or authentik_introspection.'
+  );
+}
+
 function normalizePublicApiBaseUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -450,7 +519,10 @@ function validateProductionSecurityConfig(config: AppConfig): void {
     return;
   }
 
-  if (config.jwtSecret === 'change-me-in-production' || config.jwtSecret.length < 32) {
+  if (
+    config.adminAuthMode === 'simple'
+    && (config.jwtSecret === 'change-me-in-production' || config.jwtSecret.length < 32)
+  ) {
     throw new ConfigurationError(
       'JWT_SECRET must be changed and at least 32 characters long when NODE_ENV=production.'
     );
@@ -480,10 +552,43 @@ function validateProductionSecurityConfig(config: AppConfig): void {
     );
   }
 
-  if (config.adminAuthMode === 'oidc' && isExampleSecret(config.oidcAdminClientSecret)) {
+  if (
+    config.adminAuthMode === 'oidc'
+    && (
+      !config.oidcAdminClientSecret
+      || Buffer.byteLength(config.oidcAdminClientSecret, 'utf8') < 32
+      || isExampleSecret(config.oidcAdminClientSecret)
+    )
+  ) {
     throw new ConfigurationError(
-      'OIDC_ADMIN_CLIENT_SECRET must not use an example or default value when NODE_ENV=production.'
+      'OIDC_ADMIN_CLIENT_SECRET must contain at least 32 bytes and must not use an example value when NODE_ENV=production.'
     );
+  }
+
+  if (
+    config.oidcAccessTokenValidationMode === 'authentik_introspection'
+    && [config.discoveryAuthMode, config.publicReadAuthMode, config.proposalAuthMode].includes('oidc')
+    && (
+      !config.oidcIntrospectionClientSecret
+      || Buffer.byteLength(config.oidcIntrospectionClientSecret, 'utf8') < 32
+      || isExampleSecret(config.oidcIntrospectionClientSecret)
+    )
+  ) {
+    throw new ConfigurationError(
+      'OIDC_INTROSPECTION_CLIENT_SECRET must contain at least 32 bytes and must not use an example value when NODE_ENV=production.'
+    );
+  }
+
+  for (const [name, mode, token] of [
+    ['PUBLIC_READ_BEARER_TOKEN', config.publicReadAuthMode, config.publicReadBearerToken],
+    ['PROPOSAL_BEARER_TOKEN', config.proposalAuthMode, config.proposalBearerToken],
+    ['DISCOVERY_BEARER_TOKEN', config.discoveryAuthMode, config.discoveryBearerToken],
+  ] as const) {
+    if (mode === 'bearer' && (!token || Buffer.byteLength(token, 'utf8') < 32 || isExampleSecret(token))) {
+      throw new ConfigurationError(
+        `${name} must contain at least 32 random bytes and must not use an example value when NODE_ENV=production.`
+      );
+    }
   }
 }
 
@@ -504,6 +609,18 @@ function validateOidcConfiguration(config: AppConfig): void {
     }
     for (const area of enabledAgentAreas) {
       requireOidcValue(area.scope, oidcScopeName(area.name), area.name);
+    }
+    if (config.oidcAccessTokenValidationMode === 'authentik_introspection') {
+      requireOidcValue(
+        config.oidcIntrospectionClientId,
+        'OIDC_INTROSPECTION_CLIENT_ID',
+        'OIDC_ACCESS_TOKEN_VALIDATION_MODE'
+      );
+      requireOidcValue(
+        config.oidcIntrospectionClientSecret,
+        'OIDC_INTROSPECTION_CLIENT_SECRET',
+        'OIDC_ACCESS_TOKEN_VALIDATION_MODE'
+      );
     }
   }
 
@@ -670,6 +787,20 @@ function parsePositiveInteger(
       return fallback;
     }
     throw new ConfigurationError(`${name} must be a positive integer.`);
+  }
+  return parsed;
+}
+
+function parseBoundedInteger(
+  value: string | undefined,
+  fallback: number,
+  name: string,
+  minimum: number,
+  maximum: number
+): number {
+  const parsed = value === undefined || value.trim().length === 0 ? fallback : Number(value);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new ConfigurationError(`${name} must be an integer between ${minimum} and ${maximum}.`);
   }
   return parsed;
 }
