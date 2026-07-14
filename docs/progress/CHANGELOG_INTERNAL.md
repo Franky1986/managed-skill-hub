@@ -9,6 +9,8 @@
 - Non-admin users still see the original per-area token input form.
 - Added i18n messages for the new admin UI strings (en/de).
 - Added controller tests for "/admin/agent-auth-config" covering admin success,
+- Added the new endpoint to `packages/openapi/skill-registry.openapi.yaml`
+  with the `AdminAgentAuthConfigResponse` schema and regenerated TypeScript types.
   anonymous rejection, and omission of non-bearer/empty-token areas.
 - Updated co-located specs:
   - apps/api/src/adapters/inbound/http/AgentSessionController.spec.md

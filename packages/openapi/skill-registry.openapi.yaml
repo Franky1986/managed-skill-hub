@@ -2610,6 +2610,31 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+
+  /admin/agent-auth-config:
+    get:
+      operationId: getAdminAgentAuthConfig
+      tags:
+      - Agent Sessions
+      - Admin
+      summary: View configured agent bearer tokens
+      description: Admin-only. Returns the currently configured bearer token values
+        for every bearer-protected area so an admin can share them through a
+        separate trusted channel. Areas that are not bearer-protected or have an
+        empty token are omitted.
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Configured bearer tokens per area
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAgentAuthConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
 components:
   securitySchemes:
     adminSession:
@@ -5064,3 +5089,24 @@ components:
         expiresAt:
           type: string
           format: date-time
+    AdminAgentAuthConfigResponse:
+      type: object
+      required:
+      - tokens
+      properties:
+        tokens:
+          type: array
+          items:
+            type: object
+            required:
+            - area
+            - value
+            properties:
+              area:
+                type: string
+                enum:
+                - discovery
+                - public-read
+                - proposal
+              value:
+                type: string
