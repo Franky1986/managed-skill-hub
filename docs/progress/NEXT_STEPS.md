@@ -23,8 +23,11 @@
       cross-area isolation.
 - [x] `npm run lint`, `npm run typecheck`, `npm run test`, and production
       builds pass for all workspaces.
-- [ ] Run `./scripts/check.sh` end-to-end in an environment without tsx IPC
+- [x] Run `./scripts/check.sh` end-to-end in an environment without tsx IPC
       pipe/network listen restrictions.
+- [ ] Run the auto-judge/vercel-ai-sdk acceptance gate: configure real model
+      credentials, submit a disposable skill, verify real LLM judgement,
+      auto-publish eligibility, and publication flow.
 
 ## Production Readiness Verification
 

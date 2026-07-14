@@ -1,3 +1,18 @@
+## 2026-07-14: End-to-end agent-session and proposal publication verification
+
+- Verified the agent-session flow against the running local stack:
+  - /discover advertises the frontend agent-session URL (port 3041).
+  - Read-only sessions access /api/skills; proposal sessions access
+    /api/proposals/check-duplicate.
+  - Read-only sessions on proposal endpoints get a 401 with sessionAreas,
+    agentSessionUrl, and a clear recommendation.
+  - Combined read+proposal sessions cover both areas.
+- Identified and published an existing but unreviewed skill
+  (sample-integration) through the admin workflow so the agent can download it.
+- Set AGENT_SESSION_MAX_ACTIVE=unlimited in local .env to avoid hitting the
+  default 10-session cap during repeated agent-driven tests.
+- Remaining: activate Vercel AI SDK judger for real auto-judge/auto-publish tests.
+
 ## 2026-07-14: Area-scoped agent-session errors and proposal actor resolution
 
 - Extended `AgentAuthRequiredError` with the session areas it is valid for and
