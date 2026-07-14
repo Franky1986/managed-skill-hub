@@ -28,6 +28,8 @@ export function AgentAuthPage() {
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [copied, setCopied] = useState(false);
+    const { isAuthenticated, roles } = useAuthStore();
+    const isAdmin = isAuthenticated && hasAdminRole(roles, 'admin');
 
     useEffect(() => {
         setLoading(true);
@@ -118,9 +120,6 @@ export function AgentAuthPage() {
             </div>
         );
     }
-
-    const { isAuthenticated, roles } = useAuthStore();
-    const isAdmin = isAuthenticated && hasAdminRole(roles, 'admin');
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
