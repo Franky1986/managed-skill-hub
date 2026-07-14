@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { adminApi } from '../api/admin';
 import { hasAdminRole, useAuthStore } from '../store/auth';
 import { useLanguage, type LanguageCode } from '../i18n';
+import { useBackgroundPolling } from '../hooks/useBackgroundPolling';
 
 interface LayoutProps {
     children: ReactNode;
@@ -16,43 +17,31 @@ export function Layout({ children }: LayoutProps) {
     const canReview = hasAdminRole(roles, 'reviewer');
     const { language, setLanguage, t } = useLanguage();
 
-    const refreshProposalNotice = useCallback(() => {
-        adminApi
-            .proposalNotice()
-            .then((response) => setProposalNotice(response.data))
-            .catch(() => {
+    const refreshProposalNotice = useCallback(async (signal: AbortSignal) => {
+        try {
+            const response = await adminApi.proposalNotice(signal);
+            setProposalNotice(response.data);
+        } catch {
+            if (!signal.aborted) {
                 setProposalNotice(null);
-            });
+            }
+        }
     }, []);
 
     useEffect(() => {
         void checkSession();
     }, [checkSession]);
 
+    const shouldPollProposalNotice = !isLoading && isAuthenticated && canReview;
+    useBackgroundPolling(refreshProposalNotice, shouldPollProposalNotice);
+
     useEffect(() => {
-        if (isLoading || !isAuthenticated || !canReview) {
-            setProposalNotice(null);
+        if (shouldPollProposalNotice) {
             return;
         }
 
-        void refreshProposalNotice();
-    }, [isLoading, isAuthenticated, canReview, refreshProposalNotice]);
-
-    useEffect(() => {
-        if (isLoading || !isAuthenticated || !canReview) {
-            return;
-        }
-
-        const handleProposalDecisionUpdate = () => {
-            refreshProposalNotice();
-        };
-        const timer = setInterval(refreshProposalNotice, 30000);
-        window.addEventListener('skillHub:proposalDecision', handleProposalDecisionUpdate);
-        return () => {
-            clearInterval(timer);
-            window.removeEventListener('skillHub:proposalDecision', handleProposalDecisionUpdate);
-        };
-    }, [isLoading, isAuthenticated, canReview, refreshProposalNotice]);
+        setProposalNotice(null);
+    }, [shouldPollProposalNotice]);
 
     const navLinkClass = (path: string) => {
         const active = location.pathname === path;
@@ -99,6 +88,7 @@ export function Layout({ children }: LayoutProps) {
                         <Link to="/" className={navLinkClass('/')}>{t('app.nav.explore')}</Link>
                         <Link to="/search" className={navLinkClass('/search')}>{t('app.nav.search')}</Link>
                         <Link to="/how-to-propose" className={navLinkClass('/how-to-propose')}>{t('app.nav.howToPropose')}</Link>
+                        <Link to="/agent-auth" className={navLinkClass('/agent-auth')}>{t('app.nav.agentAuth')}</Link>
                     </div>
 
                     <div className="ml-auto flex flex-wrap justify-end items-center gap-sm sm:gap-2">
@@ -173,6 +163,12 @@ export function Layout({ children }: LayoutProps) {
                             className="text-on-surface-variant font-small text-small hover:text-primary underline opacity-80 hover:opacity-100 transition-all"
                         >
                             {t('common.admin')}
+                        </Link>
+                        <Link
+                            to="/admin/agent-sessions"
+                            className="text-on-surface-variant font-small text-small hover:text-primary underline opacity-80 hover:opacity-100 transition-all"
+                        >
+                            {t('app.nav.agentSessions')}
                         </Link>
                     </div>
                 </div>

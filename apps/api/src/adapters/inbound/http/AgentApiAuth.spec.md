@@ -13,7 +13,7 @@ changing domain or use-case logic.
 
 ## Non-Scope
 
-- Admin session authentication
+- Admin session establishment and role mapping
 - Provider-specific role interpretation in controllers
 - OAuth/OIDC protocol implementation in domain or use-case code
 
@@ -42,6 +42,9 @@ changing domain or use-case logic.
   per-consumer isolation is provided by OIDC principal ownership.
 - OIDC success and denial produce structured, redacted operational events with
   area and coarse category. Authorization headers and tokens are never logged.
+- At public read route registration, a valid admin browser session with the
+  `reader` or `admin` role is an explicit alternative to agent authentication.
+  This route-level composition does not apply to discovery or proposals.
 
 ## Runtime Metadata
 
@@ -70,3 +73,32 @@ scopes, and applicable areas, never a client secret.
 - Do not let agent bearer tokens grant admin privileges.
 - Do not print or persist bearer tokens in logs, responses, generated scripts, or
   proposal artifacts.
+
+## Agent Session Delegation
+
+When `AGENT_SESSION_ENABLED=true` and at least one agent-facing area uses
+`bearer`, the adapter:
+
+- Advertises an `agent-session` scheme in `/discover` `authSchemes` covering the
+  bearer-enabled areas.
+- Accepts `Authorization: AgentSession <code>` on protected agent routes after
+  bearer validation fails.
+- Validates the code through `ValidateAgentSessionUseCase` for the requested
+  area only.
+- Creates a `session`-scheme principal for the request context when validation
+  succeeds.
+- Falls back to the standard `401` response when no valid bearer or session is
+  present.
+
+### Session Creation Validation
+
+`AgentApiAuth` exposes helper methods for the controller:
+
+- `validateAreaBearerToken(area, token)` performs a constant-time comparison of
+  the supplied token against the configured bearer token for that area.
+- `throwIfAreaBearerInvalid(area, token)` throws the normalized `401` when the
+  token is missing or invalid.
+
+These helpers allow `POST /agent-sessions` to require a separate bearer token for
+each requested area (via `X-Agent-*-Token` headers) without reinterpreting the
+single `Authorization` header.

@@ -4,26 +4,28 @@ info:
   description: Self-hosted skill registry for AI agents.
   version: 0.1.0
 servers:
-  - url: http://localhost:3040
-    description: Local API server
+- url: http://localhost:3040
+  description: Local API server
 x-managed-skill-hub-runtime-auth:
-  description: >-
-    Agent-facing operation security is selected at runtime. The static security arrays enumerate credentialed modes
-    only; anonymous access is enabled only when the corresponding environment selector is `none`.
+  description: Agent-facing operation security is selected at runtime. The static
+    security arrays enumerate credentialed modes only; anonymous access is enabled
+    only when the corresponding environment selector is `none`. Public read operations
+    additionally accept an active adminSession whose principal has the reader or admin
+    role.
   selectors:
     discovery: DISCOVERY_AUTH_MODE
     publicRead: PUBLIC_READ_AUTH_MODE
     proposal: PROPOSAL_AUTH_MODE
   supportedModes:
-    - none
-    - bearer
-    - oidc
+  - none
+  - bearer
+  - oidc
 paths:
   /api/health:
     get:
       operationId: getHealth
       tags:
-        - Health
+      - Health
       summary: API Healthcheck
       responses:
         '200':
@@ -36,16 +38,16 @@ paths:
     get:
       operationId: discover
       tags:
-        - Discovery
+      - Discovery
       summary: Registry discovery endpoint
-      description: >-
-        Returns registry identity, canonical API base URL, entrypoints, and runtime auth requirements. May require
-        discoveryBearer when DISCOVERY_AUTH_MODE=bearer or an Authentik access token with the advertised discovery
-        scope when DISCOVERY_AUTH_MODE=oidc.
+      description: Returns registry identity, canonical API base URL, entrypoints,
+        and runtime auth requirements. May require discoveryBearer when DISCOVERY_AUTH_MODE=bearer
+        or an Authentik access token with the advertised discovery scope when DISCOVERY_AUTH_MODE=oidc.
       security:
-        - discoveryBearer: []
-        - agentOidc:
-            - managedskillhub:discovery
+      - discoveryBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:discovery
       responses:
         '200':
           description: Registry metadata
@@ -59,15 +61,16 @@ paths:
     get:
       operationId: getHowToPropose
       tags:
-        - Proposals
+      - Proposals
       summary: Get proposal workflow instructions for agents
-      description: >-
-        Returns proposal workflow and runtime proposal auth guidance. May require discoveryBearer when
-        DISCOVERY_AUTH_MODE=bearer or agentOidc when DISCOVERY_AUTH_MODE=oidc.
+      description: Returns proposal workflow and runtime proposal auth guidance. May
+        require discoveryBearer when DISCOVERY_AUTH_MODE=bearer or agentOidc when
+        DISCOVERY_AUTH_MODE=oidc.
       security:
-        - discoveryBearer: []
-        - agentOidc:
-            - managedskillhub:discovery
+      - discoveryBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:discovery
       responses:
         '200':
           description: Recommended proposal workflow for agents
@@ -81,41 +84,45 @@ paths:
                     id: how-to-propose
                     title: Proposal workflow for agents
                     summary: Mandatory preflight before submit
-                    description: >-
-                      Read this endpoint before every proposal upload. Agents must communicate with the user in the
-                      language the user is currently using, validate the local package, normalize it only when needed,
-                      ensure SKILL.md is the root entrypoint, keep dependency installation artifacts out of the uploaded
-                      package, verify self-contained references, scan for credentials or PII, and only then continue to
-                      duplicate prechecks and submission.
-                    conversationLanguage: >-
-                      When communicating with the user, use the language the user is currently using unless the user
-                      explicitly asks for another language.
-                    metadataLanguageGuidance: >-
-                      Proposal metadata should preferably be written in English: title, description, category, tags,
-                      capabilities, useWhen and doNotUseWhen. Uploaded content files may be in any language.
-                    escalationRule: >-
-                      Do not proceed with proposal creation while the package is structurally ambiguous, references are
-                      broken, sensitive content is present, or duplicate intent is unconfirmed.
+                    description: Read this endpoint before every proposal upload.
+                      Agents must communicate with the user in the language the user
+                      is currently using, validate the local package, normalize it
+                      only when needed, ensure SKILL.md is the root entrypoint, keep
+                      dependency installation artifacts out of the uploaded package,
+                      verify self-contained references, scan for credentials or PII,
+                      and only then continue to duplicate prechecks and submission.
+                    conversationLanguage: When communicating with the user, use the
+                      language the user is currently using unless the user explicitly
+                      asks for another language.
+                    metadataLanguageGuidance: 'Proposal metadata should preferably
+                      be written in English: title, description, category, tags, capabilities,
+                      useWhen and doNotUseWhen. Uploaded content files may be in any
+                      language.'
+                    escalationRule: Do not proceed with proposal creation while the
+                      package is structurally ambiguous, references are broken, sensitive
+                      content is present, or duplicate intent is unconfirmed.
                     duplicateConfirmationRule:
                       appliesWhen:
-                        - exactDuplicateProposalId is set
-                        - exactDuplicateSkillId is set
-                        - skillIdCollision.exists is true
-                        - similarMatches contains a strong title/description intent match
+                      - exactDuplicateProposalId is set
+                      - exactDuplicateSkillId is set
+                      - skillIdCollision.exists is true
+                      - similarMatches contains a strong title/description intent
+                        match
                       requiredUserFacingSummary:
-                        - >-
-                          Name each relevant duplicate candidate with kind, id, skillId/title when available,
-                          status/version when available, and similarity score for similar matches.
-                        - >-
-                          Summarize the core overlap including matching title or intent, shared category, shared
-                          tags/capabilities, matching entrypoint, and exact content digest when available.
-                        - >-
-                          Summarize what would change if uploaded, including resolution option, metadata changes, file
-                          additions/removals, or changed file fingerprints.
-                        - Provide a concise diff from duplicate-check differences and local file fingerprint comparison.
-                      confirmationRequired: >-
-                        Ask the user explicitly whether to upload despite the duplicate or choose one of the returned
-                        resolutionOptions. Do not call POST /proposals until the user confirms.
+                      - Name each relevant duplicate candidate with kind, id, skillId/title
+                        when available, status/version when available, and similarity
+                        score for similar matches.
+                      - Summarize the core overlap including matching title or intent,
+                        shared category, shared tags/capabilities, matching entrypoint,
+                        and exact content digest when available.
+                      - Summarize what would change if uploaded, including resolution
+                        option, metadata changes, file additions/removals, or changed
+                        file fingerprints.
+                      - Provide a concise diff from duplicate-check differences and
+                        local file fingerprint comparison.
+                      confirmationRequired: Ask the user explicitly whether to upload
+                        despite the duplicate or choose one of the returned resolutionOptions.
+                        Do not call POST /proposals until the user confirms.
                     normalizationRules:
                       entrypointFile: SKILL.md
                       packageRoot: proposal package root
@@ -123,128 +130,142 @@ paths:
                       preserveUsefulSubfolders: true
                       transparentToSubmitter: true
                     packageHandling:
-                      principle: >-
-                        Upload source artifacts and setup manifests, not initialized package-manager outputs. The later
-                        consumer of the skill is responsible for dependency installation in their own environment.
+                      principle: Upload source artifacts and setup manifests, not
+                        initialized package-manager outputs. The later consumer of
+                        the skill is responsible for dependency installation in their
+                        own environment.
                       disallowedInstalledPaths:
-                        - node_modules/
-                        - .venv/
-                        - venv/
-                        - vendor/
-                        - dist-packages/
-                        - site-packages/
+                      - node_modules/
+                      - .venv/
+                      - venv/
+                      - vendor/
+                      - dist-packages/
+                      - site-packages/
                       allowedManifestFiles:
-                        - package.json
-                        - package-lock.json
-                        - pnpm-lock.yaml
-                        - yarn.lock
-                        - pyproject.toml
-                        - poetry.lock
-                        - requirements.txt
-                        - Pipfile.lock
-                      submitterResponsibility: >-
-                        The uploaded proposal may document how dependencies should be installed later, but it should not
-                        contain preinstalled packages or environment snapshots.
+                      - package.json
+                      - package-lock.json
+                      - pnpm-lock.yaml
+                      - yarn.lock
+                      - pyproject.toml
+                      - poetry.lock
+                      - requirements.txt
+                      - Pipfile.lock
+                      submitterResponsibility: The uploaded proposal may document
+                        how dependencies should be installed later, but it should
+                        not contain preinstalled packages or environment snapshots.
                     requiredSteps:
-                      - step: 1
-                        title: Read this workflow first
-                        checks:
-                          - GET /howToPropose is mandatory before POST /proposals
-                      - step: 2
-                        title: Use the user conversation language
-                        checks:
-                          - Use English API and contract fields as documented
-                          - Respond to the user in the language they are currently using
-                      - step: 3
-                        title: Inspect the local package
-                        checks:
-                          - Determine whether the package already matches the upload contract
-                          - >-
-                            Detect installed dependency folders such as node_modules, .venv, venv, vendor,
-                            dist-packages, or site-packages
-                          - >-
-                            Detect references outside the effective skill root, such as parent-directory references,
-                            absolute local paths, IDE/agent workspace folders, command folders, generated-output
-                            folders, or other project-root-relative paths
-                          - >-
-                            If an outside-root reference points to a required artifact, copy it into the
-                            temporary upload package and rewrite the reference to a package-relative path
-                          - >-
-                            If a runtime command reference points to .cursor/commands, .codex/commands, or
-                            .claude/commands and is relevant to using the skill, copy or merge it into
-                            commands/ and add commands/manifest.json
-                          - >-
-                            If the source package already contains commands/, preserve existing command
-                            files, compare collisions, and do not silently overwrite command artifacts
-                          - Keep dependency manifests and lockfiles, but do not upload installed package trees
-                      - step: 4
-                        title: Normalize only when needed
-                        checks:
-                          - Final entrypoint must be SKILL.md in the package root
-                          - Preserve meaningful subfolders such as commands/, scripts/, docs/, templates/, examples/, assets/, or prompts/
-                          - Rewrite workspace-root, IDE-specific, agent-specific, and generated-output references to package-relative references in the temporary upload copy
-                          - Rewrite active runtime command references to commands/<name>.md when the command ships with the package
-                          - Strip installed dependency folders from the temporary upload package
-                      - step: 5
-                        title: Prefer English proposal metadata
-                        checks:
-                          - Prefer English for title, description, category, tags and capabilities
-                          - Uploaded content files may be in any language
-                      - step: 6
-                        title: Validate self-contained and safe content
-                        checks:
-                          - No required artifact reference may still resolve outside the temporary upload package root
-                          - Broken references, credentials or PII must block the upload
-                      - step: 7
-                        title: Build and prove the final upload package before network upload
-                        checks:
-                          - Create a temporary upload package if normalization was needed
-                          - Recursively scan every readable file in the final package before POST /proposals
-                          - >-
-                            Scan for .cursor/skills, .cursor/commands, .codex/commands,
-                            .claude/commands, CursorProjects, /Users, ../, absolute local paths,
-                            Markdown links, Markdown inline-code file paths, and JSON path/source fields
-                          - >-
-                            Verify every required package reference exists, runtime output examples use
-                            placeholders, and relevant command shortcuts are packaged under commands/
-                          - Compute sha256 values from the final temporary upload package after normalization
-                          - Do not call POST /proposals until this local package proof is complete
-                      - step: 8
-                        title: Search the public catalog exploratively
-                        checks:
-                          - GET /skills/search?q=<title>&mode=keyword
-                          - GET /skills/search?q=<short description keywords>&mode=keyword
-                          - Inspect matching descriptions and public files when relevant
-                      - step: 9
-                        title: Run duplicate precheck
-                        checks:
-                          - POST /proposals/check-duplicate
-                          - Stop on exact duplicates, skill-id collisions, or strong intent matches
-                          - >-
-                            Show duplicate candidate, overlap, intended resolution, and concise
-                            metadata/file-fingerprint diff before asking
-                      - step: 10
-                        title: Create proposal only after confirmation
-                        checks:
-                          - Final temporary upload package is complete, locally scanned, normalized, and hashed
-                          - POST /proposals opens an in_upload proposal
-                          - POST /proposals/{id}/files attaches files within configured limits
-                          - POST /proposals/{id}/validate-upload returns all package findings without finalizing
-                          - >-
-                            POST /proposals/{id}/finalize-upload explicitly marks the package complete and starts
-                            judgement
+                    - step: 1
+                      title: Read this workflow first
+                      checks:
+                      - GET /howToPropose is mandatory before POST /proposals
+                    - step: 2
+                      title: Use the user conversation language
+                      checks:
+                      - Use English API and contract fields as documented
+                      - Respond to the user in the language they are currently using
+                    - step: 3
+                      title: Inspect the local package
+                      checks:
+                      - Determine whether the package already matches the upload contract
+                      - Detect installed dependency folders such as node_modules,
+                        .venv, venv, vendor, dist-packages, or site-packages
+                      - Detect references outside the effective skill root, such as
+                        parent-directory references, absolute local paths, IDE/agent
+                        workspace folders, command folders, generated-output folders,
+                        or other project-root-relative paths
+                      - If an outside-root reference points to a required artifact,
+                        copy it into the temporary upload package and rewrite the
+                        reference to a package-relative path
+                      - If a runtime command reference points to .cursor/commands,
+                        .codex/commands, or .claude/commands and is relevant to using
+                        the skill, copy or merge it into commands/ and add commands/manifest.json
+                      - If the source package already contains commands/, preserve
+                        existing command files, compare collisions, and do not silently
+                        overwrite command artifacts
+                      - Keep dependency manifests and lockfiles, but do not upload
+                        installed package trees
+                    - step: 4
+                      title: Normalize only when needed
+                      checks:
+                      - Final entrypoint must be SKILL.md in the package root
+                      - Preserve meaningful subfolders such as commands/, scripts/,
+                        docs/, templates/, examples/, assets/, or prompts/
+                      - Rewrite workspace-root, IDE-specific, agent-specific, and
+                        generated-output references to package-relative references
+                        in the temporary upload copy
+                      - Rewrite active runtime command references to commands/<name>.md
+                        when the command ships with the package
+                      - Strip installed dependency folders from the temporary upload
+                        package
+                    - step: 5
+                      title: Prefer English proposal metadata
+                      checks:
+                      - Prefer English for title, description, category, tags and
+                        capabilities
+                      - Uploaded content files may be in any language
+                    - step: 6
+                      title: Validate self-contained and safe content
+                      checks:
+                      - No required artifact reference may still resolve outside the
+                        temporary upload package root
+                      - Broken references, credentials or PII must block the upload
+                    - step: 7
+                      title: Build and prove the final upload package before network
+                        upload
+                      checks:
+                      - Create a temporary upload package if normalization was needed
+                      - Recursively scan every readable file in the final package
+                        before POST /proposals
+                      - Scan for .cursor/skills, .cursor/commands, .codex/commands,
+                        .claude/commands, CursorProjects, /Users, ../, absolute local
+                        paths, Markdown links, Markdown inline-code file paths, and
+                        JSON path/source fields
+                      - Verify every required package reference exists, runtime output
+                        examples use placeholders, and relevant command shortcuts
+                        are packaged under commands/
+                      - Compute sha256 values from the final temporary upload package
+                        after normalization
+                      - Do not call POST /proposals until this local package proof
+                        is complete
+                    - step: 8
+                      title: Search the public catalog exploratively
+                      checks:
+                      - GET /skills/search?q=<title>&mode=keyword
+                      - GET /skills/search?q=<short description keywords>&mode=keyword
+                      - Inspect matching descriptions and public files when relevant
+                    - step: 9
+                      title: Run duplicate precheck
+                      checks:
+                      - POST /proposals/check-duplicate
+                      - Stop on exact duplicates, skill-id collisions, or strong intent
+                        matches
+                      - Show duplicate candidate, overlap, intended resolution, and
+                        concise metadata/file-fingerprint diff before asking
+                    - step: 10
+                      title: Create proposal only after confirmation
+                      checks:
+                      - Final temporary upload package is complete, locally scanned,
+                        normalized, and hashed
+                      - POST /proposals opens an in_upload proposal
+                      - POST /proposals/{id}/files attaches files within configured
+                        limits
+                      - POST /proposals/{id}/validate-upload returns all package findings
+                        without finalizing
+                      - POST /proposals/{id}/finalize-upload explicitly marks the
+                        package complete and starts judgement
         '401':
           $ref: '#/components/responses/UnauthorizedError'
   /agent-credentials/setup.sh:
     get:
       operationId: getAgentCredentialSetupScript
       tags:
-        - Discovery
+      - Discovery
       summary: Download a local ManagedSkillHub credential setup script
-      description: >-
-        Generates a no-secret shell script for this registry URL and active auth requirements. By default the script
-        opens a local browser form with only the token fields required by the current config; --terminal uses terminal
-        prompts. It updates ~/.managed-skill-hub/credentials.json per registry alias/base URL.
+      description: Generates a no-secret shell script for this registry URL and active
+        auth requirements. By default the script opens a local browser form with only
+        the token fields required by the current config; --terminal uses terminal
+        prompts. It updates ~/.managed-skill-hub/credentials.json per registry alias/base
+        URL.
       responses:
         '200':
           description: Shell setup script
@@ -255,23 +276,27 @@ paths:
   /skills/suggest-name:
     get:
       operationId: suggestSkillName
-      security: &publicReadSecurity
-        - publicReadBearer: []
-        - agentOidc:
-            - managedskillhub:skills:read
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - &id001
+        agentOidc:
+        - managedskillhub:skills:read
+      - &id002
+        adminSession: []
       tags:
-        - Skills
+      - Skills
       summary: Suggest a valid Skill ID
       parameters:
-        - name: title
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: description
-          in: query
-          schema:
-            type: string
+      - name: title
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: description
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Suggested names
@@ -288,34 +313,38 @@ paths:
   /skills:
     get:
       operationId: listSkills
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: List published skills
       parameters:
-        - name: category
-          in: query
-          schema:
+      - name: category
+        in: query
+        schema:
+          type: string
+      - name: tag
+        in: query
+        description: Filter by tags. Repeat the parameter to require multiple tags.
+        schema:
+          type: array
+          items:
             type: string
-        - name: tag
-          in: query
-          description: Filter by tags. Repeat the parameter to require multiple tags.
-          schema:
-            type: array
-            items:
-              type: string
-          style: form
-          explode: true
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 50
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
+        style: form
+        explode: true
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
       responses:
         '200':
           description: List of published skills
@@ -328,48 +357,52 @@ paths:
   /skills/search:
     get:
       operationId: searchSkills
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Search published skills
       parameters:
-        - name: q
-          in: query
-          required: true
-          schema:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: mode
+        in: query
+        schema:
+          type: string
+          enum:
+          - keyword
+          - fulltext
+          - regex
+          default: keyword
+      - name: category
+        in: query
+        schema:
+          type: string
+      - name: tag
+        in: query
+        description: Filter by tags. Repeat the parameter to require multiple tags.
+        schema:
+          type: array
+          items:
             type: string
-        - name: mode
-          in: query
-          schema:
-            type: string
-            enum:
-              - keyword
-              - fulltext
-              - regex
-            default: keyword
-        - name: category
-          in: query
-          schema:
-            type: string
-        - name: tag
-          in: query
-          description: Filter by tags. Repeat the parameter to require multiple tags.
-          schema:
-            type: array
-            items:
-              type: string
-          style: form
-          explode: true
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 20
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
+        style: form
+        explode: true
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 20
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
       responses:
         '200':
           description: Search results
@@ -382,9 +415,13 @@ paths:
   /categories:
     get:
       operationId: listCategories
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: List known skill categories
       responses:
         '200':
@@ -398,9 +435,13 @@ paths:
   /tags:
     get:
       operationId: listTags
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: List known skill tags
       responses:
         '200':
@@ -414,16 +455,20 @@ paths:
   /skills/{skillId}:
     get:
       operationId: getSkill
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Get published skill
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Skill details
@@ -438,20 +483,24 @@ paths:
   /skills/{skillId}/manifest:
     get:
       operationId: getSkillManifest
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Get skill manifest
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Skill manifest
@@ -466,21 +515,25 @@ paths:
   /skills/{skillId}/package:
     get:
       operationId: downloadSkillPackage
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Download a published skill package
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          description: Optional published version. Omit to use latest published.
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        description: Optional published version. Omit to use latest published.
+        schema:
+          type: string
       responses:
         '200':
           description: Skill package or single SKILL.md file
@@ -504,20 +557,24 @@ paths:
   /skills/{skillId}/files:
     get:
       operationId: listSkillFiles
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: List skill files
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: List of files
@@ -530,25 +587,29 @@ paths:
   /skills/{skillId}/files/{fileId}:
     get:
       operationId: getSkillFile
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Download a skill file
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: File content
@@ -564,25 +625,29 @@ paths:
   /skills/{skillId}/files/{fileId}/extracted-content:
     get:
       operationId: getSkillFileExtractedContent
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Get extracted text for an extractable published skill file
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Extracted file content
@@ -599,25 +664,29 @@ paths:
   /skills/{skillId}/files/{fileId}/probe:
     get:
       operationId: getSkillFileProbe
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Probe a published skill file with ffprobe
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Probe output and parsed summary
@@ -634,20 +703,24 @@ paths:
   /skills/{skillId}/deprecation:
     get:
       operationId: getSkillDeprecation
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Public deprecation info for a published skill version
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Deprecation information
@@ -662,16 +735,20 @@ paths:
   /skills/{skillId}/versions:
     get:
       operationId: listSkillVersions
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: List versions of a skill
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: List of versions
@@ -684,16 +761,20 @@ paths:
   /skills/{skillId}/history:
     get:
       operationId: getSkillHistory
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: Get audit history of a skill
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Audit history
@@ -707,17 +788,26 @@ paths:
     post:
       operationId: checkDuplicateProposal
       tags:
-        - Proposals
+      - Proposals
       summary: Pre-submission duplicate and similarity check
-      description: |
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
-        Checks whether an identical or similar proposal/skill already exists before creating a proposal.
-        Agents should call this endpoint before submitting. Submission is not blocked by matches;
-        the response only provides transparency about existing content and skill id collisions.
+      description: 'May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc
+        when PROPOSAL_AUTH_MODE=oidc.
+
+        Checks whether an identical or similar proposal/skill already exists before
+        creating a proposal.
+
+        Agents should call this endpoint before submitting. Submission is not blocked
+        by matches;
+
+        the response only provides transparency about existing content and skill id
+        collisions.
+
+        '
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       requestBody:
         required: true
         content:
@@ -741,13 +831,15 @@ paths:
     post:
       operationId: submitProposal
       tags:
-        - Proposals
+      - Proposals
       summary: Submit a new proposal
-      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc
+        when PROPOSAL_AUTH_MODE=oidc.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       requestBody:
         required: true
         content:
@@ -769,13 +861,15 @@ paths:
     get:
       operationId: getProposalNotice
       tags:
-        - Proposals
+      - Proposals
       summary: Show whether new proposals are waiting for admin review
-      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc when PROPOSAL_AUTH_MODE=oidc.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc
+        when PROPOSAL_AUTH_MODE=oidc.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       responses:
         '200':
           description: Aggregated proposal notice
@@ -791,21 +885,22 @@ paths:
     get:
       operationId: getProposalStatus
       tags:
-        - Proposals
+      - Proposals
       summary: Public proposal status lookup
-      description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or any allowed agentOidc proposal principal when
-        PROPOSAL_AUTH_MODE=oidc. Knowing the UUID is insufficient without the configured authentication.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or any
+        allowed agentOidc proposal principal when PROPOSAL_AUTH_MODE=oidc. Knowing
+        the UUID is insufficient without the configured authentication.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Public proposal status
@@ -823,22 +918,24 @@ paths:
     patch:
       operationId: updateOpenProposalMetadata
       tags:
-        - Proposals
+      - Proposals
       summary: Update metadata for an open proposal upload
-      description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Only proposals still in `in_upload` can be
-        updated through this public submitter path. Agents should use this after submitter-side post-checks when title,
-        description, category, tags, capabilities, or entrypoint need correction before finalization.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the
+        owning agentOidc principal when oidc. Only proposals still in `in_upload`
+        can be updated through this public submitter path. Agents should use this
+        after submitter-side post-checks when title, description, category, tags,
+        capabilities, or entrypoint need correction before finalization.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -865,21 +962,23 @@ paths:
     delete:
       operationId: deleteOpenProposalUpload
       tags:
-        - Proposals
+      - Proposals
       summary: Abort and delete an open proposal upload
-      description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Only proposals still in `in_upload` can be deleted
-        through this submitter path. After finalize-upload, public proposal deletion is blocked.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the
+        owning agentOidc principal when oidc. Only proposals still in `in_upload`
+        can be deleted through this submitter path. After finalize-upload, public
+        proposal deletion is blocked.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '204':
           description: Open proposal upload deleted
@@ -897,24 +996,26 @@ paths:
     post:
       operationId: attachProposalFile
       tags:
-        - Proposals
+      - Proposals
       summary: Attach a file to a proposal
-      description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Attach one proposal artifact. When the file belongs
-        in a subfolder, send multipart field `path` with the relative in-package path such as `scripts/build.py`.
-        While the proposal is still `in_upload`, sending the same relative path again replaces that file so agents can
-        apply post-check corrections without creating another proposal.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the
+        owning agentOidc principal when oidc. Attach one proposal artifact. When the
+        file belongs in a subfolder, send multipart field `path` with the relative
+        in-package path such as `scripts/build.py`. While the proposal is still `in_upload`,
+        sending the same relative path again replaces that file so agents can apply
+        post-check corrections without creating another proposal.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
         required: true
         content:
@@ -927,9 +1028,9 @@ paths:
                   format: binary
                 path:
                   type: string
-                  description: >-
-                    Optional relative in-package path. Use this to preserve subfolders like scripts/, templates/, docs/,
-                    or assets/ during upload.
+                  description: Optional relative in-package path. Use this to preserve
+                    subfolders like scripts/, templates/, docs/, or assets/ during
+                    upload.
       responses:
         '200':
           description: File attached
@@ -951,23 +1052,26 @@ paths:
     post:
       operationId: validateProposalUpload
       tags:
-        - Proposals
+      - Proposals
       summary: Validate an open proposal upload without finalizing
-      description: >-
-        May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc. Checks the currently uploaded package while the
-        proposal is still `in_upload`, returns all package-reference findings, and does not finalize the upload, run
-        extraction, run judgement, or change proposal status. Agents should call this before finalize-upload and apply
-        corrections through PATCH /proposals/{proposalId} or POST /proposals/{proposalId}/files upserts.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the
+        owning agentOidc principal when oidc. Checks the currently uploaded package
+        while the proposal is still `in_upload`, returns all package-reference findings,
+        and does not finalize the upload, run extraction, run judgement, or change
+        proposal status. Agents should call this before finalize-upload and apply
+        corrections through PATCH /proposals/{proposalId} or POST /proposals/{proposalId}/files
+        upserts.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Upload validation result
@@ -989,20 +1093,22 @@ paths:
     post:
       operationId: finalizeProposalUpload
       tags:
-        - Proposals
+      - Proposals
       summary: Finalize an open proposal upload and start judgement
-      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the owning agentOidc principal when oidc.
+      description: May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or the
+        owning agentOidc principal when oidc.
       security:
-        - proposalBearer: []
-        - agentOidc:
-            - managedskillhub:proposals
+      - proposalBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:proposals
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
         '200':
           description: Upload finalized
@@ -1026,17 +1132,17 @@ paths:
     post:
       operationId: judgeProposal
       tags:
-        - Judgements
+      - Judgements
       summary: Request judgement for a proposal
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
         '200':
           description: Judgement result
@@ -1052,10 +1158,10 @@ paths:
     post:
       operationId: judgeFile
       tags:
-        - Judgements
+      - Judgements
       summary: Judge a single file
       security:
-        - adminSession: []
+      - adminSession: []
       requestBody:
         required: true
         content:
@@ -1081,21 +1187,21 @@ paths:
     post:
       operationId: judgeSkillVersion
       tags:
-        - Judgements
+      - Judgements
       summary: Judge a published skill version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Judgement result
@@ -1111,25 +1217,25 @@ paths:
     get:
       operationId: listJudgements
       tags:
-        - Judgements
+      - Judgements
       summary: List judgements for a target
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: targetType
-          in: path
-          required: true
-          schema:
-            type: string
-            enum:
-              - proposal
-              - skill
-              - file
-        - name: targetId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: targetType
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - proposal
+          - skill
+          - file
+      - name: targetId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: List of judgements
@@ -1143,7 +1249,7 @@ paths:
     get:
       operationId: getAdminAuthMethods
       tags:
-        - Admin Auth
+      - Admin Auth
       summary: Get the active administrator login method
       responses:
         '200':
@@ -1156,14 +1262,14 @@ paths:
     get:
       operationId: startAdminOidcLogin
       tags:
-        - Admin Auth
+      - Admin Auth
       summary: Start server-side Authentik Authorization Code login
       parameters:
-        - name: returnTo
-          in: query
-          schema:
-            type: string
-          description: Allowlisted relative route under /admin.
+      - name: returnTo
+        in: query
+        schema:
+          type: string
+        description: Allowlisted relative route under /admin.
       responses:
         '302':
           description: Redirect to the configured Authentik authorization endpoint
@@ -1173,29 +1279,30 @@ paths:
     get:
       operationId: completeAdminOidcLogin
       tags:
-        - Admin Auth
+      - Admin Auth
       summary: Validate the Authentik callback and establish a local session
       parameters:
-        - name: code
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: state
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: code
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: true
+        schema:
+          type: string
       responses:
         '302':
-          description: Local opaque session established and redirected to the stored administrator route
+          description: Local opaque session established and redirected to the stored
+            administrator route
         '401':
           $ref: '#/components/responses/UnauthorizedError'
   /admin/login:
     post:
       operationId: adminLogin
       tags:
-        - Admin Auth
+      - Admin Auth
       summary: Admin login in ADMIN_AUTH_MODE=simple only
       requestBody:
         required: true
@@ -1216,10 +1323,10 @@ paths:
     post:
       operationId: adminLogout
       tags:
-        - Admin Auth
+      - Admin Auth
       summary: Admin logout
       security:
-        - adminSession: []
+      - adminSession: []
       responses:
         '200':
           description: Logout successful
@@ -1227,10 +1334,10 @@ paths:
     get:
       operationId: getAdminSession
       tags:
-        - Admin Auth
+      - Admin Auth
       summary: Validate the current admin session
       security:
-        - adminSession: []
+      - adminSession: []
       responses:
         '200':
           description: Session is valid
@@ -1244,10 +1351,10 @@ paths:
     get:
       operationId: adminListSkills
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: List skills including unpublished latest versions
       security:
-        - adminSession: []
+      - adminSession: []
       responses:
         '200':
           description: Skill list
@@ -1260,10 +1367,10 @@ paths:
     post:
       operationId: adminCreateSkill
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Create a skill from a proposal or draft
       security:
-        - adminSession: []
+      - adminSession: []
       requestBody:
         required: true
         content:
@@ -1285,16 +1392,16 @@ paths:
     get:
       operationId: adminGetSkill
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Get any skill including unpublished versions
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Skill details
@@ -1309,16 +1416,16 @@ paths:
     patch:
       operationId: adminUpdateSkill
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Update skill draft metadata by creating a new draft version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -1340,20 +1447,20 @@ paths:
     get:
       operationId: adminListSkillFiles
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: List files for any skill version including unpublished ones
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: File list
@@ -1368,21 +1475,21 @@ paths:
     post:
       operationId: adminUploadSkillFile
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Create a new draft version by uploading or replacing a skill file
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -1395,11 +1502,11 @@ paths:
                 role:
                   type: string
                   enum:
-                    - entrypoint
-                    - example
-                    - knowledge
-                    - test
-                    - attachment
+                  - entrypoint
+                  - example
+                  - knowledge
+                  - test
+                  - attachment
                 file:
                   type: string
                   format: binary
@@ -1420,25 +1527,25 @@ paths:
     get:
       operationId: adminGetSkillFile
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Download any skill file including unpublished versions
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: File content
@@ -1454,26 +1561,26 @@ paths:
     patch:
       operationId: adminMoveSkillFile
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Create a new draft version by moving or renaming a skill file
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -1498,26 +1605,26 @@ paths:
     delete:
       operationId: adminDeleteSkillFile
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Create a new draft version by removing a skill file
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Created draft version
@@ -1535,26 +1642,26 @@ paths:
     put:
       operationId: adminUpdateSkillFileContent
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Create a new draft version by replacing text-based file content
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -1578,25 +1685,25 @@ paths:
     get:
       operationId: adminGetSkillFileExtractedContent
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Get extracted text for any skill file including unpublished versions
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Extracted file content
@@ -1614,25 +1721,25 @@ paths:
     get:
       operationId: adminGetSkillFileProbe
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Probe a skill file with ffprobe
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Probe output and parsed summary
@@ -1650,21 +1757,21 @@ paths:
     post:
       operationId: adminSubmitForReview
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Submit skill for review
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Submitted
@@ -1680,21 +1787,21 @@ paths:
     post:
       operationId: adminApproveSkill
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Approve skill version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Approved
@@ -1710,21 +1817,33 @@ paths:
     post:
       operationId: adminPublishSkill
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Publish approved skill version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                judgementOverrideReason:
+                  type: string
+                  minLength: 1
+                  description: Audited administrator-only reason for overriding a
+                    required judgement policy.
       responses:
         '200':
           description: Published
@@ -1740,21 +1859,21 @@ paths:
     post:
       operationId: adminRejectSkill
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Reject a draft, in-review, or approved skill version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -1762,7 +1881,7 @@ paths:
             schema:
               type: object
               required:
-                - reason
+              - reason
               properties:
                 reason:
                   type: string
@@ -1783,21 +1902,21 @@ paths:
     post:
       operationId: adminDeprecateSkill
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Deprecate published skill version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -1821,25 +1940,25 @@ paths:
     post:
       operationId: adminReextractSkillFile
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Re-run extraction for a skill file without modifying the original artifact
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Extracted content
@@ -1857,21 +1976,21 @@ paths:
     post:
       operationId: adminRejudgeSkillVersion
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Re-run judgement for a skill version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Judgement result
@@ -1887,10 +2006,10 @@ paths:
     post:
       operationId: adminReindexSearch
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Rebuild the published skill search index
       security:
-        - adminSession: []
+      - adminSession: []
       responses:
         '200':
           description: Reindex result
@@ -1904,17 +2023,17 @@ paths:
     post:
       operationId: adminRebuildProjections
       tags:
-        - Admin Skills
+      - Admin Skills
       summary: Rebuild relational projections for configured catalog/search providers
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: clearProjections
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
+      - name: clearProjections
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: Rebuild summary
@@ -1930,10 +2049,10 @@ paths:
     get:
       operationId: adminGetObservabilityMetrics
       tags:
-        - Admin Observability
+      - Admin Observability
       summary: Get the current observability snapshot
       security:
-        - adminSession: []
+      - adminSession: []
       responses:
         '200':
           description: Observability snapshot
@@ -1947,20 +2066,20 @@ paths:
     get:
       operationId: adminExportObservabilityMetrics
       tags:
-        - Admin Observability
+      - Admin Observability
       summary: Export the current observability snapshot
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: format
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - json
-              - csv
-            default: json
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - json
+          - csv
+          default: json
       responses:
         '200':
           description: Observability export
@@ -1977,17 +2096,17 @@ paths:
     post:
       operationId: adminConvertProposal
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Convert a proposal to a skill or skill version
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
         '200':
           description: Converted
@@ -2005,17 +2124,17 @@ paths:
     post:
       operationId: adminRejectProposal
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Reject a proposal
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
         content:
           application/json:
@@ -2039,20 +2158,20 @@ paths:
     get:
       operationId: adminListProposals
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: List proposals for review
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: skillId
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            type: string
-            description: Optional comma-separated list of proposal states.
+      - name: skillId
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+          description: Optional comma-separated list of proposal states.
       responses:
         '200':
           description: Proposal list
@@ -2066,10 +2185,10 @@ paths:
     get:
       operationId: adminGetProposalNotice
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Get the review proposal count for the administrator navigation
       security:
-        - adminSession: []
+      - adminSession: []
       responses:
         '200':
           description: Proposal review notice
@@ -2085,16 +2204,16 @@ paths:
     get:
       operationId: adminGetProposal
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Get proposal details
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Proposal details
@@ -2109,16 +2228,16 @@ paths:
     patch:
       operationId: adminUpdateProposal
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Update proposal metadata before conversion
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -2141,16 +2260,16 @@ paths:
     delete:
       operationId: adminDeleteProposal
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Delete an abandoned open proposal upload
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '204':
           description: Deleted
@@ -2164,21 +2283,21 @@ paths:
     get:
       operationId: adminGetProposalFile
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Get proposal file content
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Proposal file content
@@ -2198,21 +2317,21 @@ paths:
     get:
       operationId: adminGetProposalFileExtractedContent
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Get extracted proposal file content
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Extracted proposal file content
@@ -2230,21 +2349,21 @@ paths:
     get:
       operationId: adminGetProposalFileProbe
       tags:
-        - Admin Proposals
+      - Admin Proposals
       summary: Probe a proposal file with ffprobe
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Probe output and parsed summary
@@ -2262,21 +2381,22 @@ paths:
     post:
       operationId: adminReextractProposalFile
       tags:
-        - Admin Proposals
-      summary: Re-run extraction for a proposal file without modifying the original artifact
+      - Admin Proposals
+      summary: Re-run extraction for a proposal file without modifying the original
+        artifact
       security:
-        - adminSession: []
+      - adminSession: []
       parameters:
-        - name: proposalId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Extracted proposal file content
@@ -2290,17 +2410,51 @@ paths:
           $ref: '#/components/responses/NotFoundError'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /admin/proposals/{proposalId}/files/{fileId}/judge:
+    post:
+      operationId: adminJudgeProposalFile
+      tags:
+      - Judgements
+      summary: Re-run judgement for one stored proposal file
+      security:
+      - adminSession: []
+      parameters:
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Judgement result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgementResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /openapi.yaml:
     get:
       operationId: getOpenApiYaml
       security:
-        - discoveryBearer: []
-        - agentOidc:
-            - managedskillhub:discovery
+      - discoveryBearer: []
+      - agentSession: []
+      - agentOidc:
+        - managedskillhub:discovery
       tags:
-        - Discovery
+      - Discovery
       summary: Download OpenAPI specification
-      description: Returns the OpenAPI YAML contract. It follows DISCOVERY_AUTH_MODE and may require discoveryBearer or agentOidc.
+      description: Returns the OpenAPI YAML contract. It follows DISCOVERY_AUTH_MODE
+        and may require discoveryBearer or agentOidc.
       responses:
         '200':
           description: OpenAPI YAML
@@ -2315,20 +2469,24 @@ paths:
   /skills/{skillId}/judgements:
     get:
       operationId: listSkillPublicJudgements
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: List public judgements for a published skill version
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Skill judgements
@@ -2343,25 +2501,29 @@ paths:
   /skills/{skillId}/files/{fileId}/judgements:
     get:
       operationId: listSkillFilePublicJudgements
-      security: *publicReadSecurity
+      security:
+      - publicReadBearer: []
+      - agentSession: []
+      - *id001
+      - *id002
       tags:
-        - Skills
+      - Skills
       summary: List public judgements for a published skill file
       parameters:
-        - name: skillId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: fileId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: query
-          schema:
-            type: string
+      - name: skillId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: query
+        schema:
+          type: string
       responses:
         '200':
           description: Skill file judgements
@@ -2373,6 +2535,81 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+  /agent-sessions:
+    post:
+      operationId: createAgentSession
+      tags:
+      - Agent Sessions
+      summary: Create a short-lived agent session
+      description: 'Creates an area-scoped agent session after validating the bearer
+        token for each requested area in the dedicated X-Agent-*-Token headers. Returns
+        an 8-character session code the agent can use as "Authorization: AgentSession
+        <code>".'
+  /admin/agent-sessions:
+    get:
+      operationId: listAgentSessions
+      tags:
+      - Agent Sessions
+      - Admin
+      summary: List agent sessions
+      description: Admin-only. Returns active, expired, and revoked agent sessions
+        with sanitized metadata. Raw bearer token values are never returned.
+      security:
+      - adminSession: []
+      parameters:
+      - name: includeExpired
+        in: query
+        schema:
+          type: boolean
+      - name: includeRevoked
+        in: query
+        schema:
+          type: boolean
+      - name: limit
+        in: query
+        schema:
+          type: integer
+      - name: offset
+        in: query
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: List of agent sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSessionListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+  /admin/agent-sessions/{code}:
+    delete:
+      operationId: revokeAgentSession
+      tags:
+      - Agent Sessions
+      - Admin
+      summary: Revoke an agent session
+      description: Admin-only. Immediately revokes the agent session identified by
+        its code.
+      security:
+      - adminSession: []
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Session revoked
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
 components:
   securitySchemes:
     adminSession:
@@ -2382,29 +2619,37 @@ components:
     publicReadBearer:
       type: http
       scheme: bearer
-      description: Runtime-configurable bearer token for published skill consumption when PUBLIC_READ_AUTH_MODE=bearer.
+      description: Runtime-configurable bearer token for published skill consumption
+        when PUBLIC_READ_AUTH_MODE=bearer.
     proposalBearer:
       type: http
       scheme: bearer
-      description: >-
-        Runtime-configurable bearer token for proposal duplicate check, submit, upload, finalization, notices, and
-        status when PROPOSAL_AUTH_MODE=bearer.
+      description: Runtime-configurable bearer token for proposal duplicate check,
+        submit, upload, finalization, notices, and status when PROPOSAL_AUTH_MODE=bearer.
     discoveryBearer:
       type: http
       scheme: bearer
-      description: Runtime-configurable bearer token for discovery/contract endpoints when DISCOVERY_AUTH_MODE=bearer.
+      description: Runtime-configurable bearer token for discovery/contract endpoints
+        when DISCOVERY_AUTH_MODE=bearer.
     agentOidc:
       type: openIdConnect
       openIdConnectUrl: https://auth.example.invalid/application/o/managedskillhub-agent-device/.well-known/openid-configuration
-      description: >-
-        Runtime Authentik access token. The concrete issuer, client ID, scopes, Device Authorization endpoint, token
-        endpoint, and OpenID configuration URL must be read from /discover; this static URL is intentionally only a
-        contract placeholder.
+      description: Runtime Authentik access token. The concrete issuer, client ID,
+        scopes, Device Authorization endpoint, token endpoint, and OpenID configuration
+        URL must be read from /discover; this static URL is intentionally only a contract
+        placeholder.
       x-device-authorization:
         flow: device_code
         runtimeMetadataPath: /discover
         verificationLinkField: verification_uri_complete
         deviceCodeIsSecret: true
+    agentSession:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'Short-lived agent session code sent as "Authorization: AgentSession
+        <code>". Created through POST /agent-sessions after proving possession of
+        the relevant area bearer tokens.'
   responses:
     NotFoundError:
       description: Resource not found
@@ -2451,8 +2696,8 @@ components:
     HealthResponse:
       type: object
       required:
-        - status
-        - version
+      - status
+      - version
       properties:
         status:
           type: string
@@ -2464,18 +2709,18 @@ components:
     DiscoveryResponse:
       type: object
       required:
-        - name
-        - version
-        - description
-        - registryId
-        - registryName
-        - apiBaseUrl
-        - readAuthRequired
-        - proposalAuthRequired
-        - discoveryAuthRequired
-        - documentation
-        - capabilities
-        - entrypoints
+      - name
+      - version
+      - description
+      - registryId
+      - registryName
+      - apiBaseUrl
+      - readAuthRequired
+      - proposalAuthRequired
+      - discoveryAuthRequired
+      - documentation
+      - capabilities
+      - entrypoints
       properties:
         name:
           type: string
@@ -2499,8 +2744,8 @@ components:
             $ref: '#/components/schemas/RuntimeAuthScheme'
         credentialSetupScriptUrl:
           type:
-            - string
-            - 'null'
+          - string
+          - 'null'
         workflowNotes:
           type: object
           properties:
@@ -2525,9 +2770,9 @@ components:
         documentation:
           type: object
           required:
-            - human
-            - openapi
-            - frontend
+          - human
+          - openapi
+          - frontend
           properties:
             human:
               type: string
@@ -2541,9 +2786,9 @@ components:
           items:
             type: object
             required:
-              - id
-              - name
-              - description
+            - id
+            - name
+            - description
             properties:
               id:
                 type: string
@@ -2556,12 +2801,12 @@ components:
           items:
             type: object
             required:
-              - id
-              - name
-              - description
-              - methods
-              - path
-              - url
+            - id
+            - name
+            - description
+            - methods
+            - path
+            - url
             properties:
               id:
                 type: string
@@ -2574,11 +2819,11 @@ components:
                 items:
                   type: string
                   enum:
-                    - GET
-                    - POST
-                    - PATCH
-                    - PUT
-                    - DELETE
+                  - GET
+                  - POST
+                  - PATCH
+                  - PUT
+                  - DELETE
               path:
                 type: string
               url:
@@ -2586,21 +2831,22 @@ components:
     RuntimeAuthScheme:
       type: object
       required:
-        - id
-        - type
-        - appliesTo
+      - id
+      - type
+      - appliesTo
       properties:
         id:
           type: string
         type:
           type: string
           enum:
-            - bearer
-            - oauth2
+          - bearer
+          - oauth2
+          - agent-session
         flow:
           type: string
           enum:
-            - device_code
+          - device_code
         issuer:
           type: string
           format: uri
@@ -2627,23 +2873,23 @@ components:
           items:
             type: string
             enum:
-              - discovery
-              - public-read
-              - proposal
+            - discovery
+            - public-read
+            - proposal
     HowToProposeResponse:
       type: object
       required:
-        - id
-        - title
-        - summary
-        - description
-        - requiredSteps
-        - escalationRule
-        - duplicateConfirmationRule
-        - normalizationRules
-        - packageHandling
-        - uploadLimits
-        - uploadFinalization
+      - id
+      - title
+      - summary
+      - description
+      - requiredSteps
+      - escalationRule
+      - duplicateConfirmationRule
+      - normalizationRules
+      - packageHandling
+      - uploadLimits
+      - uploadFinalization
       properties:
         id:
           type: string
@@ -2662,10 +2908,10 @@ components:
           items:
             type: object
             required:
-              - step
-              - title
-              - purpose
-              - checks
+            - step
+            - title
+            - purpose
+            - checks
             properties:
               step:
                 type: integer
@@ -2695,11 +2941,11 @@ components:
         normalizationRules:
           type: object
           required:
-            - entrypointFile
-            - packageRoot
-            - normalizeOnlyWhenNeeded
-            - preserveUsefulSubfolders
-            - transparentToSubmitter
+          - entrypointFile
+          - packageRoot
+          - normalizeOnlyWhenNeeded
+          - preserveUsefulSubfolders
+          - transparentToSubmitter
           properties:
             entrypointFile:
               type: string
@@ -2714,10 +2960,10 @@ components:
         packageHandling:
           type: object
           required:
-            - principle
-            - disallowedInstalledPaths
-            - allowedManifestFiles
-            - submitterResponsibility
+          - principle
+          - disallowedInstalledPaths
+          - allowedManifestFiles
+          - submitterResponsibility
           properties:
             principle:
               type: string
@@ -2734,10 +2980,10 @@ components:
         uploadLimits:
           type: object
           required:
-            - maxFiles
-            - maxFileSizeBytes
-            - disallowedPaths
-            - recommendations
+          - maxFiles
+          - maxFileSizeBytes
+          - disallowedPaths
+          - recommendations
           properties:
             maxFiles:
               type: integer
@@ -2754,9 +3000,9 @@ components:
         uploadFinalization:
           type: object
           required:
-            - required
-            - finalizeEndpoint
-            - statusFollowUp
+          - required
+          - finalizeEndpoint
+          - statusFollowUp
           properties:
             required:
               type: boolean
@@ -2789,12 +3035,12 @@ components:
               type: boolean
             credentialSetupScriptUrl:
               type:
-                - string
-                - 'null'
+              - string
+              - 'null'
             authorizationHeader:
               type:
-                - string
-                - 'null'
+              - string
+              - 'null'
             authSetupFlow:
               type: string
             checkDuplicateNote:
@@ -2802,7 +3048,7 @@ components:
     SkillNameSuggestionRequest:
       type: object
       required:
-        - title
+      - title
       properties:
         title:
           type: string
@@ -2811,9 +3057,9 @@ components:
     SkillNameSuggestionResponse:
       type: object
       required:
-        - suggestion
-        - alternatives
-        - isAvailable
+      - suggestion
+      - alternatives
+      - isAvailable
       properties:
         suggestion:
           type: string
@@ -2826,8 +3072,8 @@ components:
     SkillListResponse:
       type: object
       required:
-        - items
-        - total
+      - items
+      - total
       properties:
         items:
           type: array
@@ -2838,9 +3084,9 @@ components:
     SkillSearchResponse:
       type: object
       required:
-        - items
-        - total
-        - mode
+      - items
+      - total
+      - mode
       properties:
         items:
           type: array
@@ -2853,17 +3099,17 @@ components:
     SkillSummary:
       type: object
       required:
-        - id
-        - title
-        - description
-        - category
-        - tags
-        - skillUuid
-        - versionUuid
-        - contentDigest
-        - version
-        - status
-        - publishedAt
+      - id
+      - title
+      - description
+      - category
+      - tags
+      - skillUuid
+      - versionUuid
+      - contentDigest
+      - version
+      - status
+      - publishedAt
       properties:
         id:
           type: string
@@ -2890,38 +3136,38 @@ components:
         status:
           type: string
           enum:
-            - draft
-            - in_review
-            - approved
-            - rejected
-            - published
-            - deprecated
+          - draft
+          - in_review
+          - approved
+          - rejected
+          - published
+          - deprecated
         publishedAt:
           type: string
           format: date-time
           nullable: true
     SkillSearchResult:
       allOf:
-        - $ref: '#/components/schemas/SkillSummary'
-        - type: object
-          properties:
-            score:
-              type: number
+      - $ref: '#/components/schemas/SkillSummary'
+      - type: object
+        properties:
+          score:
+            type: number
     SkillResponse:
       type: object
       required:
-        - id
-        - title
-        - description
-        - category
-        - tags
-        - capabilities
-        - useWhen
-        - doNotUseWhen
-        - entrypoint
-        - skillUuid
-        - latestPublishedVersion
-        - versions
+      - id
+      - title
+      - description
+      - category
+      - tags
+      - capabilities
+      - useWhen
+      - doNotUseWhen
+      - entrypoint
+      - skillUuid
+      - latestPublishedVersion
+      - versions
       properties:
         id:
           type: string
@@ -2962,11 +3208,11 @@ components:
     SkillVersionSummary:
       type: object
       required:
-        - version
-        - versionUuid
-        - contentDigest
-        - status
-        - createdAt
+      - version
+      - versionUuid
+      - contentDigest
+      - status
+      - createdAt
       properties:
         version:
           type: string
@@ -2978,12 +3224,12 @@ components:
         status:
           type: string
           enum:
-            - draft
-            - in_review
-            - approved
-            - rejected
-            - published
-            - deprecated
+          - draft
+          - in_review
+          - approved
+          - rejected
+          - published
+          - deprecated
         createdAt:
           type: string
           format: date-time
@@ -3024,7 +3270,7 @@ components:
     SkillVersionListResponse:
       type: object
       required:
-        - items
+      - items
       properties:
         items:
           type: array
@@ -3033,12 +3279,12 @@ components:
     Manifest:
       type: object
       required:
-        - id
-        - title
-        - version
-        - status
-        - category
-        - entrypoint
+      - id
+      - title
+      - version
+      - status
+      - category
+      - entrypoint
       properties:
         id:
           type: string
@@ -3051,12 +3297,12 @@ components:
         status:
           type: string
           enum:
-            - draft
-            - in_review
-            - approved
-            - rejected
-            - published
-            - deprecated
+          - draft
+          - in_review
+          - approved
+          - rejected
+          - published
+          - deprecated
         category:
           type: string
         tags:
@@ -3084,19 +3330,19 @@ components:
     ManifestFile:
       type: object
       required:
-        - path
-        - role
+      - path
+      - role
       properties:
         path:
           type: string
         role:
           type: string
           enum:
-            - entrypoint
-            - example
-            - knowledge
-            - test
-            - attachment
+          - entrypoint
+          - example
+          - knowledge
+          - test
+          - attachment
         mimeType:
           type: string
         sha256:
@@ -3104,7 +3350,7 @@ components:
     SkillFileListResponse:
       type: object
       required:
-        - items
+      - items
       properties:
         items:
           type: array
@@ -3113,13 +3359,13 @@ components:
     SkillFileInfo:
       type: object
       required:
-        - id
-        - artifactId
-        - path
-        - role
-        - mimeType
-        - sizeBytes
-        - extractable
+      - id
+      - artifactId
+      - path
+      - role
+      - mimeType
+      - sizeBytes
+      - extractable
       properties:
         id:
           type: string
@@ -3146,9 +3392,9 @@ components:
     ExtractedContentResponse:
       type: object
       required:
-        - text
-        - extractedBy
-        - metadata
+      - text
+      - extractedBy
+      - metadata
       properties:
         text:
           type: string
@@ -3159,15 +3405,15 @@ components:
     ProbeResponse:
       type: object
       required:
-        - probedBy
-        - tool
-        - filePath
-        - mimeType
-        - summary
-        - parsed
-        - format
-        - streams
-        - rawOutput
+      - probedBy
+      - tool
+      - filePath
+      - mimeType
+      - summary
+      - parsed
+      - format
+      - streams
+      - rawOutput
       properties:
         probedBy:
           type: string
@@ -3192,7 +3438,7 @@ components:
     AuditLogResponse:
       type: object
       required:
-        - items
+      - items
       properties:
         items:
           type: array
@@ -3201,11 +3447,11 @@ components:
     AuditEntry:
       type: object
       required:
-        - id
-        - skillId
-        - action
-        - actor
-        - createdAt
+      - id
+      - skillId
+      - action
+      - actor
+      - createdAt
       properties:
         id:
           type: string
@@ -3229,9 +3475,9 @@ components:
     SubmitProposalRequest:
       type: object
       required:
-        - title
-        - description
-        - category
+      - title
+      - description
+      - category
       properties:
         skillId:
           type: string
@@ -3254,32 +3500,32 @@ components:
     ProposalReview:
       type: object
       required:
-        - latestJudgementRisk
-        - labels
-        - latestJudgementId
-        - latestJudgedAt
+      - latestJudgementRisk
+      - labels
+      - latestJudgementId
+      - latestJudgedAt
       properties:
         latestJudgementRisk:
           type: string
           enum:
-            - low
-            - medium
-            - high
-            - critical
-            - no_judge_available
+          - low
+          - medium
+          - high
+          - critical
+          - no_judge_available
           nullable: true
         labels:
           type: array
           items:
             type: string
             enum:
-              - safe
-              - needs_review
-              - contains_executable
-              - external_dependency
-              - sensitive_input
-              - prompt_injection_risk
-              - download_only
+            - safe
+            - needs_review
+            - contains_executable
+            - external_dependency
+            - sensitive_input
+            - prompt_injection_risk
+            - download_only
         latestJudgementId:
           type: string
           nullable: true
@@ -3290,34 +3536,35 @@ components:
     ProposalResponse:
       type: object
       required:
-        - id
-        - skillId
-        - title
-        - description
-        - category
-        - tags
-        - capabilities
-        - status
-        - createdAt
-        - files
-        - judgements
-        - review
-        - conversion
-        - lifecycle
-        - uploadFinalized
-        - fileCount
-        - maxFiles
-        - maxFileSizeBytes
-        - disallowedPaths
-        - autoPublishEnabled
-        - autoPublishEligible
-        - autoPublishBlockedReason
-        - autoPublishBlockedByCategory
-        - autoPublishClassifierReason
-        - autoPublishMatchedExcludedCategory
-        - autoPublished
-        - autoPublishedSkillId
-        - autoPublishedVersion
+      - id
+      - skillId
+      - title
+      - description
+      - category
+      - tags
+      - capabilities
+      - status
+      - createdAt
+      - files
+      - judgements
+      - judgement
+      - review
+      - conversion
+      - lifecycle
+      - uploadFinalized
+      - fileCount
+      - maxFiles
+      - maxFileSizeBytes
+      - disallowedPaths
+      - autoPublishEnabled
+      - autoPublishEligible
+      - autoPublishBlockedReason
+      - autoPublishBlockedByCategory
+      - autoPublishClassifierReason
+      - autoPublishMatchedExcludedCategory
+      - autoPublished
+      - autoPublishedSkillId
+      - autoPublishedVersion
       properties:
         id:
           type: string
@@ -3344,12 +3591,12 @@ components:
         status:
           type: string
           enum:
-            - in_upload
-            - submitted
-            - judged
-            - approved
-            - rejected
-            - converted
+          - in_upload
+          - submitted
+          - judged
+          - approved
+          - rejected
+          - converted
         createdAt:
           type: string
           format: date-time
@@ -3363,6 +3610,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/JudgementResponse'
+        judgement:
+          $ref: '#/components/schemas/JudgementExecutionStatus'
         review:
           $ref: '#/components/schemas/ProposalReview'
         conversion:
@@ -3411,16 +3660,16 @@ components:
     ProposalLifecycleEvent:
       type: object
       required:
-        - id
-        - action
-        - actor
-        - at
-        - fromStatus
-        - toStatus
-        - skillId
-        - skillVersion
-        - reason
-        - comment
+      - id
+      - action
+      - actor
+      - at
+      - fromStatus
+      - toStatus
+      - skillId
+      - skillVersion
+      - reason
+      - comment
       properties:
         id:
           type: string
@@ -3472,8 +3721,8 @@ components:
     ProposalListResponse:
       type: object
       required:
-        - items
-        - total
+      - items
+      - total
       properties:
         items:
           type: array
@@ -3484,17 +3733,17 @@ components:
     ProposalSummary:
       type: object
       required:
-        - id
-        - skillId
-        - title
-        - status
-        - createdAt
-        - submittedAt
-        - rejectedAt
-        - rejectedBy
-        - latestJudgementRisk
-        - latestJudgement
-        - labels
+      - id
+      - skillId
+      - title
+      - status
+      - createdAt
+      - submittedAt
+      - rejectedAt
+      - rejectedBy
+      - latestJudgementRisk
+      - latestJudgement
+      - labels
       properties:
         id:
           type: string
@@ -3506,12 +3755,12 @@ components:
         status:
           type: string
           enum:
-            - in_upload
-            - submitted
-            - judged
-            - approved
-            - rejected
-            - converted
+          - in_upload
+          - submitted
+          - judged
+          - approved
+          - rejected
+          - converted
         createdAt:
           type: string
           format: date-time
@@ -3528,15 +3777,15 @@ components:
         latestJudgementRisk:
           type: string
           enum:
-            - low
-            - medium
-            - high
-            - critical
-            - no_judge_available
+          - low
+          - medium
+          - high
+          - critical
+          - no_judge_available
           nullable: true
         latestJudgement:
           allOf:
-            - $ref: '#/components/schemas/JudgementResponse'
+          - $ref: '#/components/schemas/JudgementResponse'
           nullable: true
         labels:
           type: array
@@ -3547,18 +3796,18 @@ components:
     ProposalConversionPreview:
       type: object
       required:
-        - mode
-        - targetSkillId
-        - targetSkillExists
-        - currentLatestVersion
-        - nextVersion
-        - targetEntrypoint
+      - mode
+      - targetSkillId
+      - targetSkillExists
+      - currentLatestVersion
+      - nextVersion
+      - targetEntrypoint
       properties:
         mode:
           type: string
           enum:
-            - create_skill
-            - create_version
+          - create_skill
+          - create_version
         targetSkillId:
           type: string
         targetSkillTitle:
@@ -3574,23 +3823,24 @@ components:
         targetEntrypoint:
           type: string
           enum:
-            - safe
-            - needs_review
-            - contains_executable
-            - external_dependency
-            - sensitive_input
-            - prompt_injection_risk
-            - download_only
+          - safe
+          - needs_review
+          - contains_executable
+          - external_dependency
+          - sensitive_input
+          - prompt_injection_risk
+          - download_only
     CheckDuplicateProposalRequest:
       type: object
       required:
-        - title
-        - description
-        - category
+      - title
+      - description
+      - category
       properties:
         skillId:
           type: string
-          description: Optional target skill id. If it already exists, conversion would create a new draft version.
+          description: Optional target skill id. If it already exists, conversion
+            would create a new draft version.
         title:
           type: string
         description:
@@ -3609,13 +3859,13 @@ components:
           type: string
         files:
           type: array
-          description: >-
-            Optional file fingerprints. If sha256 values are provided, an exact content digest can be computed and
-            checked against existing proposals/skills without uploading the full content.
+          description: Optional file fingerprints. If sha256 values are provided,
+            an exact content digest can be computed and checked against existing proposals/skills
+            without uploading the full content.
           items:
             type: object
             required:
-              - path
+            - path
             properties:
               path:
                 type: string
@@ -3625,21 +3875,21 @@ components:
     CheckDuplicateProposalMatch:
       type: object
       required:
-        - kind
-        - id
-        - skillId
-        - title
-        - description
-        - category
-        - similarityScore
-        - matchedOn
-        - differences
+      - kind
+      - id
+      - skillId
+      - title
+      - description
+      - category
+      - similarityScore
+      - matchedOn
+      - differences
       properties:
         kind:
           type: string
           enum:
-            - proposal
-            - skill
+          - proposal
+          - skill
         id:
           type: string
         skillId:
@@ -3712,17 +3962,17 @@ components:
     CheckDuplicateProposalResolutionOption:
       type: object
       required:
-        - strategy
-        - label
-        - description
-        - requiresAdminAction
+      - strategy
+      - label
+      - description
+      - requiresAdminAction
       properties:
         strategy:
           type: string
           enum:
-            - create_new_skill
-            - create_new_version
-            - request_admin_update
+          - create_new_skill
+          - create_new_version
+          - request_admin_update
         label:
           type: string
         description:
@@ -3735,18 +3985,19 @@ components:
     CheckDuplicateProposalResponse:
       type: object
       required:
-        - submittedContentDigest
-        - exactDuplicateProposalId
-        - exactDuplicateSkillId
-        - similarMatches
-        - skillIdCollision
-        - resolutionOptions
-        - note
+      - submittedContentDigest
+      - exactDuplicateProposalId
+      - exactDuplicateSkillId
+      - similarMatches
+      - skillIdCollision
+      - resolutionOptions
+      - note
       properties:
         submittedContentDigest:
           type: string
           nullable: true
-          description: Computed content digest if file fingerprints were provided, otherwise null.
+          description: Computed content digest if file fingerprints were provided,
+            otherwise null.
         exactDuplicateProposalId:
           type: string
           nullable: true
@@ -3760,9 +4011,9 @@ components:
         skillIdCollision:
           type: object
           required:
-            - exists
-            - existingSkillId
-            - note
+          - exists
+          - existingSkillId
+          - note
           properties:
             exists:
               type: boolean
@@ -3775,23 +4026,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CheckDuplicateProposalResolutionOption'
-          description: Actions the submitter can choose from based on duplicate/skill-id collision findings.
+          description: Actions the submitter can choose from based on duplicate/skill-id
+            collision findings.
         note:
           type: string
     ProposalSubmissionResponse:
       type: object
       required:
-        - id
-        - message
-        - statusUrl
-        - checkUrl
-        - finalizeUploadUrl
+      - id
+      - message
+      - statusUrl
+      - checkUrl
+      - finalizeUploadUrl
       properties:
         id:
           type: string
         message:
           type: string
-          description: Human-readable confirmation that the upload was opened and must still be finalized by the submitter.
+          description: Human-readable confirmation that the upload was opened and
+            must still be finalized by the submitter.
         statusUrl:
           type: string
           description: Absolute or prefix-aware URL to poll the public proposal status.
@@ -3800,7 +4053,8 @@ components:
           description: Alias for statusUrl, provided for convenience.
         finalizeUploadUrl:
           type: string
-          description: Absolute or prefix-aware URL to explicitly finalize the upload after all files were attached.
+          description: Absolute or prefix-aware URL to explicitly finalize the upload
+            after all files were attached.
     ProposalMetadataUpdateRequest:
       type: object
       minProperties: 1
@@ -3825,21 +4079,21 @@ components:
     ProposalMetadataUpdateResponse:
       type: object
       required:
-        - id
-        - status
-        - title
-        - description
-        - category
-        - tags
-        - capabilities
-        - entrypoint
+      - id
+      - status
+      - title
+      - description
+      - category
+      - tags
+      - capabilities
+      - entrypoint
       properties:
         id:
           type: string
         status:
           type: string
           enum:
-            - in_upload
+          - in_upload
         title:
           type: string
         description:
@@ -3860,29 +4114,30 @@ components:
     ProposalFinalizeUploadResponse:
       type: object
       required:
-        - id
-        - status
-        - message
-        - statusUrl
-        - checkUrl
-        - uploadFinalized
-        - judgementStatus
-        - autoPublishStatus
-        - autoPublishBlockedReason
+      - id
+      - status
+      - message
+      - statusUrl
+      - checkUrl
+      - uploadFinalized
+      - judgementStatus
+      - autoPublishStatus
+      - autoPublishBlockedReason
       properties:
         id:
           type: string
         status:
           type: string
           enum:
-            - submitted
-            - judged
-            - approved
-            - rejected
-            - converted
+          - submitted
+          - judged
+          - approved
+          - rejected
+          - converted
         message:
           type: string
-          description: Human-readable confirmation that the upload was finalized and judgement started.
+          description: Human-readable confirmation that the upload was finalized and
+            judgement started.
         statusUrl:
           type: string
         checkUrl:
@@ -3892,37 +4147,40 @@ components:
         judgementStatus:
           type: string
           enum:
-            - completed
+          - completed
+          - partial
+          - unavailable
+          - failed
         autoPublishStatus:
           type: string
           enum:
-            - disabled
-            - skipped
-            - published
+          - disabled
+          - skipped
+          - published
         autoPublishBlockedReason:
           type: string
           nullable: true
     ProposalPublicStatusResponse:
       type: object
       required:
-        - id
-        - skillId
-        - title
-        - status
-        - createdAt
-        - latestJudgementRisk
-        - rejectionReason
-        - convertedSkillId
-        - contentDigest
-        - duplicateOfSkillId
-        - uploadFinalized
-        - finalizeRequired
-        - autoPublishEnabled
-        - autoPublishEligible
-        - autoPublishBlockedReason
-        - reviewNote
-        - nextStepForSubmitter
-        - adminOnlyNextSteps
+      - id
+      - skillId
+      - title
+      - status
+      - createdAt
+      - latestJudgementRisk
+      - rejectionReason
+      - convertedSkillId
+      - contentDigest
+      - duplicateOfSkillId
+      - uploadFinalized
+      - finalizeRequired
+      - autoPublishEnabled
+      - autoPublishEligible
+      - autoPublishBlockedReason
+      - reviewNote
+      - nextStepForSubmitter
+      - adminOnlyNextSteps
       properties:
         id:
           type: string
@@ -3934,23 +4192,23 @@ components:
         status:
           type: string
           enum:
-            - in_upload
-            - submitted
-            - judged
-            - approved
-            - rejected
-            - converted
+          - in_upload
+          - submitted
+          - judged
+          - approved
+          - rejected
+          - converted
         createdAt:
           type: string
           format: date-time
         latestJudgementRisk:
           type: string
           enum:
-            - low
-            - medium
-            - high
-            - critical
-            - no_judge_available
+          - low
+          - medium
+          - high
+          - critical
+          - no_judge_available
           nullable: true
         rejectionReason:
           type: string
@@ -3961,18 +4219,18 @@ components:
         contentDigest:
           type: string
           nullable: true
-          description: >-
-            Content-derived digest of proposal metadata and attached file checksums. Used for duplicate detection across
-            proposals and published skills.
+          description: Content-derived digest of proposal metadata and attached file
+            checksums. Used for duplicate detection across proposals and published
+            skills.
         duplicateOfSkillId:
           type: string
           nullable: true
-          description: >-
-            ID of a published skill with identical content, if any. Submission is not blocked; admins should verify
-            whether a new version is needed.
+          description: ID of a published skill with identical content, if any. Submission
+            is not blocked; admins should verify whether a new version is needed.
         uploadFinalized:
           type: boolean
-          description: False while the submitter is still attaching files and has not called finalize-upload yet.
+          description: False while the submitter is still attaching files and has
+            not called finalize-upload yet.
         finalizeRequired:
           type: boolean
           description: True while the submitter still has to call finalize-upload.
@@ -3986,22 +4244,24 @@ components:
           nullable: true
         reviewNote:
           type: string
-          description: Explains whether the proposal is still waiting for admin review or has already been reviewed.
+          description: Explains whether the proposal is still waiting for admin review
+            or has already been reviewed.
         nextStepForSubmitter:
           type: string
-          description: >-
-            Action guidance for the submitter. Only status polling is possible; approval and publication require admin
-            access.
+          description: Action guidance for the submitter. Only status polling is possible;
+            approval and publication require admin access.
         adminOnlyNextSteps:
           type: array
           items:
             type: string
-          description: List of actions that can only be performed by an admin.
+          description: Status-dependent list of currently valid actions that can only
+            be performed by an admin. Terminal proposal states do not advertise stale
+            conversion or rejection actions.
     ProposalNoticeResponse:
       type: object
       required:
-        - hasNewProposals
-        - totalPending
+      - hasNewProposals
+      - totalPending
       properties:
         hasNewProposals:
           type: boolean
@@ -4010,8 +4270,8 @@ components:
     ProposalAttachmentResponse:
       type: object
       required:
-        - id
-        - files
+      - id
+      - files
       properties:
         id:
           type: string
@@ -4022,19 +4282,19 @@ components:
     ProposalUploadValidationResponse:
       type: object
       required:
-        - proposalId
-        - status
-        - valid
-        - fileCount
-        - checkedTextFileCount
-        - findings
+      - proposalId
+      - status
+      - valid
+      - fileCount
+      - checkedTextFileCount
+      - findings
       properties:
         proposalId:
           type: string
         status:
           type: string
           enum:
-            - in_upload
+          - in_upload
         valid:
           type: boolean
         fileCount:
@@ -4045,42 +4305,43 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProposalUploadFinding'
-          description: >-
-            Structured findings. Variable placeholder runtime-output examples such as
-            `{output}/screenshots/{name}.png`, documentation-only external references, and portable
-            command guidance findings are not hard-blocking package-reference findings.
+          description: Structured findings. Variable placeholder runtime-output examples
+            such as `{output}/screenshots/{name}.png`, documentation-only external
+            references, and portable command guidance findings are not hard-blocking
+            package-reference findings.
     ProposalUploadFinding:
       type: object
       required:
-        - kind
-        - severity
-        - blocksFinalize
-        - message
-        - file
-        - line
-        - candidate
-        - suggestedReplacement
+      - kind
+      - severity
+      - blocksFinalize
+      - message
+      - file
+      - line
+      - candidate
+      - suggestedReplacement
       properties:
         kind:
           type: string
           enum:
-            - empty_upload
-            - external_reference
-            - missing_package_reference
-            - outside_root_reference
-            - portable_command_manifest_invalid
-            - portable_command_manifest_missing
-            - portable_command_missing
-            - portable_command_reference
+          - empty_upload
+          - external_reference
+          - missing_package_reference
+          - outside_root_reference
+          - portable_command_manifest_invalid
+          - portable_command_manifest_missing
+          - portable_command_missing
+          - portable_command_reference
         severity:
           type: string
           enum:
-            - error
-            - warning
-            - info
+          - error
+          - warning
+          - info
         blocksFinalize:
           type: boolean
-          description: True when the finding must be fixed before finalize-upload can succeed.
+          description: True when the finding must be fixed before finalize-upload
+            can succeed.
         message:
           type: string
         file:
@@ -4098,11 +4359,12 @@ components:
     ProposalFileResponse:
       type: object
       required:
-        - id
-        - path
-        - mimeType
-        - sizeBytes
-        - extractable
+      - id
+      - path
+      - mimeType
+      - sizeBytes
+      - extractable
+      - judgement
       properties:
         id:
           type: string
@@ -4117,15 +4379,40 @@ components:
           nullable: true
         extractable:
           type: boolean
+        judgement:
+          $ref: '#/components/schemas/JudgementExecutionStatus'
+    JudgementExecutionStatus:
+      type: object
+      required:
+      - state
+      - provider
+      - attemptedAt
+      - message
+      properties:
+        state:
+          type: string
+          enum:
+          - not_started
+          - completed
+          - unavailable
+          - failed
+        provider:
+          type: string
+        attemptedAt:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
     SkillDeprecationInfoResponse:
       type: object
       required:
-        - skillId
-        - version
-        - status
-        - deprecatedBy
-        - deprecatedAt
-        - reason
+      - skillId
+      - version
+      - status
+      - deprecatedBy
+      - deprecatedAt
+      - reason
       properties:
         skillId:
           type: string
@@ -4134,12 +4421,12 @@ components:
         status:
           type: string
           enum:
-            - draft
-            - in_review
-            - approved
-            - rejected
-            - published
-            - deprecated
+          - draft
+          - in_review
+          - approved
+          - rejected
+          - published
+          - deprecated
         deprecatedBy:
           type: string
           nullable: true
@@ -4153,7 +4440,7 @@ components:
     CategoryListResponse:
       type: object
       required:
-        - items
+      - items
       properties:
         items:
           type: array
@@ -4162,7 +4449,7 @@ components:
     TagListResponse:
       type: object
       required:
-        - items
+      - items
       properties:
         items:
           type: array
@@ -4171,18 +4458,18 @@ components:
     ReindexSearchResponse:
       type: object
       required:
-        - indexedVersions
+      - indexedVersions
       properties:
         indexedVersions:
           type: integer
     RebuildProjectionsResponse:
       type: object
       required:
-        - skills
-        - proposals
-        - publishedVersions
-        - skillJudgements
-        - auditEntries
+      - skills
+      - proposals
+      - publishedVersions
+      - skillJudgements
+      - auditEntries
       properties:
         skills:
           type: integer
@@ -4197,14 +4484,14 @@ components:
     ObservabilityMetricsResponse:
       type: object
       required:
-        - generatedAt
-        - counters
-        - areaSummaries
-        - requestTimeline
-        - latencyHistogram
-        - hourlyRollups
-        - recentRequests
-        - recentErrors
+      - generatedAt
+      - counters
+      - areaSummaries
+      - requestTimeline
+      - latencyHistogram
+      - hourlyRollups
+      - recentRequests
+      - recentErrors
       properties:
         generatedAt:
           type: string
@@ -4240,28 +4527,28 @@ components:
     ObservabilityCounter:
       type: object
       required:
-        - name
-        - area
-        - method
-        - route
-        - statusClass
-        - count
-        - lastObservedAt
+      - name
+      - area
+      - method
+      - route
+      - statusClass
+      - count
+      - lastObservedAt
       properties:
         name:
           type: string
         area:
           type: string
           enum:
-            - retrieval
-            - viewer
-            - proposal
-            - review
-            - publish
-            - extraction
-            - auth
-            - observability
-            - other
+          - retrieval
+          - viewer
+          - proposal
+          - review
+          - publish
+          - extraction
+          - auth
+          - observability
+          - other
         method:
           type: string
         route:
@@ -4276,26 +4563,26 @@ components:
     ObservabilityAreaSummary:
       type: object
       required:
-        - area
-        - totalRequests
-        - errorRequests
-        - avgDurationMs
-        - p95DurationMs
-        - maxDurationMs
-        - lastObservedAt
+      - area
+      - totalRequests
+      - errorRequests
+      - avgDurationMs
+      - p95DurationMs
+      - maxDurationMs
+      - lastObservedAt
       properties:
         area:
           type: string
           enum:
-            - retrieval
-            - viewer
-            - proposal
-            - review
-            - publish
-            - extraction
-            - auth
-            - observability
-            - other
+          - retrieval
+          - viewer
+          - proposal
+          - review
+          - publish
+          - extraction
+          - auth
+          - observability
+          - other
         totalRequests:
           type: integer
         errorRequests:
@@ -4312,10 +4599,10 @@ components:
     ObservabilityTimelineBucket:
       type: object
       required:
-        - bucketStart
-        - bucketEnd
-        - totalRequests
-        - errorRequests
+      - bucketStart
+      - bucketEnd
+      - totalRequests
+      - errorRequests
       properties:
         bucketStart:
           type: string
@@ -4330,10 +4617,10 @@ components:
     ObservabilityLatencyHistogramBucket:
       type: object
       required:
-        - label
-        - minDurationMs
-        - maxDurationMs
-        - count
+      - label
+      - minDurationMs
+      - maxDurationMs
+      - count
       properties:
         label:
           type: string
@@ -4347,12 +4634,12 @@ components:
     ObservabilityHourlyRollup:
       type: object
       required:
-        - bucketStart
-        - bucketEnd
-        - totalRequests
-        - errorRequests
-        - avgDurationMs
-        - maxDurationMs
+      - bucketStart
+      - bucketEnd
+      - totalRequests
+      - errorRequests
+      - avgDurationMs
+      - maxDurationMs
       properties:
         bucketStart:
           type: string
@@ -4371,14 +4658,14 @@ components:
     ObservabilityRequest:
       type: object
       required:
-        - traceId
-        - method
-        - route
-        - url
-        - statusCode
-        - durationMs
-        - area
-        - timestamp
+      - traceId
+      - method
+      - route
+      - url
+      - statusCode
+      - durationMs
+      - area
+      - timestamp
       properties:
         traceId:
           type: string
@@ -4395,15 +4682,15 @@ components:
         area:
           type: string
           enum:
-            - retrieval
-            - viewer
-            - proposal
-            - review
-            - publish
-            - extraction
-            - auth
-            - observability
-            - other
+          - retrieval
+          - viewer
+          - proposal
+          - review
+          - publish
+          - extraction
+          - auth
+          - observability
+          - other
         timestamp:
           type: string
           format: date-time
@@ -4428,15 +4715,15 @@ components:
     IdResponse:
       type: object
       required:
-        - id
+      - id
       properties:
         id:
           type: string
     SkillMutationResponse:
       type: object
       required:
-        - id
-        - version
+      - id
+      - version
       properties:
         id:
           type: string
@@ -4445,23 +4732,23 @@ components:
     JudgementResponse:
       type: object
       required:
-        - id
-        - targetType
-        - targetId
-        - dimensions
-        - overallRisk
-        - summary
-        - skillPurposeSummary
-        - createdAt
+      - id
+      - targetType
+      - targetId
+      - dimensions
+      - overallRisk
+      - summary
+      - skillPurposeSummary
+      - createdAt
       properties:
         id:
           type: string
         targetType:
           type: string
           enum:
-            - proposal
-            - skill
-            - file
+          - proposal
+          - skill
+          - file
         targetId:
           type: string
         dimensions:
@@ -4471,11 +4758,11 @@ components:
         overallRisk:
           type: string
           enum:
-            - low
-            - medium
-            - high
-            - critical
-            - no_judge_available
+          - low
+          - medium
+          - high
+          - critical
+          - no_judge_available
         summary:
           type: string
         skillPurposeSummary:
@@ -4490,16 +4777,16 @@ components:
     JudgementDimension:
       type: object
       required:
-        - risk
-        - score
+      - risk
+      - score
       properties:
         risk:
           type: string
           enum:
-            - low
-            - medium
-            - high
-            - critical
+          - low
+          - medium
+          - high
+          - critical
         score:
           type: number
         reason:
@@ -4507,7 +4794,7 @@ components:
     JudgementListResponse:
       type: object
       required:
-        - items
+      - items
       properties:
         items:
           type: array
@@ -4516,8 +4803,8 @@ components:
     AdminLoginRequest:
       type: object
       required:
-        - username
-        - password
+      - username
+      - password
       properties:
         username:
           type: string
@@ -4526,70 +4813,71 @@ components:
     AdminLoginResponse:
       type: object
       required:
-        - success
+      - success
       properties:
         success:
           type: boolean
     AdminSessionResponse:
       type: object
       required:
-        - username
-        - roles
-        - mode
-        - expiresAt
+      - username
+      - roles
+      - mode
+      - expiresAt
       properties:
         username:
           type: string
         displayName:
           type:
-            - string
-            - 'null'
+          - string
+          - 'null'
         roles:
           type: array
           items:
             type: string
             enum:
-              - submitter
-              - reader
-              - reviewer
-              - publisher
-              - admin
+            - submitter
+            - reader
+            - reviewer
+            - publisher
+            - admin
         mode:
           type: string
           enum:
-            - simple
-            - oidc
+          - simple
+          - oidc
         expiresAt:
           type: string
           format: date-time
     AdminAuthMethodsResponse:
       type: object
       required:
-        - mode
-        - loginStartUrl
-        - adminUiBasePath
+      - mode
+      - loginStartUrl
+      - adminUiBasePath
       properties:
         mode:
           type: string
           enum:
-            - simple
-            - oidc
+          - simple
+          - oidc
         loginStartUrl:
           type:
-            - string
-            - 'null'
+          - string
+          - 'null'
         adminUiBasePath:
           type: string
-          description: Absolute-path prefix accepted as the post-login administrator return target.
+          description: Absolute-path prefix accepted as the post-login administrator
+            return target.
           example: /frontend/admin
     AdminCreateSkillRequest:
       type: object
       required:
-        - id
-        - title
-        - description
-        - category
-        - entrypoint
+      - id
+      - title
+      - description
+      - category
+      - entrypoint
       properties:
         id:
           type: string
@@ -4629,14 +4917,14 @@ components:
     AdminMoveSkillFileRequest:
       type: object
       required:
-        - path
+      - path
       properties:
         path:
           type: string
     AdminUpdateSkillFileContentRequest:
       type: object
       required:
-        - content
+      - content
       properties:
         content:
           type: string
@@ -4645,9 +4933,9 @@ components:
     ErrorResponse:
       type: object
       required:
-        - error
-        - code
-        - requestId
+      - error
+      - code
+      - requestId
       properties:
         error:
           type: string
@@ -4664,20 +4952,115 @@ components:
             authArea:
               type: string
               enum:
-                - discovery
-                - public-read
-                - proposal
+              - discovery
+              - public-read
+              - proposal
             authScheme:
               type: string
               enum:
-                - bearer
+              - bearer
+              - agent-session
             discoverUrl:
               type: string
             credentialSetupScriptUrl:
               type:
-                - string
-                - 'null'
+              - string
+              - 'null'
             recommendation:
               type: string
         originalError:
           type: string
+    AgentSession:
+      type: object
+      required:
+      - code
+      - areas
+      - createdAt
+      - expiresAt
+      - revokedAt
+      - lastUsedAt
+      - createdByIp
+      - lastUsedIp
+      - userAgent
+      properties:
+        code:
+          type: string
+        areas:
+          type: array
+          items:
+            type: string
+            enum:
+            - discovery
+            - public-read
+            - proposal
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        lastUsedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdByIp:
+          type:
+          - string
+          - 'null'
+        lastUsedIp:
+          type:
+          - string
+          - 'null'
+        userAgent:
+          type:
+          - string
+          - 'null'
+    AgentSessionListResponse:
+      type: object
+      required:
+      - sessions
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentSession'
+    CreateAgentSessionRequest:
+      type: object
+      required:
+      - areas
+      properties:
+        areas:
+          type: array
+          items:
+            type: string
+            enum:
+            - discovery
+            - public-read
+            - proposal
+          minItems: 1
+    CreateAgentSessionResponse:
+      type: object
+      required:
+      - code
+      - areas
+      - expiresAt
+      properties:
+        code:
+          type: string
+        areas:
+          type: array
+          items:
+            type: string
+            enum:
+            - discovery
+            - public-read
+            - proposal
+        expiresAt:
+          type: string
+          format: date-time

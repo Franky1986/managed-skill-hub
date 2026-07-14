@@ -29,17 +29,17 @@ sanitized summaries and identify evidence artifacts by path or CI run ID.
 Complete this once for each acceptance run:
 
 ```text
-Run ID:
-Commit SHA:
-Date/time (UTC):
-Operator:
+Run ID: auth-2026-07-14-01
+Commit SHA: 7d96823
+Date/time (UTC): 2026-07-14
+Operator: frankrichter
 Follow-up agent:
-Environment label:
+Environment label: local
 Public API base URL:
 Web base URL:
-Authentik version:
-Deployment/reverse-proxy version:
-Notes:
+Authentik version: not applicable to AUTH-00
+Deployment/reverse-proxy version: not applicable to AUTH-00
+Notes: Local baseline with the configured MySQL catalog/search profile.
 ```
 
 Use non-sensitive aliases for test identities:
@@ -56,9 +56,9 @@ Use non-sensitive aliases for test identities:
 
 | ID | Profile | Status | Result reference |
 |---|---|---|---|
-| AUTH-00 | Automated baseline | `[ ] NOT RUN` | |
+| AUTH-00 | Automated baseline | `[x] PASS` | `auth-2026-07-14-01` |
 | AUTH-01 | Simple admin, open agent APIs | `[ ] NOT RUN` | |
-| AUTH-02 | Independent static bearer areas | `[ ] NOT RUN` | |
+| AUTH-02 | Independent static bearer areas | `[x] PASS` | `auth-2026-07-14-03-AUTH-02` |
 | AUTH-03 | Production configuration fail-fast | `[ ] NOT RUN` | |
 | AUTH-04 | Authentik provider and proxy readiness | `[ ] NOT RUN` | |
 | AUTH-05 | OIDC admin browser session | `[ ] NOT RUN` | |
@@ -112,22 +112,68 @@ curl -o /dev/null -sS -w '%{http_code}\n' "$BASE_URL/categories"
 curl -o /dev/null -sS -w '%{http_code}\n' "$BASE_URL/proposals/notice"
 ```
 
+## Sanitized Evidence Logging
+
+Create one ignored evidence directory per scenario. Application logs and test
+status output are useful for follow-up agents, but credentials and protocol
+artifacts are not evidence and must never be captured.
+
+```bash
+RUN_ID='auth-2026-07-14-02-AUTH-01'
+RUN_DIR=".tmp/auth-acceptance/$RUN_ID"
+mkdir -p "$RUN_DIR"
+bash scripts/restart-all.sh restart | tee "$RUN_DIR/start.log"
+```
+
+Allowed evidence:
+
+- commit SHA, run ID, environment label, and non-secret auth modes;
+- endpoint path, HTTP status, expected/observed result, and coarse error code;
+- sanitized server events without headers, query credentials, subjects, email,
+  proposal UUIDs, or provider payloads;
+- a manual `PASS|FAIL|BLOCKED` note for browser-only steps.
+
+Never use `set -x`, `curl -v`, raw header dumps, browser HAR export, or copied
+browser storage. Never log `Authorization`, `Cookie`, `Set-Cookie`, passwords,
+authorization codes, device codes, access/ID/refresh tokens, or full OIDC
+callback URLs.
+
+After a scenario, preserve the server log and scan the evidence directory:
+
+```bash
+cp .tmp/restart-all.log "$RUN_DIR/server.log"
+if rg -l '(Authorization:|Cookie:|Set-Cookie:|password=|access_token|id_token|refresh_token|code=)' "$RUN_DIR" >/dev/null; then
+  echo 'sensitiveEvidenceScan=FAIL'
+else
+  echo 'sensitiveEvidenceScan=PASS'
+fi
+```
+
+The scan must return no sensitive matches. A follow-up agent may read files in
+`$RUN_DIR`, but must not read `.env.secrets` or browser state.
+
 ## AUTH-00: Automated Baseline
 
 Profile: current working tree, no external Authentik required.
 
-- [ ] `./scripts/check.sh` finishes with `[OK]`.
-- [ ] `.tmp/agent-auth-matrix.json` reports 27 passed permutations and zero
+- [x] `./scripts/check.sh` finishes with `[OK]`.
+- [x] `.tmp/agent-auth-matrix.json` reports 27 passed permutations and zero
       failures.
-- [ ] `.tmp/oidc-provider.json` reports valid ID-token verification,
+- [x] `.tmp/oidc-provider.json` reports valid ID-token verification,
       `at_hash` binding, ID-token rejection as an API token, rotation, and
       fail-closed outage behavior.
-- [ ] `npm run build:prod` succeeds.
-- [ ] `npm audit --audit-level=moderate` reports zero vulnerabilities.
-- [ ] When MySQL is in rollout scope,
-      `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` succeeds.
+- [x] `npm run build:prod` succeeds.
+- [x] `npm audit --audit-level=moderate` reports zero vulnerabilities.
+- [x] `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` succeeds for the
+      configured MySQL catalog/search profile.
 
-Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
+Status: `[x] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
+
+Result: `./scripts/check.sh` returned `[OK]`; all workspace production builds
+completed; Vite emitted only the known non-blocking 500-kB chunk warning; npm
+reported zero vulnerabilities; the MySQL full check completed every implemented
+gate. The real Authentik staging gate remains a separate environment-specific
+scenario.
 
 ## AUTH-01: Simple Admin, Open Agent APIs
 
@@ -148,24 +194,60 @@ admin credentials, and keep all three agent areas set to `none`.
 
 Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
 
+Technical pretest: `auth-2026-07-14-02-AUTH-01` passed public-route, anonymous
+admin rejection, invalid-login, valid-login, session, reviewer-badge, logout,
+and post-logout API probes. Its sanitized evidence is stored under
+`.tmp/auth-acceptance/auth-2026-07-14-02-AUTH-01/`. Browser behavior and the
+disposable upload workflow still require operator acceptance.
+
 ## AUTH-02: Independent Static Bearer Areas
 
 Use three different random tokens and configure all agent areas as `bearer`.
 Keep admin auth independent in `simple` mode.
 
-- [ ] Each protected area returns normalized `401` without credentials.
-- [ ] Each area accepts only its own token; using the read token for proposals,
+- [x] Each protected area returns normalized `401` without credentials.
+- [x] Each area accepts only its own token; using the read token for proposals,
       for example, fails.
-- [ ] Discovery advertises bearer auth and exposes the setup-script URL.
-- [ ] The generated setup script contains only the fields required by the
+- [x] Discovery advertises bearer auth and exposes the setup-script URL.
+- [x] The generated setup script contains only the fields required by the
       active bearer areas and contains no secret value.
-- [ ] A configured token can be read from the local credential store and used
+- [x] A configured token can be read from the local credential store and used
       without placing it in agent chat.
-- [ ] Browser admin cookies do not authorize agent API routes.
-- [ ] Static bearer proposals use the configured shared actor, and the result
+- [ ] A valid admin browser session with `reader` or `admin` can read the
+      protected published catalog, but cannot authorize discovery or proposal
+      routes; invalid and reviewer-only sessions still require the area's
+      agent credential.
+- [x] Static bearer proposals use the configured shared actor, and the result
       records that this mode does not provide per-human ownership.
 
-Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
+Status: `[x] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
+
+Result: `auth-2026-07-14-03-AUTH-02`
+
+Profile selectors (no secrets):
+- `ADMIN_AUTH_MODE=simple`
+- `DISCOVERY_AUTH_MODE=none`
+- `PUBLIC_READ_AUTH_MODE=bearer`
+- `PROPOSAL_AUTH_MODE=bearer`
+
+Observed HTTP results:
+- `GET /discover` without credentials → `200`, advertises
+  `credentialSetupScriptUrl` and bearer schemes for `public-read` and
+  `proposal`.
+- `GET /agent-credentials/setup.sh` → `200`, `Content-Type: text/x-shellscript`,
+  attachment disposition; script contains prompts for read and proposal tokens
+  but no server-side secret values.
+- `bash setup-managed-skill-hub.sh --terminal` with environment-supplied
+  tokens writes `~/.managed-skill-hub/credentials.json` with mode `600` and
+  parent directory mode `700`.
+- `GET /skills` without token → `401`; with read token → `200`; with wrong
+  token → `401`; with proposal token → `401` (cross-area isolation).
+- `POST /proposals` without token → `401`; with proposal token and valid body
+  → `201`; with read token → `401` (cross-area isolation).
+
+Sanitized evidence: `.tmp/auth-acceptance/auth-2026-07-14-03-AUTH-02/`
+(created by the operator). Note: the admin browser session fallback for
+protected published reads was not exercised in this run.
 
 ## AUTH-03: Production Configuration Fail-Fast
 
@@ -252,9 +334,11 @@ Configure `PUBLIC_READ_AUTH_MODE=oidc` and
       read route.
 - [ ] A proposal-only access token without the read scope is rejected.
 - [ ] Draft or non-published skills are never exposed through the read API.
-- [ ] The public React catalog does not silently reuse an admin session or store
-      an agent token. Record the currently expected limitation that protected
-      public browsing has no separate browser OIDC flow.
+- [ ] The public React catalog stores no agent token and can use a valid admin
+      session with `reader` or `admin` as an explicit read-only alternative.
+- [ ] Logout or session expiry removes that alternative; protected catalog
+      reads then return `401` until agent read auth or a new admin session is
+      present.
 
 Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
 
@@ -269,8 +353,9 @@ Configure proposal and/or read access as `required_groups`.
       fresh token.
 - [ ] Removing a group is reflected after token/session renewal; an old bounded
       token or role snapshot remains valid only for its documented lifetime.
-- [ ] Reviewer, publisher, and admin groups do not implicitly grant agent API
-      area access unless they are also configured for that area.
+- [ ] Reviewer and publisher groups do not implicitly grant agent API area
+      access. The documented admin-session exception permits only published
+      reads for `reader` or `admin`; agent tokens still follow area policy.
 
 Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
 
@@ -290,11 +375,27 @@ PROPOSAL_AUTH_MODE=oidc
 - [ ] The read token cannot authorize proposals.
 - [ ] The OIDC proposal token cannot authorize reads unless it separately has
       the configured read scope and the read area is changed to OIDC.
-- [ ] Admin authentication remains independent from all three agent areas.
+- [ ] A reader-capable admin browser session permits only protected published
+      reads; it does not authorize discovery or proposal routes.
 - [ ] At least one additional mixed profile is tested when it matches the
       intended deployment.
 
 Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
+
+Runtime observation on 2026-07-14: with discovery and proposals open and public
+reads protected by static bearer, anonymous catalog requests correctly returned
+`401`, proposal upload/finalization succeeded, but the logged-in admin catalog
+also returned `401`. The route-level fallback has since been corrected; repeat
+this mixed-profile browser check after restart before marking the scenario.
+
+Retest observation on 2026-07-14: under the additional mixed profile
+`discovery=none`, `public-read=bearer`, `proposal=none`, the logged-in admin
+catalog request to `/categories` returned `200`, the proposal detail endpoint
+returned `200`, and `/admin/proposals/notice` polled successfully at 10-second
+intervals without `401` responses. After publication, the configured read
+bearer returned `200` for skill detail and package while an anonymous read of
+the same skill returned normalized `401`. The representative OIDC-proposal
+profile and remaining cross-area credential boundaries are still pending.
 
 ## AUTH-10: OIDC-Protected Discovery
 

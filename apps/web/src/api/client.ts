@@ -33,6 +33,14 @@ export const apiClient: AxiosInstance = axios.create({
   withCredentials: true,
 });
 
+export function getApiErrorCode(error: unknown): string | null {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+  const payload = (error as AxiosError<{ code?: string }>).response?.data;
+  return payload?.code ?? null;
+}
+
 export function handleApiError(error: unknown, language: LanguageCode = 'en'): string {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<{

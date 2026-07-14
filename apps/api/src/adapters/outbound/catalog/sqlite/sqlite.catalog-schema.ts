@@ -166,6 +166,22 @@ export function ensureSqliteCatalogSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry
       ON admin_sessions (expires_at, session_id_hash);
 
+
+    CREATE TABLE IF NOT EXISTS agent_sessions (
+      code TEXT PRIMARY KEY,
+      areas TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      last_used_at TEXT,
+      created_by_ip TEXT,
+      last_used_ip TEXT,
+      user_agent TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_sessions_expiry
+      ON agent_sessions (expires_at, code);
+    CREATE INDEX IF NOT EXISTS idx_agent_sessions_revoked
+      ON agent_sessions (revoked_at, code);
     CREATE TABLE IF NOT EXISTS oidc_login_transactions (
       state_hash TEXT PRIMARY KEY,
       nonce TEXT NOT NULL,
@@ -184,6 +200,27 @@ export function ensureSqliteCatalogSchema(db: Database.Database): void {
   ensureAuditColumns(db);
   ensureProposalColumns(db);
   ensureVersionColumns(db);
+  ensureAgentSessionColumns(db);
+}
+
+function ensureAgentSessionColumns(db: Database.Database): void {
+  const columns = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('revoked_at')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN revoked_at TEXT;`);
+  }
+  if (!names.has('last_used_at')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_used_at TEXT;`);
+  }
+  if (!names.has('created_by_ip')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN created_by_ip TEXT;`);
+  }
+  if (!names.has('last_used_ip')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_used_ip TEXT;`);
+  }
+  if (!names.has('user_agent')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN user_agent TEXT;`);
+  }
 }
 
 function ensureAuditColumns(db: Database.Database): void {

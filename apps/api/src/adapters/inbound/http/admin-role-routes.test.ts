@@ -104,13 +104,32 @@ describe('administrator role route wiring', () => {
     expect(reindex.statusCode).toBe(403);
     expect(testContainer.reviewSkill.approve).not.toHaveBeenCalled();
     expect(testContainer.reindexSkillSearch.execute).not.toHaveBeenCalled();
+    expect(testContainer.reviewSkill.publish).toHaveBeenCalledWith(
+      'skill-1',
+      '1.0.0',
+      expect.any(String),
+      expect.objectContaining({ judgementOverrideAllowed: false })
+    );
   });
 
   it('lets administrators satisfy specialized and admin-only routes', async () => {
-    const { app } = await appFor(['admin']);
+    const { app, testContainer } = await appFor(['admin']);
 
     expect((await app.inject({ method: 'POST', url: '/admin/skills/skill-1/approve?version=1.0.0' })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: '/admin/skills/skill-1/publish?version=1.0.0' })).statusCode).toBe(200);
+    expect((await app.inject({
+      method: 'POST',
+      url: '/admin/skills/skill-1/publish?version=1.0.0',
+      payload: { judgementOverrideReason: 'Manual security review completed' },
+    })).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url: '/admin/search/reindex' })).statusCode).toBe(200);
+    expect(testContainer.reviewSkill.publish).toHaveBeenCalledWith(
+      'skill-1',
+      '1.0.0',
+      expect.any(String),
+      expect.objectContaining({
+        judgementOverrideAllowed: true,
+        judgementOverrideReason: 'Manual security review completed',
+      })
+    );
   });
 });

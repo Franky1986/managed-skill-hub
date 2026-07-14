@@ -10,6 +10,7 @@ import {
   parseJudgerProvider,
   parseOidcAccessPolicy,
   parseOidcAccessTokenValidationMode,
+  parsePublishJudgementPolicy,
   parseSearchProvider,
   resolveDataDir,
 } from './config';
@@ -46,6 +47,26 @@ describe('judger provider parsing', () => {
 
   it('supports custom providers without validation, but loader still needs a path', () => {
     expect(parseJudgerProvider('my-custom-judger')).toBe('my-custom-judger');
+  });
+});
+
+describe('publish judgement policy parsing', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('defaults to warn outside production and required in production', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    expect(parsePublishJudgementPolicy(undefined)).toBe('warn');
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(parsePublishJudgementPolicy(undefined)).toBe('required');
+  });
+
+  it('accepts only documented policy values', () => {
+    expect(parsePublishJudgementPolicy('disabled')).toBe('disabled');
+    expect(parsePublishJudgementPolicy('warn')).toBe('warn');
+    expect(parsePublishJudgementPolicy('required')).toBe('required');
+    expect(() => parsePublishJudgementPolicy('optional')).toThrow(ConfigurationError);
   });
 });
 
@@ -523,6 +544,20 @@ describe('security config', () => {
     expect(config.adminPassword).toBeNull();
     expect(config.adminPasswordHash).toContain('$2b$10$');
     expect(config.proposalAuthMode).toBe('bearer');
+  });
+
+  it('rejects a built-in judger combined with a custom adapter path in production', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('JUDGER_ADAPTER_PATH', './custom.judger.ts');
+    vi.stubEnv('ADMIN_PASSWORD', '');
+    vi.stubEnv('ADMIN_PASSWORD_HASH', '$2b$10$012345678901234567890u01234567890123456789012345678901234');
+    vi.stubEnv('JWT_SECRET', 'production-secret-with-at-least-32-characters');
+    vi.stubEnv('PROPOSAL_AUTH_MODE', 'bearer');
+    vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'J6f8mB3wQ2rN9xK4pT7vC5sL1hD0zA8u');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    expect(() => loadConfig()).toThrow(/JUDGER_ADAPTER_PATH must be empty/);
   });
 
   it('does not require local admin credentials or JWT_SECRET in production OIDC mode', () => {

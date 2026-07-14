@@ -7,6 +7,7 @@ HTTP adapter for LLM judgement operations.
 ## Scope
 
 - `POST /admin/proposals/:proposalId/judge`
+- `POST /admin/proposals/:proposalId/files/:fileId/judge`
 - `POST /admin/judge/skill/:skillId/version/:version`
 - `POST /admin/judge/file`, direct file upload for checking
 - `GET /admin/judgements/:targetType/:targetId`
@@ -53,6 +54,8 @@ HTTP adapter for LLM judgement operations.
 
 - Admin sees assessments for proposals.
 - Proposal judgement and file judgement use configured `SkillJudgerPort`.
+- Stored proposal-file retry persists the result and remains available after
+  proposal conversion so operators can repair an incomplete judgement history.
 - Timeout/provider errors are translated into suitable HTTP status codes.
 - On-demand judgement POSTs require valid admin session.
 - `POST /admin/judge/skill/:skillId/version/:version` judges a concrete skill

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { proposalsApi, ProposalPublicStatus } from '../api/proposals';
 import { handleApiError } from '../api/client';
 import { useLanguage } from '../i18n';
 import { formatLocalDateTime } from '../lib/formatLocalDateTime';
 import { formatOverallRiskLabel, isNoJudgeAvailable, noJudgeHint } from '../lib/judgement';
+import { useBackgroundPolling } from '../hooks/useBackgroundPolling';
 
 export function ProposalStatusPage() {
     const { id } = useParams<{ id: string }>();
@@ -12,15 +13,36 @@ export function ProposalStatusPage() {
     const [status, setStatus] = useState<ProposalPublicStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const hasLoadedStatus = useRef(false);
 
     useEffect(() => {
-        if (!id) return;
+        hasLoadedStatus.current = false;
+        setStatus(null);
         setLoading(true);
-        proposalsApi.status(id)
-            .then((res) => setStatus(res.data))
-            .catch((err) => setError(handleApiError(err, language)))
-            .finally(() => setLoading(false));
+        setError(null);
+    }, [id]);
+
+    const refreshStatus = useCallback(async (signal: AbortSignal) => {
+        if (!id) {
+            setLoading(false);
+            return;
+        }
+        try {
+            const response = await proposalsApi.status(id, signal);
+            hasLoadedStatus.current = true;
+            setStatus(response.data);
+            setError(null);
+        } catch (loadError) {
+            if (!signal.aborted && !hasLoadedStatus.current) {
+                setError(handleApiError(loadError, language));
+            }
+        } finally {
+            if (!signal.aborted) {
+                setLoading(false);
+            }
+        }
     }, [id, language]);
+    useBackgroundPolling(refreshStatus, Boolean(id));
 
     if (loading) return <p className="p-6">{t('proposalStatus.loading')}</p>;
     if (error) return <p className="p-6 text-red-600">{error}</p>;

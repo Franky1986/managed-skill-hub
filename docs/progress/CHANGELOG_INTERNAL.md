@@ -1,5 +1,187 @@
 # CHANGELOG_INTERNAL
 
+## 2026-07-14: EPIC-012 Agent Session Delegation Implemented
+
+- Implemented browser-based, human-in-the-loop agent session delegation as
+  documented in `docs/roadmap/EPIC-012-agent-session-delegation.md`.
+- Backend changes:
+  - Added `agent_sessions` table to SQLite and MySQL catalog schemas.
+  - Added `AgentSessionRepositoryPort` and SQLite/MySQL adapters.
+  - Added use cases: create, validate, list, revoke.
+  - Extended `AgentApiAuth` to accept `Authorization: AgentSession <code>`
+    as a fallback after bearer validation, with cross-area isolation.
+  - Added `POST /agent-sessions`, `GET /admin/agent-sessions`, and
+    `DELETE /admin/agent-sessions/:code` to `AgentSessionController`.
+  - Secured `POST /agent-sessions` so it requires a valid bearer token for each
+    requested area via dedicated `X-Agent-*-Token` headers.
+- Frontend changes:
+  - Added public `/frontend/agent-auth` page with per-area token inputs,
+    session code display, copy-to-clipboard, and usage instructions.
+  - Added admin-only `/frontend/admin/agent-sessions` page with list,
+    polling, and revoke action.
+  - Updated router, layout navigation, and i18n messages (en/de).
+- OpenAPI changes:
+  - Added `agentSession` security scheme.
+  - Added `/agent-sessions` and `/admin/agent-sessions` endpoints.
+  - Added `AgentSession`, `AgentSessionListResponse`,
+    `CreateAgentSessionRequest/Response` schemas.
+  - Regenerated `packages/openapi/dist/skill-registry.d.ts`.
+- Specs and tests:
+  - Added co-located specs for controller, use cases, port, and adapters.
+  - Added controller tests with in-memory repository.
+  - Extended `agent-api-auth-matrix.test.ts` and `check-agent-auth-matrix.ts`
+    to verify agent-session advertisement, authentication, and cross-area
+    isolation.
+- Docs:
+  - Updated `docs/setup/ENVIRONMENT.md` with agent session variables.
+  - Updated `docs/progress/NEXT_STEPS.md` and `CHANGELOG_INTERNAL.md`.
+- Verification:
+  - `npm run lint`, `npm run typecheck`, `npm run test` pass for all
+    workspaces.
+  - `apps/api` and `apps/web` production builds pass.
+  - Most `./scripts/check.sh` integration scripts pass when run directly via
+    `node --import tsx/loader.mjs`; the full `check.sh` wrapper is blocked in
+    this sandbox by tsx IPC pipe/network listen restrictions.
+
+
+## 2026-07-14: EPIC-012 Agent Session Delegation — Secure Session Creation
+
+- Hardened `POST /agent-sessions` so it requires a valid bearer token for **each**
+  area being delegated (`discovery`, `public-read`, `proposal`).
+- Tokens are supplied in dedicated headers (`X-Agent-Discovery-Token`,
+  `X-Agent-Read-Token`, `X-Agent-Proposal-Token`) so multiple area secrets can be
+  proved in a single request without abusing the single `Authorization` header.
+- Replaced the previous `agentAuth.guard('discovery')` pre-handler, which would
+  have allowed a discovery bearer token (or no token at all when discovery was
+  unprotected) to create read/proposal sessions.
+- Added `validateAreaBearerToken` and `throwIfAreaBearerInvalid` to
+  `AgentApiAuth` to keep constant-time token comparison inside the auth adapter.
+- Rewrote `agent-session.controller.test.ts` with an in-memory fake repository to
+  avoid a cross-directory vitest import issue and added tests for multi-area
+  creation, missing/wrong area tokens, and disabled areas.
+- Updated `docs/roadmap/EPIC-012-agent-session-delegation.md` to document the
+  per-area header validation and the hardened endpoint contract.
+- `apps/api` typecheck passes; the new controller test suite passes.
+
+
+## 2026-07-14: Serve Discovery Inline At Frontend Root
+
+- Changed the Vite dev-server root middleware (`apps/web/vite.config.ts`) to
+  proxy `GET /` directly to `/api/discover` and return the JSON body inline,
+  instead of issuing an HTTP `302` redirect to `/api/discover`.
+- Agents can now bootstrap with a single `curl http://localhost:3041/` and
+  receive the discovery document immediately, saving one redirect hop.
+- The dev proxy still routes `/api/*` to the configured API base URL.
+- Production builds are unaffected; `dist/index.html` remains the static SPA
+  entry point.
+
+
+## 2026-07-14: Static Bearer Setup-Script Flow Acceptance (AUTH-02)
+
+- Added `setup-script-client-flow.test.ts`, an executable end-to-end test that
+  downloads `/agent-credentials/setup.sh`, verifies it contains no server-side
+  secrets, runs it in terminal mode, checks `~/.managed-skill-hub/credentials.json`
+  permissions, and proves the saved read/proposal tokens authenticate the
+  corresponding API areas.
+- Ran the live flow against the local server with:
+  - `PUBLIC_READ_AUTH_MODE=bearer`
+  - `PROPOSAL_AUTH_MODE=bearer`
+  - `DISCOVERY_AUTH_MODE=none`
+  - separate read and proposal bearer tokens in `.env.secrets`.
+- Verified discovery advertises `credentialSetupScriptUrl` and bearer schemes.
+- Verified protected reads and proposals return `401` without credentials and
+  `200`/`201` with the correct token.
+- Verified cross-area isolation: read token rejected on proposal routes and
+  proposal token rejected on read routes.
+- Recorded the result as AUTH-02 PASS in
+  `docs/setup/AUTHENTICATION_ACCEPTANCE_CHECKLIST.md` with sanitized evidence
+  under `.tmp/auth-acceptance/auth-2026-07-14-03-AUTH-02/`.
+- Fixed `scripts/check-public-release-hygiene.sh` to handle multiple matching
+  ignored files per glob, preventing false failures when several
+  `docs/setup/*INTERNAL*.md` files exist.
+- Restored `.env` and `.env.secrets` to the previous local dev profile after the
+  test. Kept a non-public record of the exact bearer-test profile in
+  `docs/setup/AUTHENTIK_INTERNAL_NOTES.md`.
+
+
+## 2026-07-14: Production Readiness Verification Handoff
+
+- Added an executable production-readiness handoff covering automated gates,
+  mixed and OIDC auth profiles, real Authentik activation, custom-judger failure
+  and retry cases, publication policies, runtime safety, and evidence rules.
+- Recorded the restricted-sandbox restart caveat and the required clean host
+  restart/runtime verification without exposing secret material.
+
+## 2026-07-14: Proposal Status Guidance Correction
+
+- Made public `adminOnlyNextSteps` status-dependent so converted, rejected, and
+  approved proposals no longer advertise stale conversion or rejection work.
+- Kept administrative cleanup guidance for incomplete uploads and review
+  guidance for submitted/judged proposals, with regression coverage for every
+  proposal lifecycle status.
+
+## 2026-07-14: custom-provider Judger Acceptance And Published Read Proof
+
+- Accepted JUDGE-03 against the real custom-provider custom adapter with persisted
+  proposal and file results across restart.
+- Verified conversion, submit-review, approval, and publication of
+  `sample-custom-judger-skill@1.0.0`; every lifecycle mutation returned `200` and
+  conversion produced successful skill-version and file judgement events.
+- Verified the published detail and package through configured bearer auth,
+  preserved the original 21,848-byte `SKILL.md` with `HTTP/1.1`, and confirmed
+  anonymous protected reads still return `401`.
+- Retained JUDGE-05 and JUDGE-06 as pending because their retry, failure,
+  alternate-policy, override, and independent-role branches are not yet proven.
+
+## 2026-07-14: Proposal Background Refresh
+
+- Added a shared abortable, non-overlapping 10-second frontend polling hook.
+- Applied background refresh to the open-proposal navigation count, admin
+  proposal list, admin proposal detail, and public proposal status page.
+- Preserved rendered data, selection, expansion, scroll, and other local UI
+  state during background requests so refreshes do not produce loading flicker.
+- Extended the deterministic admin UI smoke proof with polling interval,
+  request cancellation, and route coverage checks.
+
+## 2026-07-14: Protected Catalog Browser Access And Reference Validation
+
+- Allowed valid admin browser sessions with `reader` or `admin` to satisfy
+  protected published-read routes without storing agent bearer/OIDC tokens in
+  the frontend; discovery and proposal authentication remain independent.
+- Added route-boundary coverage for reader/admin, reviewer-only, invalid, and
+  discovery-session cases and documented the OpenAPI `adminSession` alternative.
+- Excluded HTTP protocol version labels such as `HTTP/1.1` from proposal package
+  path detection while preserving normal missing-artifact validation.
+- Recorded the successful local custom-provider proposal/file judgement observation
+  and the required post-restart browser retest.
+
+## 2026-07-14: Explicit Judgement State And Publication Safety
+
+- Added proposal-level and per-file execution states derived from persisted
+  judgements and failure audit events.
+- Corrected finalize-upload responses so unavailable, failed, and partial runs
+  are not reported as completed.
+- Added stored proposal-file judgement retry and preserved converted/rejected
+  proposal states during re-judgement.
+- Added structured judgement runtime events and safe provider error responses.
+- Added `PUBLISH_JUDGEMENT_POLICY=disabled|warn|required`, required-mode missing
+  target checks, and audited administrator override reasons.
+- Exposed converted draft lifecycle controls, proposal/file retry controls, and
+  explicit no-result states in the admin skill workbench.
+- Added OpenAPI coverage, environment examples, co-located spec updates, and a
+  manual judgement/publication acceptance checklist.
+
+## 2026-07-14: Authentication Acceptance Run AUTH-00
+
+- Recorded the local automated baseline as passing on commit `7d96823`:
+  repository checks, deterministic auth/OIDC proofs, production builds, and
+  dependency audit completed successfully with zero known vulnerabilities.
+- Ran the optional MySQL full gate against the configured local MySQL profile;
+  every implemented gate completed successfully.
+- Recorded a sanitized `AUTH-01` API pretest covering public routes, simple
+  admin login/session/logout, protected routes, and the reviewer badge. Browser
+  and disposable-upload acceptance remains operator-driven.
+
 ## 2026-07-13: Layered Runtime Configuration And Secrets
 
 - Split non-secret runtime configuration (`.env`) from local secret material

@@ -30,6 +30,11 @@ export interface MoveSkillFileDraft {
   path: string;
 }
 
+export interface PublishSkillOptions {
+  judgementOverrideAllowed?: boolean;
+  judgementOverrideReason?: string;
+}
+
 export interface SkillCommandPort {
   createSkill(draft: CreateSkillDraft, actor: string): Promise<Skill>;
   updateSkill(id: string, patch: UpdateSkillDraft, actor: string): Promise<Skill>;
@@ -38,7 +43,7 @@ export interface SkillCommandPort {
   deleteFile(id: string, version: string, filePath: string, actor: string): Promise<Skill>;
   submitForReview(id: string, version: string, actor: string): Promise<Skill>;
   approve(id: string, version: string, actor: string): Promise<Skill>;
-  publish(id: string, version: string, actor: string): Promise<Skill>;
+  publish(id: string, version: string, actor: string, options?: PublishSkillOptions): Promise<Skill>;
   reject(id: string, version: string, actor: string, reason: string): Promise<Skill>;
   deprecate(id: string, version: string, actor: string, reason?: string | null): Promise<Skill>;
 }

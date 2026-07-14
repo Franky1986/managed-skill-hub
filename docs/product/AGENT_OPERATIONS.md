@@ -99,6 +99,20 @@ Auto-publish treats `noop` judgements as not judged by default. Keep
 `AUTO_APPROVE_WITHOUT_JUDGER=false` unless an operator explicitly accepts that
 risk.
 
+Manual publication has a separate gate:
+
+```bash
+PUBLISH_JUDGEMENT_POLICY=required
+```
+
+- `required` blocks publication until the skill version and every extractable
+  file have a real judgement. An administrator can override the block only with
+  an audited reason.
+- `warn` records missing targets in the audit log and continues publication.
+- `disabled` skips the publication judgement gate.
+
+Production defaults to `required`; other environments default to `warn`.
+
 
 ## SQLite-Only Local Setup
 

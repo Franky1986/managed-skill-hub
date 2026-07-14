@@ -178,8 +178,12 @@ export const adminApi = {
         apiClient.post(`/admin/skills/${id}/submit-review`, {}, { params: { version }, headers: { 'Content-Type': 'application/json' } }),
     approve: (id: string, version: string) =>
         apiClient.post(`/admin/skills/${id}/approve`, {}, { params: { version }, headers: { 'Content-Type': 'application/json' } }),
-    publish: (id: string, version: string) =>
-        apiClient.post(`/admin/skills/${id}/publish`, {}, { params: { version }, headers: { 'Content-Type': 'application/json' } }),
+    publish: (id: string, version: string, judgementOverrideReason?: string) =>
+        apiClient.post(
+            `/admin/skills/${id}/publish`,
+            judgementOverrideReason ? { judgementOverrideReason } : {},
+            { params: { version }, headers: { 'Content-Type': 'application/json' } }
+        ),
     rejectSkillVersion: (id: string, version: string, reason: string) =>
         apiClient.post(`/admin/skills/${id}/reject`, { reason }, { params: { version }, headers: { 'Content-Type': 'application/json' } }),
     deprecate: (id: string, version: string, reason?: string) =>
@@ -207,12 +211,18 @@ export const adminApi = {
         apiClient.get<{ items: JudgementRecord[] }>(`/admin/judgements/${targetType}/${encodeURIComponent(targetId)}`),
     judgeProposal: (proposalId: string) =>
         apiClient.post<JudgementRecord>(`/admin/proposals/${proposalId}/judge`, {}, { headers: { 'Content-Type': 'application/json' } }),
-    listProposals: (skillId?: string, status?: string) =>
-        apiClient.get<{ items: ProposalSummary[]; total: number }>('/admin/proposals', { params: { skillId, status } }),
-    proposalNotice: () =>
-        apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice'),
-    getProposal: (proposalId: string) =>
-        apiClient.get<ProposalDetail>(`/admin/proposals/${proposalId}`),
+    judgeProposalFile: (proposalId: string, fileId: string) =>
+        apiClient.post<JudgementRecord>(
+            `/admin/proposals/${proposalId}/files/${encodeURIComponent(fileId)}/judge`,
+            {},
+            { headers: { 'Content-Type': 'application/json' } }
+        ),
+    listProposals: (skillId?: string, status?: string, signal?: AbortSignal) =>
+        apiClient.get<{ items: ProposalSummary[]; total: number }>('/admin/proposals', { params: { skillId, status }, signal }),
+    proposalNotice: (signal?: AbortSignal) =>
+        apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice', { signal }),
+    getProposal: (proposalId: string, signal?: AbortSignal) =>
+        apiClient.get<ProposalDetail>(`/admin/proposals/${proposalId}`, { signal }),
     updateProposal: (proposalId: string, data: ProposalUpdatePayload) =>
         apiClient.patch<ProposalDetail>(`/admin/proposals/${proposalId}`, data),
     getProposalFileContent: (proposalId: string, fileId: string) =>

@@ -1,7 +1,8 @@
 # Judger Adapters
 
 `managed-skill-hub` loads the judger implementation through `SkillJudgerPort`.
-Any module that exports this port can be swapped in by setting `JUDGER_ADAPTER_PATH`.
+Custom provider modules are selected by combining a custom `JUDGER_PROVIDER`
+identifier with `JUDGER_ADAPTER_PATH`.
 
 ## Built-in modes
 
@@ -13,6 +14,10 @@ Any module that exports this port can be swapped in by setting `JUDGER_ADAPTER_P
 
 For every other provider, set `JUDGER_ADAPTER_PATH` to a module implementing
 `SkillJudgerPort`.
+
+Built-in providers ignore `JUDGER_ADAPTER_PATH`. A contradictory development
+configuration emits `judger_adapter_path_ignored`; production startup rejects
+it so an operator cannot assume that a custom adapter is active when it is not.
 
 ## Add a custom Judger adapter
 
@@ -170,4 +175,13 @@ export default adapter;
 ## Next step
 
 - Restart API after adding the file and setting `JUDGER_PROVIDER` and `JUDGER_ADAPTER_PATH`.
+- Verify the startup log contains the intended provider and no
+  `judger_adapter_path_ignored` warning.
+- Finalized proposals expose an execution state for the proposal and every
+  file: `not_started`, `completed`, `unavailable`, or `failed`. Reviewers can
+  retry the proposal or an individual file without changing a terminal
+  `converted` or `rejected` proposal state.
+- Set `PUBLISH_JUDGEMENT_POLICY=required` when publication must be blocked until
+  the skill version and every extractable file have a real judgement. `warn`
+  audits and continues; `disabled` omits this publication check.
 - Keep `SkillJudgerPort` as the only dependency between application logic and judge transport.

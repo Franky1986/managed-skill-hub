@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Container } from '../../../infrastructure/container';
-import { AdminAuth, adminActor, adminGuard } from './admin-auth';
+import { AdminAuth, adminActor, adminGuard, getAdminAuthContext } from './admin-auth';
 import { sendApiError, sendMappedApiError } from './error-response';
 import { ValidationError } from '../../../domain/errors';
 import { sendArtifactResponse } from './artifact-response';
@@ -288,10 +288,16 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
   app.post('/admin/skills/:skillId/publish', publishGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
+    const body = (request.body as { judgementOverrideReason?: string } | undefined) ?? {};
+    const session = getAdminAuthContext(request).session;
     const skill = await container.reviewSkill.publish(
       skillId,
       version ?? '1.0.0',
-      adminActor(request)
+      adminActor(request),
+      {
+        judgementOverrideAllowed: session.roles.includes('admin'),
+        judgementOverrideReason: body.judgementOverrideReason,
+      }
     );
     return reply.send({ id: skill.id.toString() });
   });

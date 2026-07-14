@@ -10,6 +10,7 @@ import { SkillJudgerPort } from '../../ports/outbound/judger.port';
 import { SkillRepositoryPort } from '../../ports/outbound/skill-repository.port';
 import { SkillFileStoragePort, StoredExtractedContent, StoredFile } from '../../ports/outbound/file-storage.port';
 import { FileScannerPort, ScannedContent } from '../../ports/outbound/file-scanner.port';
+import { ProposalStatus } from '../../../domain/proposal/ProposalStatus';
 
 describe('JudgeProposalUseCase', () => {
   it('judges a proposal and persists the updated proposal', async () => {
@@ -95,6 +96,44 @@ describe('JudgeProposalUseCase', () => {
     expect(judger.lastText).toContain('File: build.py');
     expect(judger.lastText).toContain('hello from python');
   });
+
+  it('re-judges one stored file without reopening a converted proposal', async () => {
+    const proposal = Proposal.rehydrate({
+      id: 'proposal-1',
+      title: 'Proposal One',
+      description: 'Some description',
+      category: 'automation',
+      submittedBy: 'agent',
+      createdAt: new Date('2026-07-01T00:00:00.000Z'),
+      status: ProposalStatus.CONVERTED,
+      files: [{
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 15,
+        sha256: 'sha-skill',
+      }],
+    });
+    const repo = new Repo(proposal);
+    const judger = new Judger();
+    const audit = new Audit();
+    const useCase = new JudgeProposalUseCase(
+      repo,
+      judger,
+      audit,
+      undefined,
+      new Storage({
+        'SKILL.md': { content: Buffer.from('# Valid skill'), mimeType: 'text/markdown' },
+      }),
+      new Scanner()
+    );
+
+    const judgement = await useCase.executeFile('proposal-1', 'SKILL.md');
+
+    expect(judgement.targetType).toBe('file');
+    expect(repo.savedProposal?.status).toBe(ProposalStatus.CONVERTED);
+    expect(audit.entries.some((entry) => entry.action === 'judge_proposal_file')).toBe(true);
+  });
 });
 
 class Repo implements SkillRepositoryPort {
@@ -133,8 +172,8 @@ class Judger implements SkillJudgerPort {
     this.lastText = target.text;
     return Judgement.create({
       id: 'new-judgement',
-      targetType: 'proposal',
-      targetId: 'proposal-1',
+      targetType: target.type,
+      targetId: target.id,
       summary: 'needs review',
       model: 'stub',
       createdAt: new Date('2026-07-02T00:00:00.000Z'),

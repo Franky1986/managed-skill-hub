@@ -18,6 +18,8 @@ The proof is source-contract based and does not require a browser driver. It is 
 - Auth error copy can point users and agents to the setup script without exposing tokens.
 - Proposal detail and judgement UI distinguish `no_judge_available` / not-judged states.
 - Admin proposal review, draft/conversion, and proposal-decision refresh paths are reachable from the UI source.
+- Proposal navigation, admin list/detail, and public status views use the shared
+  non-overlapping 10-second background poller with request cancellation.
 
 ## Artifacts
 

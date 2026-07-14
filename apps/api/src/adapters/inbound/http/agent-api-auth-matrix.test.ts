@@ -8,6 +8,14 @@ import { AgentApiAuth } from './agent-api-auth';
 import { registerApiErrorHandler } from './error-response';
 import { registerProposalRoutes } from './proposal.controller';
 import { registerSkillReadRoutes } from './skill-read.controller';
+import { registerAgentSessionRoutes } from './agent-session.controller';
+import { AdminAuth } from './admin-auth';
+import { ValidateAgentSessionUseCase } from '../../../application/usecases/agent-session/validate-agent-session.usecase';
+import {
+  AgentSession,
+  AgentSessionArea,
+  AgentSessionRepositoryPort,
+} from '../../../application/ports/outbound/agent-session.port';
 
 type MatrixArea = 'read' | 'proposal' | 'discovery';
 type MatrixCase = Record<MatrixArea, AgentAuthMode>;
@@ -46,6 +54,11 @@ function config(testCase: MatrixCase): AppConfig {
     proposalMaxFileSizeBytes: 10 * 1024 * 1024,
     proposalDisallowedPaths: ['node_modules/'],
     autoPublishOnGreen: false,
+    agentSessionEnabled: true,
+    agentSessionTtlSeconds: 10800,
+    agentSessionCodeLength: 8,
+    agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+    agentSessionMaxActive: null,
   } as AppConfig;
 }
 
@@ -62,17 +75,64 @@ function container(testCase: MatrixCase): Container {
     proposalRead: {
       getNotice: async () => ({ hasNewProposals: false, totalPending: 0 }),
     } as unknown as Container['proposalRead'],
+    agentSessionRepository: new InMemoryAgentSessionRepository(),
   } as Container;
 }
 
 async function buildApp(testCase: MatrixCase) {
   const app = Fastify({ logger: false });
   const c = container(testCase);
-  const auth = new AgentApiAuth(c.config, fakeOidcVerifier());
+  const validateUseCase = new ValidateAgentSessionUseCase(c.agentSessionRepository);
+  const auth = new AgentApiAuth(c.config, fakeOidcVerifier(), validateUseCase);
   registerSkillReadRoutes(app, c, auth);
   registerProposalRoutes(app, c, auth);
+  registerAgentSessionRoutes(app, c, auth, fakeAdminAuth());
   registerApiErrorHandler(app);
   return app;
+}
+
+
+class InMemoryAgentSessionRepository implements AgentSessionRepositoryPort {
+  private sessions: AgentSession[] = [];
+
+  async create(session: AgentSession): Promise<void> {
+    this.sessions.push(session);
+  }
+
+  async findByCode(code: string): Promise<AgentSession | null> {
+    return this.sessions.find((s) => s.code === code) ?? null;
+  }
+
+  async updateLastUsed(code: string, lastUsedAt: Date, lastUsedIp: string | null): Promise<void> {
+    const session = this.sessions.find((s) => s.code === code);
+    if (session) {
+      session.lastUsedAt = lastUsedAt;
+      session.lastUsedIp = lastUsedIp;
+    }
+  }
+
+  async list(): Promise<AgentSession[]> {
+    return this.sessions;
+  }
+
+  async revoke(code: string, revokedAt: Date): Promise<boolean> {
+    const session = this.sessions.find((s) => s.code === code);
+    if (!session || session.revokedAt !== null) return false;
+    session.revokedAt = revokedAt;
+    return true;
+  }
+
+  async countActiveByIp(): Promise<number> {
+    return 0;
+  }
+}
+
+function fakeAdminAuth(): AdminAuth {
+  return {
+    mode: 'simple',
+    validate: async () => null,
+    requireRole: async () => ({ principalId: 'admin', kind: 'human', externalSubject: null, issuer: null, clientId: null, displayName: 'Admin', email: null, groups: [], roles: ['admin'], scheme: 'session' }),
+  } as unknown as AdminAuth;
 }
 
 function fakeOidcVerifier(): AccessTokenVerifierPort {
@@ -149,8 +209,10 @@ describe('agent API auth matrix', () => {
       if (oidcScheme) {
         expect(oidcScheme).toMatchObject({
           flow: 'device_code',
-          deviceAuthorizationEndpoint: 'https://auth.example.test/application/o/device/',
-          tokenEndpoint: 'https://auth.example.test/application/o/token/',
+          metadata: {
+            deviceAuthorizationEndpoint: 'https://auth.example.test/application/o/device/',
+            tokenEndpoint: 'https://auth.example.test/application/o/token/',
+          },
         });
       }
 
@@ -177,6 +239,30 @@ describe('agent API auth matrix', () => {
 
       await assertArea(app, '/categories', 'read', testCase.read);
       await assertArea(app, '/proposals/notice', 'proposal', testCase.proposal);
+
+      // Agent session delegation: when bearer is enabled for an area, /discover advertises agent-session.
+      const hasAgentSessionScheme = discoveryPayload.authSchemes.some(
+        (scheme: { type: string; appliesTo?: string[] }) => scheme.type === 'agent-session'
+      );
+      expect(hasAgentSessionScheme).toBe(anyBearer);
+
+      if (anyBearer) {
+        const code = await createAgentSession(app, testCase);
+        if (testCase.read === 'bearer') {
+          const withSession = await app.inject({ method: 'GET', url: '/categories', headers: { authorization: `AgentSession ${code}` } });
+          expect(withSession.statusCode).toBe(200);
+        }
+        if (testCase.proposal === 'bearer') {
+          const withSession = await app.inject({ method: 'GET', url: '/proposals/notice', headers: { authorization: `AgentSession ${code}` } });
+          expect(withSession.statusCode).toBe(200);
+        }
+        // Cross-area isolation: a session for read must not access a protected proposal area.
+        if (testCase.read === 'bearer' && testCase.proposal === 'bearer') {
+          const readOnlyCode = await createAgentSessionForArea(app, 'public-read', testCase);
+          const cross = await app.inject({ method: 'GET', url: '/proposals/notice', headers: { authorization: `AgentSession ${readOnlyCode}` } });
+          expect(cross.statusCode).toBe(401);
+        }
+      }
 
       const setupScript = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
       expect(setupScript.statusCode).toBe(200);
@@ -207,3 +293,54 @@ async function assertArea(
     expect(authenticated.statusCode).toBe(200);
   }
 }
+
+async function createAgentSession(app: Awaited<ReturnType<typeof buildApp>>, testCase: MatrixCase): Promise<string> {
+  const headers: Record<string, string> = {};
+  const areas: AgentSessionArea[] = [];
+  if (testCase.discovery === 'bearer') {
+    headers['X-Agent-Discovery-Token'] = 'discovery-token';
+    areas.push('discovery');
+  }
+  if (testCase.read === 'bearer') {
+    headers['X-Agent-Read-Token'] = 'read-token';
+    areas.push('public-read');
+  }
+  if (testCase.proposal === 'bearer') {
+    headers['X-Agent-Proposal-Token'] = 'proposal-token';
+    areas.push('proposal');
+  }
+  const response = await app.inject({
+    method: 'POST',
+    url: '/agent-sessions',
+    headers,
+    payload: { areas },
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json().code;
+}
+
+async function createAgentSessionForArea(app: Awaited<ReturnType<typeof buildApp>>, area: AgentSessionArea, testCase: MatrixCase): Promise<string> {
+  const headers: Record<string, string> = {};
+  const tokenByArea: Record<AgentSessionArea, string | undefined> = {
+    discovery: testCase.discovery === 'bearer' ? 'discovery-token' : undefined,
+    'public-read': testCase.read === 'bearer' ? 'read-token' : undefined,
+    proposal: testCase.proposal === 'bearer' ? 'proposal-token' : undefined,
+  };
+  const headerByArea: Record<AgentSessionArea, string> = {
+    discovery: 'X-Agent-Discovery-Token',
+    'public-read': 'X-Agent-Read-Token',
+    proposal: 'X-Agent-Proposal-Token',
+  };
+  const token = tokenByArea[area];
+  if (!token) throw new Error(`Area ${area} is not bearer-enabled in this test case`);
+  headers[headerByArea[area]] = token;
+  const response = await app.inject({
+    method: 'POST',
+    url: '/agent-sessions',
+    headers,
+    payload: { areas: [area] },
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json().code;
+}
+

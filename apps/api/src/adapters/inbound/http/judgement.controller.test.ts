@@ -49,6 +49,16 @@ function buildContainer(): Container {
             },
           },
         }),
+      executeFile: async (_proposalId: string, fileId: string) =>
+        Judgement.create({
+          id: 'judgement-proposal-file',
+          targetType: 'file',
+          targetId: `proposal-1:${fileId}`,
+          summary: 'proposal file judgement',
+          dimensions: {
+            safety: { risk: 'low', score: 0.1, reason: 'safe' },
+          },
+        }),
     },
     judgeSkillVersion: {
       execute: async () =>
@@ -225,6 +235,24 @@ describe('registerJudgementRoutes', () => {
       targetType: 'skill',
       targetId: 'skill-a:1.0.0',
       summary: 'skill judgement',
+    });
+  });
+
+  it('re-runs a stored proposal file judgement for authenticated admins', async () => {
+    const appConfig = config();
+    const app = await buildApp(appConfig);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/admin/proposals/proposal-1/files/SKILL.md/judge',
+      headers: { cookie: signAdminCookie(appConfig) },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: 'judgement-proposal-file',
+      targetType: 'file',
+      targetId: 'proposal-1:SKILL.md',
     });
   });
 });

@@ -27,6 +27,11 @@ export class JudgerUnavailableError extends DomainError {}
 export class JudgerTimeoutError extends DomainError {}
 export class UnsupportedFileTypeError extends DomainError {}
 export class JudgerProtocolError extends DomainError {}
+export class JudgementRequiredError extends DomainError {
+  constructor(public readonly missingTargets: string[]) {
+    super('Publishing requires a real judgement for the skill version and every extractable file.');
+  }
+}
 export class ConfigurationError extends DomainError {}
 export class ProposalFileLimitExceededError extends DomainError {
   constructor(

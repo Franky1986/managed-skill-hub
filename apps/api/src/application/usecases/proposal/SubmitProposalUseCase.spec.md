@@ -83,6 +83,8 @@ unprocessed proposals, including explicit upload finalization.
 - Delete on non-deletable status -> `ValidationError`
 - Judger/scanner error during automatic proposal or file judgement -> proposal
   remains stored and error is audited
+- Automatic judgement emits structured success/failure runtime events without
+  proposal content or raw provider errors.
 
 ## Acceptance Criteria
 
@@ -97,6 +99,9 @@ unprocessed proposals, including explicit upload finalization.
   temporary upload package before calling finalize-upload. Documentation-only
   external references and portable command guidance are warnings; outside-root
   package references and missing package references are blocking errors.
+- HTTP protocol version labels such as `HTTP/1.1`, `HTTP/2`, and `HTTP/3` are
+  prose tokens rather than package artifact paths and must not produce missing-
+  reference findings.
 - Runtime-specific command references such as `.cursor/commands/foo.md`,
   `.codex/commands/foo.md`, and `.claude/commands/foo.md` are reported as
   portable command findings with `commands/foo.md` as suggested replacement.

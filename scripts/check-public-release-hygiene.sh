@@ -31,6 +31,34 @@ check_no_output() {
   fi
 }
 
+# Check that every file matching a glob is ignored by git.
+check_ignored_glob() {
+  local name="$1"
+  local pattern="$2"
+  local files
+  files=$(ls $pattern 2>/dev/null || true)
+  if [ -z "$files" ]; then
+    # No files to check: the ignore rule is vacuously satisfied for this pattern.
+    record_pass "$name"
+    return
+  fi
+  local all_ignored=true
+  while IFS= read -r file; do
+    if [ -z "$file" ]; then
+      continue
+    fi
+    if ! git check-ignore -q --no-index "$file"; then
+      all_ignored=false
+      echo "$file" >>"$LOG"
+    fi
+  done <<<"$files"
+  if $all_ignored; then
+    record_pass "$name"
+  else
+    record_fail "$name"
+  fi
+}
+
 repository_files() {
   git ls-files --cached --others --exclude-standard "$@"
 }
@@ -100,35 +128,11 @@ else
   echo "$history_private_references" >>"$LOG"
 fi
 
-if git check-ignore -q --no-index scripts/prepare-deploy.sh; then
-  record_pass "prepare-deploy-ignored"
-else
-  record_fail "prepare-deploy-ignored"
-fi
-
-if git check-ignore -q --no-index .env.example.private; then
-  record_pass "private-env-example-ignored"
-else
-  record_fail "private-env-example-ignored"
-fi
-
-if git check-ignore -q --no-index scripts/call-*judger.sh; then
-  record_pass "private-judger-helper-ignored"
-else
-  record_fail "private-judger-helper-ignored"
-fi
-
-if git check-ignore -q --no-index docs/setup/*INTERNAL*.md; then
-  record_pass "private-judger-doc-ignored"
-else
-  record_fail "private-judger-doc-ignored"
-fi
-
-if git check-ignore -q --no-index apps/api/src/internal/adapter/*/*.judger.ts; then
-  record_pass "private-adapter-ignored"
-else
-  record_fail "private-adapter-ignored"
-fi
+check_ignored_glob "prepare-deploy-ignored" "scripts/prepare-deploy.sh"
+check_ignored_glob "private-env-example-ignored" ".env.example.private"
+check_ignored_glob "private-judger-helper-ignored" "scripts/call-*judger.sh"
+check_ignored_glob "private-judger-doc-ignored" "docs/setup/*INTERNAL*.md"
+check_ignored_glob "private-adapter-ignored" "apps/api/src/internal/adapter/*/*.judger.ts"
 
 {
   echo "public-release-hygiene"

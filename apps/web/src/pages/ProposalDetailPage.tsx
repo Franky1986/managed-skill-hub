@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { adminApi, JudgementRecord } from '../api/admin';
 import { handleApiError } from '../api/client';
@@ -11,6 +11,7 @@ import { isTextLikeArtifact } from '../utils/artifact-utils';
 import { formatLocalDateTime } from '../lib/formatLocalDateTime';
 import { formatOverallRiskLabel, isNoJudgeAvailable, noJudgeHint } from '../lib/judgement';
 import { hasAdminRole, useAuthStore } from '../store/auth';
+import { useBackgroundPolling } from '../hooks/useBackgroundPolling';
 
 function renderJudgementFlags(judgement: JudgementRecord): JSX.Element[] {
     return Object.entries(judgement.dimensions).map(([name, dimension]: [string, { risk: string; reason: string }]) => (
@@ -74,6 +75,7 @@ export function ProposalDetailPage() {
     const [probeLoadingByFileId, setProbeLoadingByFileId] = useState<Record<string, boolean>>({});
     const [probeErrorByFileId, setProbeErrorByFileId] = useState<Record<string, string | null>>({});
     const [expandedProbeFileId, setExpandedProbeFileId] = useState<string | null>(null);
+    const hasLoadedProposal = useRef(false);
     const roles = useAuthStore((state) => state.roles);
     const canReview = hasAdminRole(roles, 'reviewer');
 
@@ -82,6 +84,7 @@ export function ProposalDetailPage() {
             return;
         }
 
+        hasLoadedProposal.current = false;
         setProposal(null);
         setError(null);
         setSelectedFileId(null);
@@ -99,11 +102,24 @@ export function ProposalDetailPage() {
         setProbeLoadingByFileId({});
         setProbeErrorByFileId({});
 
-        adminApi
-            .getProposal(id)
-            .then((res) => setProposal(res.data))
-            .catch((loadError) => setError(handleApiError(loadError, language)));
+    }, [id]);
+
+    const refreshProposal = useCallback(async (signal: AbortSignal) => {
+        if (!id) {
+            return;
+        }
+        try {
+            const response = await adminApi.getProposal(id, signal);
+            hasLoadedProposal.current = true;
+            setProposal(response.data);
+            setError(null);
+        } catch (loadError) {
+            if (!signal.aborted && !hasLoadedProposal.current) {
+                setError(handleApiError(loadError, language));
+            }
+        }
     }, [id, language]);
+    useBackgroundPolling(refreshProposal, Boolean(id));
 
     useEffect(() => {
         if (!id || !proposal || !selectedFileId) {

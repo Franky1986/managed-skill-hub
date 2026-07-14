@@ -8,6 +8,9 @@ import type { AccessTokenVerifierPort, AgentTokenArea } from '../apps/api/src/ap
 import type { AuthenticatedPrincipal } from '../apps/api/src/application/security/authenticated-principal';
 import type { AgentAuthMode, AppConfig } from '../apps/api/src/infrastructure/config';
 import type { Container } from '../apps/api/src/infrastructure/container';
+import { registerAgentSessionRoutes } from '../apps/api/src/adapters/inbound/http/agent-session.controller';
+import { ValidateAgentSessionUseCase } from '../apps/api/src/application/usecases/agent-session/validate-agent-session.usecase';
+
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
@@ -61,6 +64,11 @@ function config(testCase: MatrixCase): AppConfig {
     proposalMaxFileSizeBytes: 10 * 1024 * 1024,
     proposalDisallowedPaths: ['node_modules/'],
     autoPublishOnGreen: false,
+    agentSessionEnabled: true,
+    agentSessionTtlSeconds: 10800,
+    agentSessionCodeLength: 8,
+    agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+    agentSessionMaxActive: null,
   } as AppConfig;
 }
 
@@ -114,12 +122,64 @@ function oidcPrincipal(area: AgentTokenArea): AuthenticatedPrincipal {
   };
 }
 
+class InMemoryAgentSessionRepository {
+  private sessions: Array<{
+    code: string;
+    areas: string[];
+    createdAt: Date;
+    expiresAt: Date;
+    revokedAt: Date | null;
+    lastUsedAt: Date | null;
+    createdByIp: string | null;
+    lastUsedIp: string | null;
+    userAgent: string | null;
+  }> = [];
+
+  async create(session: { code: string; areas: string[]; createdAt: Date; expiresAt: Date; revokedAt: Date | null; lastUsedAt: Date | null; createdByIp: string | null; lastUsedIp: string | null; userAgent: string | null }): Promise<void> {
+    this.sessions.push(session);
+  }
+
+  async findByCode(code: string) {
+    return this.sessions.find((s) => s.code === code) ?? null;
+  }
+
+  async updateLastUsed(code: string, lastUsedAt: Date, lastUsedIp: string | null) {
+    const session = this.sessions.find((s) => s.code === code);
+    if (session) {
+      session.lastUsedAt = lastUsedAt;
+      session.lastUsedIp = lastUsedIp;
+    }
+  }
+
+  async list() {
+    return this.sessions;
+  }
+
+  async revoke(code: string, revokedAt: Date) {
+    const session = this.sessions.find((s) => s.code === code);
+    if (!session || session.revokedAt !== null) return false;
+    session.revokedAt = revokedAt;
+    return true;
+  }
+
+  async countActiveByIp() {
+    return 0;
+  }
+}
+
 async function buildApp(testCase: MatrixCase) {
   const app = Fastify({ logger: false });
   const c = container(testCase);
-  const auth = new AgentApiAuth(c.config, verifier());
+  c.agentSessionRepository = new InMemoryAgentSessionRepository() as unknown as Container['agentSessionRepository'];
+  const validateUseCase = new ValidateAgentSessionUseCase(c.agentSessionRepository);
+  const auth = new AgentApiAuth(c.config, verifier(), validateUseCase);
   registerSkillReadRoutes(app, c, auth);
   registerProposalRoutes(app, c, auth);
+  registerAgentSessionRoutes(app, c, auth, {
+    mode: 'simple',
+    validate: async () => null,
+    requireRole: async () => ({ principalId: 'admin', kind: 'human', externalSubject: null, issuer: null, clientId: null, displayName: 'Admin', email: null, groups: [], roles: ['admin'], scheme: 'session' }),
+  } as unknown as import('../apps/api/src/adapters/inbound/http/admin-auth').AdminAuth);
   registerApiErrorHandler(app);
   return app;
 }
@@ -177,8 +237,8 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
   const oidcScheme = discovery.authSchemes.find((scheme: { type: string }) => scheme.type === 'oauth2');
   assertEqual(Boolean(oidcScheme), anyOidc, `${id} OIDC scheme`);
   if (oidcScheme) {
-    assertEqual(oidcScheme.deviceAuthorizationEndpoint, 'https://auth.example.test/application/o/device/', `${id} device endpoint`);
-    assertEqual(oidcScheme.tokenEndpoint, 'https://auth.example.test/application/o/token/', `${id} token endpoint`);
+    assertEqual(oidcScheme.metadata?.deviceAuthorizationEndpoint, 'https://auth.example.test/application/o/device/', `${id} device endpoint`);
+    assertEqual(oidcScheme.metadata?.tokenEndpoint, 'https://auth.example.test/application/o/token/', `${id} token endpoint`);
   }
 
   const howTo = await app.inject({ method: 'GET', url: '/howToPropose', headers: authHeader('discovery', testCase.discovery) });
@@ -194,6 +254,29 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
 
   const readStatus = await runArea(app, testCase, 'read', '/categories');
   const proposalStatus = await runArea(app, testCase, 'proposal', '/proposals/notice');
+
+  // Agent session delegation assertions.
+  const hasAgentSessionScheme = discovery.authSchemes.some(
+    (scheme: { type: string }) => scheme.type === 'agent-session'
+  );
+  assertEqual(hasAgentSessionScheme, anyBearer, `${id} agent-session scheme advertised`);
+
+  if (anyBearer) {
+    const sessionCode = await createAgentSession(app, testCase);
+    if (testCase.read === 'bearer') {
+      const readWithSession = await app.inject({ method: 'GET', url: '/categories', headers: { authorization: `AgentSession ${sessionCode}` } });
+      assertEqual(readWithSession.statusCode, 200, `${id} read with agent session`);
+    }
+    if (testCase.proposal === 'bearer') {
+      const proposalWithSession = await app.inject({ method: 'GET', url: '/proposals/notice', headers: { authorization: `AgentSession ${sessionCode}` } });
+      assertEqual(proposalWithSession.statusCode, 200, `${id} proposal with agent session`);
+    }
+    if (testCase.read === 'bearer' && testCase.proposal === 'bearer') {
+      const readOnlyCode = await createAgentSessionForArea(app, 'public-read', testCase);
+      const cross = await app.inject({ method: 'GET', url: '/proposals/notice', headers: { authorization: `AgentSession ${readOnlyCode}` } });
+      assertEqual(cross.statusCode, 401, `${id} cross-area isolation read-only session on proposal`);
+    }
+  }
   const setup = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
   assertEqual(setup.statusCode, 200, `${id} setup script status`);
   const setupRead = setup.payload.includes("MSH_REQUIRE_READ='true'");
@@ -218,6 +301,38 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
   };
 }
 
+
+
+async function createAgentSession(app: Awaited<ReturnType<typeof buildApp>>, testCase: MatrixCase): Promise<string> {
+  const headers: Record<string, string> = {};
+  const areas: string[] = [];
+  if (testCase.discovery === 'bearer') { headers['X-Agent-Discovery-Token'] = 'discovery-token'; areas.push('discovery'); }
+  if (testCase.read === 'bearer') { headers['X-Agent-Read-Token'] = 'read-token'; areas.push('public-read'); }
+  if (testCase.proposal === 'bearer') { headers['X-Agent-Proposal-Token'] = 'proposal-token'; areas.push('proposal'); }
+  const response = await app.inject({ method: 'POST', url: '/agent-sessions', headers, payload: { areas } });
+  assertEqual(response.statusCode, 201, 'create agent session');
+  return response.json().code;
+}
+
+async function createAgentSessionForArea(app: Awaited<ReturnType<typeof buildApp>>, area: 'discovery' | 'public-read' | 'proposal', testCase: MatrixCase): Promise<string> {
+  const headers: Record<string, string> = {};
+  const tokenByArea: Record<'discovery' | 'public-read' | 'proposal', string | undefined> = {
+    discovery: testCase.discovery === 'bearer' ? 'discovery-token' : undefined,
+    'public-read': testCase.read === 'bearer' ? 'read-token' : undefined,
+    proposal: testCase.proposal === 'bearer' ? 'proposal-token' : undefined,
+  };
+  const headerByArea: Record<'discovery' | 'public-read' | 'proposal', string> = {
+    discovery: 'X-Agent-Discovery-Token',
+    'public-read': 'X-Agent-Read-Token',
+    proposal: 'X-Agent-Proposal-Token',
+  };
+  const token = tokenByArea[area];
+  assert(token, `area ${area} not bearer-enabled`);
+  headers[headerByArea[area]] = token;
+  const response = await app.inject({ method: 'POST', url: '/agent-sessions', headers, payload: { areas: [area] } });
+  assertEqual(response.statusCode, 201, 'create single-area agent session');
+  return response.json().code;
+}
 async function main(): Promise<void> {
   assertEqual(cases.length, 27, 'matrix case count');
   const results: CaseResult[] = [];

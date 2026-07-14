@@ -186,7 +186,10 @@ describe('AgentApiAuth', () => {
       id: 'agent-oidc-device',
       type: 'oauth2',
       flow: 'device_code',
-      deviceAuthorizationEndpoint: 'https://auth.example/application/o/device/',
+      metadata: {
+        deviceAuthorizationEndpoint: 'https://auth.example/application/o/device/',
+        tokenEndpoint: 'https://auth.example/application/o/token/',
+      },
       scopes: ['openid', 'profile', 'managedskillhub:proposals'],
       appliesTo: ['proposal'],
     }));

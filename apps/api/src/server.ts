@@ -6,6 +6,7 @@ import { loadConfig } from './infrastructure/config';
 import { buildContainer } from './infrastructure/container';
 import { SimpleAdminAuth } from './adapters/inbound/http/simple-admin-auth';
 import { AgentApiAuth } from './adapters/inbound/http/agent-api-auth';
+import { ValidateAgentSessionUseCase } from './application/usecases/agent-session/validate-agent-session.usecase';
 import { registerHealthRoutes } from './adapters/inbound/http/health.controller';
 import { registerSkillReadRoutes } from './adapters/inbound/http/skill-read.controller';
 import { registerAdminSkillRoutes } from './adapters/inbound/http/admin-skill.controller';
@@ -15,6 +16,7 @@ import { createAdminLoginRateLimiter, registerAdminAuthRoutes } from './adapters
 import { registerAdminProposalRoutes } from './adapters/inbound/http/admin-proposal.controller';
 import { registerApiErrorHandler } from './adapters/inbound/http/error-response';
 import { registerAdminObservabilityRoutes } from './adapters/inbound/http/admin-observability.controller';
+import { registerAgentSessionRoutes } from './adapters/inbound/http/agent-session.controller';
 import { registerHttpObservability } from './adapters/inbound/http/http-observability';
 import { OidcAdminAuth } from './adapters/inbound/http/oidc-admin-auth';
 import { AdminOidcIdentityProvider } from './adapters/outbound/identity/admin-oidc.identity-provider';
@@ -36,6 +38,10 @@ async function start() {
   }, 'Authentication modes configured');
   const container = await buildContainer(config, {
     recordPrincipalProjectionEvent: (event) => app.log.info(event, 'OIDC security event'),
+    recordJudgementEvent: (event) => {
+      const log = event.outcome === 'failure' ? app.log.warn.bind(app.log) : app.log.info.bind(app.log);
+      log({ ...event, provider: config.judgerProvider }, 'Judgement execution');
+    },
   });
   const auth: AdminAuth = config.adminAuthMode === 'oidc'
     ? new OidcAdminAuth(config, container.adminSessions, container.principalRepository)
@@ -70,7 +76,10 @@ async function start() {
     )
     : undefined;
   await agentTokenVerifier?.initialize();
-  const agentAuth = new AgentApiAuth(config, agentTokenVerifier);
+  const validateAgentSessionUseCase = config.agentSessionEnabled
+    ? new ValidateAgentSessionUseCase(container.agentSessionRepository)
+    : undefined;
+  const agentAuth = new AgentApiAuth(config, agentTokenVerifier, validateAgentSessionUseCase);
   const proposalRateLimiter = createProposalRateLimiter(config);
   const adminLoginRateLimiter = createAdminLoginRateLimiter(config);
 
@@ -82,6 +91,15 @@ async function start() {
     },
     'Judger provider configured'
   );
+  if (
+    (config.judgerProvider === 'noop' || config.judgerProvider === 'vercel-ai-sdk')
+    && config.judgerAdapterPath
+  ) {
+    app.log.warn({
+      event: 'judger_adapter_path_ignored',
+      provider: config.judgerProvider,
+    }, 'JUDGER_ADAPTER_PATH is ignored for the configured built-in judger provider');
+  }
 
   await app.register(cors, {
     origin: (origin, callback) => {
@@ -102,25 +120,27 @@ async function start() {
   if (apiPrefix) {
     await app.register(async (apiApp) => {
       registerHealthRoutes(apiApp);
-      registerSkillReadRoutes(apiApp, container, agentAuth);
+      registerSkillReadRoutes(apiApp, container, agentAuth, auth);
       registerProposalRoutes(apiApp, container, agentAuth, proposalRateLimiter);
       registerJudgementRoutes(apiApp, container, auth);
       registerAdminAuthRoutes(apiApp, auth, oidcAdminRoutes, adminLoginRateLimiter);
       registerAdminSkillRoutes(apiApp, container, auth);
       registerAdminProposalRoutes(apiApp, container, auth);
       registerAdminObservabilityRoutes(apiApp, container, auth);
+      registerAgentSessionRoutes(apiApp, container, agentAuth, auth);
     }, { prefix: apiPrefix });
   }
 
   // Always register at root as well for direct API access and backward compatibility.
   registerHealthRoutes(app);
-  registerSkillReadRoutes(app, container, agentAuth);
+  registerSkillReadRoutes(app, container, agentAuth, auth);
   registerProposalRoutes(app, container, agentAuth, proposalRateLimiter);
   registerJudgementRoutes(app, container, auth);
   registerAdminAuthRoutes(app, auth, oidcAdminRoutes, adminLoginRateLimiter);
   registerAdminSkillRoutes(app, container, auth);
   registerAdminProposalRoutes(app, container, auth);
   registerAdminObservabilityRoutes(app, container, auth);
+  registerAgentSessionRoutes(app, container, agentAuth, auth);
   registerApiErrorHandler(app);
 
   try {

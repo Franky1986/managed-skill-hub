@@ -14,6 +14,8 @@ import { AdminSkillPage } from './pages/admin/AdminSkillPage';
 import { AdminProposalsPage } from './pages/admin/AdminProposalsPage';
 import { ProposalDetailPage } from './pages/ProposalDetailPage';
 import { ProposalStatusPage } from './pages/ProposalStatusPage';
+import { AgentAuthPage } from './pages/AgentAuthPage';
+import { AdminAgentSessionsPage } from './pages/admin/AdminAgentSessionsPage';
 import { hasAdminRole, useAuthStore } from './store/auth';
 import type { AdminRole } from './api/admin';
 import { LanguageProvider, useLanguage } from './i18n';
@@ -53,6 +55,7 @@ export function AppRouter() {
                         <Route path="skills/:id" element={<SkillDetailPage />} />
                         <Route path="search" element={<SearchPage />} />
                         <Route path="proposals/status/:id" element={<ProposalStatusPage />} />
+                        <Route path="agent-auth" element={<AgentAuthPage />} />
                         <Route path="admin/login" element={<AdminLoginPage />} />
                         <Route path="admin" element={<AdminRoute />}>
                             <Route index element={<AdminDashboardPage />} />
@@ -60,6 +63,7 @@ export function AppRouter() {
                             <Route path="review" element={<AdminReviewQueuePage />} />
                             <Route element={<AdminRoleRoute required="admin" />}>
                                 <Route path="skills/new" element={<AdminSkillCreatePage />} />
+                                <Route path="agent-sessions" element={<AdminAgentSessionsPage />} />
                             </Route>
                             <Route path="skills/:id" element={<AdminSkillPage />} />
                             <Route element={<AdminRoleRoute required="reviewer" />}>

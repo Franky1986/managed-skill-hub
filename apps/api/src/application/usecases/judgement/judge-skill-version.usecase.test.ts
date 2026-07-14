@@ -90,6 +90,41 @@ describe('JudgeSkillVersionUseCase', () => {
     expect(judger.targets[1]?.text).toContain('python');
     expect(audit.entries.some((entry) => entry.action === 'judge_skill_file')).toBe(true);
   });
+
+  it('audits and emits a safe event when the skill-version judge fails', async () => {
+    const audit = new AuditStub();
+    const events: Array<{ outcome: string; errorCategory?: string; proposalId?: string }> = [];
+    const judger: SkillJudgerPort = {
+      judge: async () => {
+        throw new Error('provider response containing internal details');
+      },
+    };
+    const useCase = new JudgeSkillVersionUseCase(
+      new RepoStub(),
+      judger,
+      audit,
+      new CatalogStub(createCatalogVersion({ version: '1.0.1' })),
+      undefined,
+      undefined,
+      (event) => events.push(event)
+    );
+
+    await expect(useCase.execute('catalog-skill', '1.0.1', {
+      contextMetadata: { proposalId: 'proposal-1' },
+    })).rejects.toThrow('provider response');
+
+    expect(audit.entries[0]?.action).toBe('judge_skill_version_failed');
+    expect(audit.entries[0]?.after).toEqual({ errorCategory: 'Error' });
+    expect(events).toEqual([{
+      event: 'judgement_execution',
+      outcome: 'failure',
+      operation: 'skill_version',
+      skillId: 'catalog-skill',
+      version: '1.0.1',
+      proposalId: 'proposal-1',
+      errorCategory: 'Error',
+    }]);
+  });
 });
 
 class RepoStub implements SkillRepositoryPort {

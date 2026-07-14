@@ -151,7 +151,12 @@ describe('ProposalReadUseCase', () => {
     expect(detail?.review.labels).toContain('needs_review');
     expect(detail?.review.latestJudgementId).toBe('judge-1');
     expect(detail?.files[0]?.path).toBe('README.md');
+    expect(detail?.files[0]?.judgement.state).toBe('unavailable');
     expect(detail?.judgements[0]?.summary).toBe('Needs review');
+    expect(detail?.judgement).toMatchObject({
+      state: 'completed',
+      attemptedAt: new Date('2026-07-02T12:00:00.000Z'),
+    });
     expect(detail?.conversion).toMatchObject({
       mode: 'create_version',
       targetSkillId: 'existing-skill',
@@ -204,6 +209,67 @@ describe('ProposalReadUseCase', () => {
     const notice = await useCase.getNotice();
 
     expect(notice).toEqual({ hasNewProposals: false, totalPending: 0 });
+  });
+
+  it('returns only currently valid admin next steps for each proposal status', async () => {
+    const upload = Proposal.create({
+      title: 'Upload still running',
+      description: 'This proposal has not been finalized yet.',
+      category: 'automation',
+      submittedBy: 'agent',
+    });
+    const submitted = createProposal();
+    const judged = submitted.addJudgement(createLowRiskJudgement(submitted.id));
+    const approved = createProposal().approve();
+    const rejected = createProposal().reject('not suitable');
+    const converted = createProposal().approve().convert();
+    const cases = [
+      {
+        proposal: upload,
+        expected: ['review incomplete upload', 'delete abandoned upload'],
+      },
+      {
+        proposal: submitted,
+        expected: ['review proposal details', 'convert proposal to skill', 'reject proposal with reason'],
+      },
+      {
+        proposal: judged,
+        expected: ['review proposal details', 'convert proposal to skill', 'reject proposal with reason'],
+      },
+      { proposal: approved, expected: [] },
+      { proposal: rejected, expected: [] },
+      { proposal: converted, expected: [] },
+    ];
+
+    for (const testCase of cases) {
+      const audit = new FakeAudit();
+      if (testCase.proposal.status === 'converted') {
+        audit.entries.push(
+          AuditEntry.create({
+            proposalId: testCase.proposal.id,
+            skillId: 'converted-skill',
+            action: 'convert_proposal',
+            actor: 'admin',
+            after: { status: 'converted', skillId: 'converted-skill', version: '1.0.0' },
+          })
+        );
+      }
+      const repo = new ProposalRepo([testCase.proposal]);
+      const storage = new ProposalStorage();
+      const useCase = new ProposalReadUseCase(
+        repo,
+        storage,
+        new ExtractProposalFileContentUseCase(repo, storage, new Scanner()),
+        audit
+      );
+
+      const status = await useCase.getPublicStatus(testCase.proposal.id);
+
+      expect(status?.adminOnlyNextSteps).toEqual(testCase.expected);
+      if (testCase.proposal.status === 'converted') {
+        expect(status?.convertedSkillId).toBe('converted-skill');
+      }
+    }
   });
 
   it('returns proposal lifecycle events from audit entries', async () => {
@@ -594,6 +660,19 @@ function createProposal(): Proposal {
     category: 'automation',
     submittedBy: 'agent',
   }).finalizeUpload();
+}
+
+function createLowRiskJudgement(targetId: string): Judgement {
+  return Judgement.create({
+    id: `judge-${targetId}`,
+    targetType: 'proposal',
+    targetId,
+    dimensions: {
+      harmful: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' },
+    },
+    summary: 'Safe proposal',
+    model: 'test-judger',
+  });
 }
 
 function createCatalogSkillVersion(): import('../../ports/outbound/skill-catalog.port').CatalogSkillVersionRecord {

@@ -1,4 +1,9 @@
-export function formatLocalDateTime(value: string | Date | null | undefined): string {
+import { type LanguageCode, normalizeLanguage } from '../i18n/messages';
+
+export function formatLocalDateTime(
+    value: string | Date | null | undefined,
+    language?: LanguageCode
+): string {
     if (!value) {
         return '—';
     }
@@ -8,7 +13,8 @@ export function formatLocalDateTime(value: string | Date | null | undefined): st
         return String(value);
     }
 
-    return new Intl.DateTimeFormat('de-DE', {
+    const locale = normalizeLanguage(language ?? 'de') === 'de' ? 'de-DE' : 'en-US';
+    return new Intl.DateTimeFormat(locale, {
         dateStyle: 'medium',
         timeStyle: 'medium',
     }).format(parsed);

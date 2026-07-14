@@ -413,6 +413,45 @@ describe('SubmitProposalUseCase', () => {
     await expect(useCase.finalizeUpload(proposal.id, 'agent')).resolves.toBeTruthy();
   });
 
+  it('does not treat HTTP protocol versions as missing package references', async () => {
+    const repo = new InMemorySkillRepository();
+    const storage = new InMemoryStorage();
+    const audit = new InMemoryAuditLog();
+    const judger = {
+      judge: vi.fn()
+        .mockResolvedValueOnce(createJudgement('proposal-judgement', 'proposal', 'proposal-id'))
+        .mockResolvedValueOnce(createJudgement('file-judgement', 'file', 'proposal-id:SKILL.md')),
+    } satisfies SkillJudgerPort;
+    const scanner = new StubScanner();
+    const useCase = new SubmitProposalUseCase(repo, storage, audit, judger, scanner);
+    const proposal = await useCase.submitProposal(
+      {
+        title: 'HTTP protocol reference',
+        description: 'Protocol versions in prose are not package paths.',
+        category: 'api-integration',
+      },
+      'agent'
+    );
+
+    await useCase.attachFile(
+      proposal.id,
+      {
+        path: 'SKILL.md',
+        content: Buffer.from('| curl flag | protocol |\n| --- | --- |\n| `--http1.1` | HTTP/1.1 |\n'),
+        mimeType: 'text/markdown',
+      },
+      'agent'
+    );
+
+    const validation = await useCase.validateUpload(proposal.id, 'agent');
+
+    expect(validation.valid).toBe(true);
+    expect(validation.findings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ candidate: 'HTTP/1.1' }),
+    ]));
+    await expect(useCase.finalizeUpload(proposal.id, 'agent')).resolves.toBeTruthy();
+  });
+
   it('allows finalize-upload when text files document external legacy workspace artifacts', async () => {
     const repo = new InMemorySkillRepository();
     const storage = new InMemoryStorage();

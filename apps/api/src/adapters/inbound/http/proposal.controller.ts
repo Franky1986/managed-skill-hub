@@ -4,6 +4,7 @@ import { sendApiError, sendMappedApiError } from './error-response';
 import { AgentApiAuth, getAgentAuthContext } from './agent-api-auth';
 import { resolveArtifactMimeType } from '../../../domain/files/artifact-mime';
 import { ProposalActor } from '../../../application/ports/inbound/proposal-command.port';
+import { deriveFinalizeJudgementStatus } from '../../../application/usecases/judgement/judgement-execution-status';
 
 export type ProposalRateLimiter = ReturnType<typeof createProposalRateLimiter>;
 
@@ -199,15 +200,17 @@ export function registerProposalRoutes(
         : result.autoPublish.autoPublished
         ? 'published'
         : 'skipped';
+      const judgementStatus = deriveFinalizeJudgementStatus(proposal);
       return reply.send({
         id: proposal.id,
         status: proposal.status,
-        message:
-          'Proposal upload finalized. Automatic judgement has started where possible. Poll the status endpoint for the current review state.',
+        message: judgementStatus === 'completed'
+          ? 'Proposal upload finalized and all automatic judgements completed.'
+          : 'Proposal upload finalized, but one or more automatic judgements are unavailable or failed. Review the admin judgement status before publishing.',
         statusUrl: statusPath,
         checkUrl: statusPath,
         uploadFinalized: true,
-        judgementStatus: 'completed',
+        judgementStatus,
         autoPublishStatus,
         autoPublishBlockedReason: result.autoPublish.blockedReason,
       });

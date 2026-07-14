@@ -13,16 +13,35 @@ export default defineConfig({
     react(),
     tailwindcss(),
     {
-      name: 'discover-root-redirect',
+      name: 'discover-root-proxy',
       configureServer(server) {
-        server.middlewares.use((req, res, next) => {
-          if (req.url === '/') {
-            res.statusCode = 302;
-            res.setHeader('Location', '/api/discover');
-            res.end();
+        server.middlewares.use(async (req, res, next) => {
+          if (req.url !== '/') {
+            next();
             return;
           }
-          next();
+          // Serve /api/discover inline at root so agents can bootstrap with
+          // a single request to the frontend dev port, saving one redirect hop.
+          const target = USE_API_PROXY
+            ? '/api/discover'
+            : `${API_BASE_URL}/discover`;
+          try {
+            const url = new URL(target, `http://${req.headers.host ?? 'localhost'}`);
+            const response = await fetch(url.toString());
+            const body = await response.text();
+            res.statusCode = response.status;
+            response.headers.forEach((value, key) => {
+              if (key.toLowerCase() !== 'content-encoding') {
+                res.setHeader(key, value);
+              }
+            });
+            res.end(body);
+          } catch (error) {
+            server.config.logger.error(`Failed to proxy root to discovery: ${error}`);
+            res.statusCode = 502;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ error: 'Discovery proxy failed', message: String(error) }));
+          }
         });
       },
     },

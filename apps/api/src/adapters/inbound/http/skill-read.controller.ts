@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { promises as fs } from 'fs';
 import { Container } from '../../../infrastructure/container';
 import { SkillSearchQuery } from '../../../application/ports/inbound/skill-query.port';
@@ -7,6 +7,7 @@ import { sendApiError, sendMappedApiError } from './error-response';
 import { AgentApiAuth } from './agent-api-auth';
 import { normalizeRelativeArtifactPath } from '../../../domain/files/relative-artifact-path';
 import { sendArtifactResponse } from './artifact-response';
+import { AdminAuth } from './admin-auth';
 
 function parseTagQuery(value: string | string[] | undefined): string[] {
   if (!value) {
@@ -899,9 +900,23 @@ async function sendSkillPackage(
   }
 }
 
-export function registerSkillReadRoutes(app: FastifyInstance, container: Container, agentAuth = new AgentApiAuth(container.config)): void {
+export function registerSkillReadRoutes(
+  app: FastifyInstance,
+  container: Container,
+  agentAuth = new AgentApiAuth(container.config),
+  adminAuth?: AdminAuth
+): void {
   const discoveryGuard = { preHandler: agentAuth.guard('discovery') };
-  const publicReadGuard = { preHandler: agentAuth.guard('public-read') };
+  const agentPublicReadGuard = agentAuth.guard('public-read');
+  const publicReadGuard = {
+    preHandler: async (request: FastifyRequest, reply: FastifyReply) => {
+      const adminSession = await adminAuth?.validate(request);
+      if (adminSession?.roles.includes('admin') || adminSession?.roles.includes('reader')) {
+        return;
+      }
+      await agentPublicReadGuard(request, reply);
+    },
+  };
   app.get('/discover', discoveryGuard, async (request) => buildDiscoveryResponse(request, container, agentAuth));
 
   app.get('/howToPropose', discoveryGuard, async () => buildHowToProposeResponse(container, agentAuth));

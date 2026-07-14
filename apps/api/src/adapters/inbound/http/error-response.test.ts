@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { ConfigurationError, ForbiddenError, ValidationError } from '../../../domain/errors';
+import { ConfigurationError, ForbiddenError, JudgerUnavailableError, ValidationError } from '../../../domain/errors';
 import { sendMappedApiError } from './error-response';
 
 function createReplyStub() {
@@ -88,6 +88,25 @@ describe('error-response', () => {
       code: 'INTERNAL_ERROR',
       requestId: 'req-123',
       originalError: 'database exploded',
+    });
+  });
+
+  it('does not expose raw provider failure details to admin clients', () => {
+    const request = createRequestStub({ url: '/admin/proposals/proposal-1/judge' });
+    const { reply, state } = createReplyStub();
+
+    sendMappedApiError(
+      reply,
+      request,
+      new JudgerUnavailableError('provider request failed with sensitive upstream details'),
+      { admin: true }
+    );
+
+    expect(state.statusCode).toBe(503);
+    expect(state.payload).toEqual({
+      error: 'Judgement provider is unavailable or misconfigured',
+      code: 'JUDGER_UNAVAILABLE',
+      requestId: 'req-123',
     });
   });
 });

@@ -170,6 +170,20 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
         FOREIGN KEY (principal_id) REFERENCES identity_principals (id)
         ON DELETE RESTRICT
     ) ENGINE = InnoDB;
+
+    CREATE TABLE IF NOT EXISTS agent_sessions (
+      code VARCHAR(16) PRIMARY KEY,
+      areas JSON NOT NULL,
+      created_at DATETIME(3) NOT NULL,
+      expires_at DATETIME(3) NOT NULL,
+      revoked_at DATETIME(3) NULL,
+      last_used_at DATETIME(3) NULL,
+      created_by_ip VARCHAR(64) NULL,
+      last_used_ip VARCHAR(64) NULL,
+      user_agent TEXT NULL,
+      KEY idx_agent_sessions_expiry (expires_at, code),
+      KEY idx_agent_sessions_revoked (revoked_at, code)
+    ) ENGINE = InnoDB;
     CREATE TABLE IF NOT EXISTS oidc_login_transactions (
       state_hash CHAR(64) PRIMARY KEY,
       nonce VARCHAR(512) NOT NULL,
@@ -206,6 +220,11 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
   await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_principal_id', 'CHAR(36) NULL AFTER actor');
   await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_display_name', 'VARCHAR(512) NULL AFTER actor_principal_id');
   await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_client_id', 'VARCHAR(512) NULL AFTER actor_display_name');
+  await ensureMysqlColumn(client, 'agent_sessions', 'revoked_at', 'DATETIME(3) NULL AFTER expires_at');
+  await ensureMysqlColumn(client, 'agent_sessions', 'last_used_at', 'DATETIME(3) NULL AFTER revoked_at');
+  await ensureMysqlColumn(client, 'agent_sessions', 'created_by_ip', 'VARCHAR(64) NULL AFTER last_used_at');
+  await ensureMysqlColumn(client, 'agent_sessions', 'last_used_ip', 'VARCHAR(64) NULL AFTER created_by_ip');
+  await ensureMysqlColumn(client, 'agent_sessions', 'user_agent', 'TEXT NULL AFTER last_used_ip');
 }
 
 async function ensureMysqlColumn(

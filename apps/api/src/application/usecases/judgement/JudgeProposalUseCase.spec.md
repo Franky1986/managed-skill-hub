@@ -8,10 +8,11 @@ proposal state plus audit entry.
 ## Scope
 
 - `execute(proposalId)`
+- `executeFile(proposalId, fileIdOrPath)`
 
 ## Non-Scope
 
-- Separate file or skill judgements
+- Skill-version judgements
 - Final admin review decisions
 - UI/HTTP-specific error presentation
 
@@ -27,6 +28,10 @@ proposal state plus audit entry.
   proposal-level judgement can explain content-level fit issues.
 - Persist updated proposal with new judgement through repository.
 - Write audit entry for proposal judgement.
+- Re-run judgement for one stored proposal file, including extraction where
+  needed, and persist an auditable failure when the provider call fails.
+- Emit structured runtime events without including proposal content or raw
+  provider errors.
 
 ## Inputs / Outputs
 
@@ -46,6 +51,7 @@ proposal state plus audit entry.
 
 - Proposal not found -> `NotFoundError`
 - Judger error -> pass through judger error
+- Missing proposal file -> `NotFoundError`
 
 ## Acceptance Criteria
 
@@ -57,6 +63,10 @@ proposal state plus audit entry.
 - With catalog projection available, the use case does not need repository
   rehydration for proposal basis.
 - The new judgement is referenced in audit.
+- Re-judging a converted or rejected proposal does not reopen its terminal
+  lifecycle status.
+- A failed retry is visible as the latest execution state even if an older
+  successful judgement exists.
 
 ## Tests / Checks
 

@@ -1,5 +1,36 @@
 # NEXT_STEPS
 
+## EPIC-012 Agent Session Delegation
+
+- [x] Database schema, repository adapters, use cases, and `AgentApiAuth`
+      integration for `Authorization: AgentSession <code>`.
+- [x] Hardened `POST /agent-sessions` with per-area bearer-token validation via
+      `X-Agent-*-Token` headers.
+- [x] Controller test suite green with in-memory repository.
+- [x] React pages built:
+      - `/frontend/agent-auth` (public, token inputs, code display, copy button)
+      - `/frontend/admin/agent-sessions` (admin-only list + revoke)
+- [x] `packages/openapi/skill-registry.openapi.yaml` updated with
+      `/agent-sessions`, `/admin/agent-sessions`, and the `agent-session` auth
+      scheme; types regenerated.
+- [x] Co-located `*.spec.md` files added for controller, use cases, port, and
+      repository adapters plus web page specs.
+- [x] Matrix tests extended in `agent-api-auth-matrix.test.ts` and
+      `check-agent-auth-matrix.ts` to cover `AgentSession` headers and
+      cross-area isolation.
+- [x] `npm run lint`, `npm run typecheck`, `npm run test`, and production
+      builds pass for all workspaces.
+- [ ] Run `./scripts/check.sh` end-to-end in an environment without tsx IPC
+      pipe/network listen restrictions.
+
+## Production Readiness Verification
+
+- Execute `docs/setup/PRODUCTION_READINESS_HANDOFF.md` and record results in the
+  existing authentication and judgement acceptance checklists.
+- Complete the real Authentik staging gate and the remaining custom-judger
+  unavailable, failure, file-retry, publication-policy, override, and role
+  boundary scenarios before declaring production readiness.
+
 ## EPIC-003
 
 EPIC-003 is complete. Future language-related changes should preserve:
@@ -34,17 +65,21 @@ Before closing future language work, run the German-text search checklist and
   [`AUTHENTICATION_ACCEPTANCE_CHECKLIST.md`](../setup/AUTHENTICATION_ACCEPTANCE_CHECKLIST.md),
   post sanitized result blocks, and have a follow-up agent update the checklist
   and track retests against the exact commit.
+- Execute the provider, retry, converted-lifecycle, and publication-policy
+  scenarios in
+  [`JUDGEMENT_ACCEPTANCE_CHECKLIST.md`](../setup/JUDGEMENT_ACCEPTANCE_CHECKLIST.md)
+  with one disposable simple skill per profile. Post only sanitized state,
+  status-code, audit-action, and log evidence.
 - After that gate passes, remove the activation warning from
   `.env.example.authentik`, record the sanitized proof artifact, and close
   [`EPIC-011`](../roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md).
-- Decide whether protected published reads also require a dedicated browser
-  OIDC session flow. The current public React catalog intentionally stores no
-  agent credentials and is anonymously usable only with
-  `PUBLIC_READ_AUTH_MODE=none`; this must remain separate from admin sessions.
+- Retest protected published browsing after restart: a valid admin session with
+  `reader` or `admin` must load the catalog, while anonymous, expired,
+  reviewer-only, discovery, and proposal requests retain their configured auth
+  boundaries. A separate non-admin browser OIDC flow remains an optional future
+  capability.
 
 - EPIC-009 follow-up: decide whether production-specific MySQL dump/restore automation should be added beyond the current explicit fail-fast guard and documentation.
-- Improve judgement consistency across proposal overview, proposal detail, and
-  skill context views.
 - EPIC-004: continue implementation of the `vercel-ai-sdk` judger provider in
   parallel to existing public/internal provider options.
 - Expand end-to-end coverage for the auto-publish path, including controller

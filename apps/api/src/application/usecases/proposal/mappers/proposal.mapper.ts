@@ -8,6 +8,8 @@ import {
 import { Proposal } from '../../../../domain/proposal/Proposal';
 import { ProposalReviewMetadata, deriveProposalReviewMetadata } from '../review-metadata';
 import { isExtractableArtifact } from '../../skill/public-metadata';
+import { AuditEntry } from '../../../../domain/audit/AuditEntry';
+import { deriveJudgementExecutionStatus } from '../../judgement/judgement-execution-status';
 
 interface ProposalReadAugmentation {
   uploadFinalized: boolean;
@@ -15,6 +17,8 @@ interface ProposalReadAugmentation {
   maxFiles: number;
   maxFileSizeBytes: number;
   disallowedPaths: string[];
+  judgementProvider: string;
+  auditEntries: AuditEntry[];
   autoPublishState: {
     enabled: boolean;
     eligible: boolean | null;
@@ -57,6 +61,7 @@ export function mapProposalToDetail(
   lifecycle: ProposalLifecycleEventDto[] = [],
   augmentation: ProposalReadAugmentation
 ): ProposalDetailDto {
+  const uploadFinalized = augmentation.uploadFinalized;
   return {
     id: proposal.id,
     skillId: proposal.skillId,
@@ -76,8 +81,27 @@ export function mapProposalToDetail(
       sizeBytes: file.sizeBytes,
       sha256: file.sha256,
       extractable: isExtractableArtifact(file.mimeType, file.path),
+      judgement: deriveJudgementExecutionStatus({
+        targetType: 'file',
+        targetId: `${proposal.id}:${file.path}`,
+        judgements: proposal.judgements,
+        auditEntries: augmentation.auditEntries,
+        provider: augmentation.judgementProvider,
+        started: uploadFinalized,
+        failureActions: ['file_judgement_failed'],
+        failureFilePath: file.path,
+      }),
     })),
     judgements: proposal.judgements,
+    judgement: deriveJudgementExecutionStatus({
+      targetType: 'proposal',
+      targetId: proposal.id,
+      judgements: proposal.judgements,
+      auditEntries: augmentation.auditEntries,
+      provider: augmentation.judgementProvider,
+      started: uploadFinalized,
+      failureActions: ['proposal_judgement_failed'],
+    }),
     rejectionReason: proposal.rejectionReason,
     review,
     conversion,
@@ -143,6 +167,8 @@ export function mapCatalogProposalToDetail(
   lifecycle: ProposalLifecycleEventDto[] = [],
   augmentation: ProposalReadAugmentation
 ): ProposalDetailDto {
+  const mappedJudgements = judgements.map(mapCatalogJudgementToDto);
+  const uploadFinalized = augmentation.uploadFinalized;
   return {
     id: proposal.id,
     skillId: proposal.skillId,
@@ -162,8 +188,27 @@ export function mapCatalogProposalToDetail(
       sizeBytes: file.sizeBytes,
       sha256: file.sha256,
       extractable: isExtractableArtifact(file.mimeType, file.path),
+      judgement: deriveJudgementExecutionStatus({
+        targetType: 'file',
+        targetId: `${proposal.id}:${file.path}`,
+        judgements: mappedJudgements,
+        auditEntries: augmentation.auditEntries,
+        provider: augmentation.judgementProvider,
+        started: uploadFinalized,
+        failureActions: ['file_judgement_failed'],
+        failureFilePath: file.path,
+      }),
     })),
-    judgements: judgements.map(mapCatalogJudgementToDto),
+    judgements: mappedJudgements,
+    judgement: deriveJudgementExecutionStatus({
+      targetType: 'proposal',
+      targetId: proposal.id,
+      judgements: mappedJudgements,
+      auditEntries: augmentation.auditEntries,
+      provider: augmentation.judgementProvider,
+      started: uploadFinalized,
+      failureActions: ['proposal_judgement_failed'],
+    }),
     rejectionReason: proposal.rejectionReason,
     review: mapCatalogProposalToReview(proposal),
     conversion,

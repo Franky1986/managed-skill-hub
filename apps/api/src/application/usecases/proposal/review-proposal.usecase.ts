@@ -16,6 +16,7 @@ import { ExtractSkillFileContentUseCase } from '../skill/extract-skill-file-cont
 import { JudgeSkillVersionUseCase } from '../judgement/judge-skill-version.usecase';
 import { buildSkillAggregateFromCatalog } from '../skill/catalog-skill-hydrator';
 import { buildProposalAggregateFromCatalog } from './catalog-proposal-hydrator';
+import { JudgementRuntimeEventSink, judgementErrorCategory } from '../judgement/judgement-runtime-event';
 
 interface ProposalMetadataUpdate {
   title?: string;
@@ -34,7 +35,8 @@ export class ReviewProposalUseCase {
     private readonly createSkill: CreateSkillUseCase,
     private readonly judgeSkillVersion: JudgeSkillVersionUseCase | undefined,
     private readonly catalog?: SkillCatalogPort,
-    private readonly extractSkillFileContent?: ExtractSkillFileContentUseCase
+    private readonly extractSkillFileContent?: ExtractSkillFileContentUseCase,
+    private readonly judgementEvents?: JudgementRuntimeEventSink
   ) {}
 
   async rejectProposal(proposalId: string, actor: string, reason?: string | null, comment?: string | null): Promise<Proposal> {
@@ -117,6 +119,14 @@ export class ReviewProposalUseCase {
           },
           actor,
         });
+        this.judgementEvents?.({
+          event: 'judgement_execution',
+          outcome: 'success',
+          operation: 'skill_version',
+          proposalId: proposal.id,
+          skillId: skill.id.toString(),
+          version: targetVersion,
+        });
       } catch (error) {
         await this.audit.append(
           AuditEntry.create({
@@ -128,6 +138,15 @@ export class ReviewProposalUseCase {
             after: { error: (error as Error).message },
           })
         );
+        this.judgementEvents?.({
+          event: 'judgement_execution',
+          outcome: 'failure',
+          operation: 'skill_version',
+          proposalId: proposal.id,
+          skillId: skill.id.toString(),
+          version: targetVersion,
+          errorCategory: judgementErrorCategory(error),
+        });
       }
     }
     await this.audit.append(

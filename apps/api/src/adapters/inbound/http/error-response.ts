@@ -7,6 +7,7 @@ import {
   IntegrityError,
   InvalidStateError,
   JudgerProtocolError,
+  JudgementRequiredError,
   JudgerTimeoutError,
   JudgerUnavailableError,
   NotFoundError,
@@ -110,6 +111,16 @@ function mapApiError(error: unknown, options: { admin?: boolean }): ApiErrorDefi
 
   if (error instanceof ValidationError) {
     return { statusCode: 422, code: 'VALIDATION_ERROR', message: error.message, logLevel: 'warn' };
+  }
+
+  if (error instanceof JudgementRequiredError) {
+    return {
+      statusCode: 409,
+      code: 'JUDGEMENT_REQUIRED',
+      message: error.message,
+      details: { missingTargets: error.missingTargets },
+      logLevel: 'warn',
+    };
   }
 
   if (error instanceof ProposalFileLimitExceededError) {
@@ -223,15 +234,25 @@ function mapApiError(error: unknown, options: { admin?: boolean }): ApiErrorDefi
   }
 
   if (error instanceof JudgerUnavailableError) {
-    return { statusCode: 503, code: 'JUDGER_UNAVAILABLE', message: error.message, logLevel: 'error' };
+    return {
+      statusCode: 503,
+      code: 'JUDGER_UNAVAILABLE',
+      message: 'Judgement provider is unavailable or misconfigured',
+      logLevel: 'error',
+    };
   }
 
   if (error instanceof JudgerTimeoutError) {
-    return { statusCode: 504, code: 'JUDGER_TIMEOUT', message: error.message, logLevel: 'error' };
+    return { statusCode: 504, code: 'JUDGER_TIMEOUT', message: 'Judgement provider timed out', logLevel: 'error' };
   }
 
   if (error instanceof JudgerProtocolError) {
-    return { statusCode: 502, code: 'JUDGER_PROTOCOL_ERROR', message: error.message, logLevel: 'error' };
+    return {
+      statusCode: 502,
+      code: 'JUDGER_PROTOCOL_ERROR',
+      message: 'Judgement provider returned an invalid response',
+      logLevel: 'error',
+    };
   }
 
   if (error instanceof StorageError) {

@@ -2,7 +2,7 @@
 
 ## Current Date
 
-2026-07-13
+2026-07-14
 
 ## Project State
 
@@ -25,6 +25,11 @@ completion of the environment-specific real Authentik activation gate.
 Runtime configuration is layered so agent-editable `.env` profiles contain no
 secret assignments; `.env.secrets` or exported deployment secrets supply keys
 with higher precedence.
+Authentication acceptance scenario `AUTH-00` passed locally on commit
+`7d96823`: baseline checks, deterministic auth/OIDC proofs, production builds,
+the moderate dependency audit, and the full configured MySQL gate passed with
+zero known dependency vulnerabilities. The real Authentik staging gate remains
+environment-specific and is not yet accepted.
 
 ## EPIC-009 Database-Backed Content Storage
 
@@ -38,6 +43,9 @@ EPIC-007 static bearer compatibility remains implemented:
 - `PUBLIC_READ_AUTH_MODE`, `PROPOSAL_AUTH_MODE`, and `DISCOVERY_AUTH_MODE` retain
   `none` and `bearer` alongside the EPIC-011 OIDC expansion.
 - Public read endpoints remain open by default and can be protected with a read bearer token.
+- Protected public read endpoints also accept a valid admin browser session
+  with `reader` or `admin` as a read-only alternative. Discovery and proposal
+  routes do not inherit this session fallback.
 - Proposal duplicate check, submit, upload, finalize, notice, and status routes remain open by default and can be protected with one proposal bearer token.
 - Proposal status intentionally follows `PROPOSAL_AUTH_MODE`; there is no separate status token.
 - Discovery/contract endpoints can be protected with a discovery bearer token.
@@ -49,6 +57,27 @@ EPIC-007 static bearer compatibility remains implemented:
 
 API-gateway and multi-token static credential stores remain optional future
 extensions; verified per-human identity is now provided by EPIC-011 OIDC.
+
+## EPIC-012 Agent Session Delegation
+
+EPIC-012 is implemented:
+
+- Short-lived, area-scoped agent sessions can be created through a public
+  browser page at `/frontend/agent-auth`.
+- The human enters bearer tokens for the enabled areas (`discovery`,
+  `public-read`, `proposal`) in dedicated headers and receives an 8-character
+  session code.
+- The agent sends the code as `Authorization: AgentSession <code>` on protected
+  routes.
+- `POST /agent-sessions` requires a valid bearer token for every requested area,
+  preventing one area token from delegating another.
+- Session lifecycle (create, validate, list, revoke) is stored in the configured
+  catalog database and can be inspected/revoked by admins at
+  `/frontend/admin/agent-sessions`.
+- OpenAPI, co-located specs, and matrix tests cover the new flow.
+- The feature is toggled by `AGENT_SESSION_ENABLED` and configured through
+  `AGENT_SESSION_TTL_SECONDS`, `AGENT_SESSION_CODE_LENGTH`,
+  `AGENT_SESSION_CODE_CHARSET`, and `AGENT_SESSION_MAX_ACTIVE`.
 
 ## EPIC-011 Authentik OIDC And Delegated Agent Authentication
 
@@ -217,6 +246,11 @@ EPIC-004 is in progress:
   `JUDGER_PROVIDER`.
 - Provider-specific custom adapter settings are parsed by the adapter itself and
   do not leak into the provider-neutral `AppConfig`.
+- JUDGE-03 is accepted against the local custom-provider custom adapter: proposal
+  and file judgements persisted across restart, conversion generated skill and
+  file judgements, and the normal required-policy review/approve/publish path
+  completed. Failure, retry, alternate-policy, override, and independent-role
+  scenarios remain pending.
 
 ## EPIC-005 Proposal Upload Finalization
 
@@ -281,6 +315,10 @@ EPIC-005 is implemented:
   `auto_publish_failed`.
 - Admin proposal list/detail views expose incomplete uploads and auto-publish
   state, including a dedicated `in_upload` filter.
+- Proposal navigation count, admin proposal list/detail, and public proposal
+  status refresh immediately and then every 10 seconds through a shared
+  non-overlapping background poller. Existing content and local interaction
+  state remain visible while replacement data loads.
 
 ## Proposal Detail Navigation
 
@@ -310,10 +348,13 @@ EPIC-005 is implemented:
 
 Recently verified:
 
-- `./scripts/check.sh` with 72 co-located specs and all deterministic proof
-  scripts.
-- `npm run build:prod` across API, web, OpenAPI, and shared workspaces.
+- `./scripts/check.sh` with 84 co-located specs, 404 API tests in 61 files, 31
+  web tests, and all deterministic proof scripts after the judgement-state and
+  publication-gate changes.
+- `npm run build:prod` after the judgement-state and publication-gate changes;
+  only the known non-blocking Vite chunk-size warning remains.
 - `npm audit --audit-level=moderate` -> zero vulnerabilities.
+- `npm run build:prod` across API, web, OpenAPI, and shared workspaces.
 - `npm audit --audit-level=moderate --package-lock-only` -> zero
   vulnerabilities.
 - `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` -> baseline,
@@ -321,6 +362,27 @@ Recently verified:
   content-storage matrix all pass.
 - Proposal lifecycle proof -> 18/18 steps pass, including submitter ownership,
   admin cleanup of an abandoned upload, and converted-state delete protection.
+
+## Judgement Visibility And Publication Gate
+
+- Proposal detail responses expose explicit judgement execution state for the
+  proposal and every file: `not_started`, `completed`, `unavailable`, or
+  `failed`, including provider and last attempt time without raw provider
+  errors.
+- Automatic finalization no longer reports judgement completion when the
+  provider was unavailable, failed, or produced only noop placeholders.
+- Reviewers can retry the proposal or one stored proposal file after conversion;
+  retry does not reopen terminal proposal lifecycle states.
+- Converted proposal views expose the created draft-version lifecycle controls
+  without requiring edit mode.
+- `PUBLISH_JUDGEMENT_POLICY` supports `disabled`, `warn`, and `required`.
+  Production defaults to `required`; administrator override requires a
+  non-empty audited reason.
+- Structured judgement runtime events identify operation, provider, outcome,
+  and safe error category. Built-in providers combined with a custom adapter
+  path warn in development and fail startup in production.
+- Public proposal status guidance follows the current lifecycle state; terminal
+  proposals no longer advertise conversion or rejection as pending admin work.
 
 ## Important Operational Rules
 

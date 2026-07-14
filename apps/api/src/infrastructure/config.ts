@@ -10,6 +10,7 @@ export type AgentAuthMode = 'none' | 'bearer' | 'oidc';
 export type AdminAuthMode = 'simple' | 'oidc';
 export type OidcAccessPolicy = 'all_authenticated_users' | 'required_groups';
 export type OidcAccessTokenValidationMode = 'jwt_profile' | 'authentik_introspection';
+export type PublishJudgementPolicy = 'disabled' | 'warn' | 'required';
 type MySqlSslMode = 'preferred' | 'required' | 'disabled' | 'verify_ca' | 'verify_identity';
 
 export interface AppConfig {
@@ -60,6 +61,7 @@ export interface AppConfig {
   autoPublishOnGreen: boolean;
   autoPublishExcludedCategories: string[];
   autoApproveWithoutJudger: boolean;
+  publishJudgementPolicy: PublishJudgementPolicy;
   publicReadAuthMode: AgentAuthMode;
   publicReadBearerToken: string | null;
   publicReadBearerActor: string;
@@ -98,6 +100,11 @@ export interface AppConfig {
   oidcAccessTokenValidationMode: OidcAccessTokenValidationMode;
   oidcIntrospectionClientId: string | null;
   oidcIntrospectionClientSecret: string | null;
+  agentSessionEnabled: boolean;
+  agentSessionTtlSeconds: number;
+  agentSessionCodeLength: number;
+  agentSessionCodeCharset: string;
+  agentSessionMaxActive: number | null;
 }
 
 export function loadConfig(): AppConfig {
@@ -176,6 +183,25 @@ export function loadConfig(): AppConfig {
       300,
       604_800
     ),
+    agentSessionEnabled: parseBoolean(process.env.AGENT_SESSION_ENABLED, true, 'AGENT_SESSION_ENABLED'),
+    agentSessionTtlSeconds: parsePositiveInteger(
+      process.env.AGENT_SESSION_TTL_SECONDS,
+      3 * 3600,
+      'AGENT_SESSION_TTL_SECONDS'
+    ),
+    agentSessionCodeLength: parseBoundedInteger(
+      process.env.AGENT_SESSION_CODE_LENGTH,
+      8,
+      'AGENT_SESSION_CODE_LENGTH',
+      4,
+      32
+    ),
+    agentSessionCodeCharset: parseAgentSessionCodeCharset(process.env.AGENT_SESSION_CODE_CHARSET),
+    agentSessionMaxActive: parseNullablePositiveInteger(
+      process.env.AGENT_SESSION_MAX_ACTIVE,
+      10,
+      'AGENT_SESSION_MAX_ACTIVE'
+    ),
     adminLoginRateLimitWindowMs: parseBoundedInteger(
       process.env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS,
       300_000,
@@ -245,6 +271,7 @@ export function loadConfig(): AppConfig {
       'ALLOW_OPEN_PROPOSALS_IN_PRODUCTION'
     ),
     autoPublishOnGreen: parseBoolean(process.env.AUTO_PUBLISH_ON_GREEN, false, 'AUTO_PUBLISH_ON_GREEN'),
+    publishJudgementPolicy: parsePublishJudgementPolicy(process.env.PUBLISH_JUDGEMENT_POLICY),
     autoPublishExcludedCategories: parseCsvList(
       process.env.AUTO_PUBLISH_EXCLUDED_CATEGORIES,
       ['security', 'automation', 'filesystem', 'network']
@@ -418,6 +445,17 @@ export function parseJudgerProvider(value: string | undefined): JudgerProvider {
   return trimmed;
 }
 
+export function parsePublishJudgementPolicy(value: string | undefined): PublishJudgementPolicy {
+  const normalized = value?.trim().toLowerCase()
+    || (process.env.NODE_ENV === 'production' ? 'required' : 'warn');
+  if (normalized === 'disabled' || normalized === 'warn' || normalized === 'required') {
+    return normalized;
+  }
+  throw new ConfigurationError(
+    `PUBLISH_JUDGEMENT_POLICY must be disabled, warn, or required. Received: ${normalized}.`
+  );
+}
+
 export function parseCatalogProvider(value: string | undefined): CatalogProvider {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -519,6 +557,15 @@ function normalizePublicApiBaseUrl(value: string): string {
 function validateProductionSecurityConfig(config: AppConfig): void {
   if (process.env.NODE_ENV !== 'production') {
     return;
+  }
+
+  if (
+    (config.judgerProvider === 'noop' || config.judgerProvider === 'vercel-ai-sdk')
+    && config.judgerAdapterPath
+  ) {
+    throw new ConfigurationError(
+      'JUDGER_ADAPTER_PATH must be empty for built-in JUDGER_PROVIDER values in production.'
+    );
   }
 
   if (
@@ -725,6 +772,39 @@ function parseMySqlSslMode(value: string | undefined): MySqlSslMode {
   }
 
   throw new ConfigurationError(`MYSQL_SSL_MODE must be one of: preferred, required, disabled, verify_ca, verify_identity.`);
+}
+
+function parseNullablePositiveInteger(
+  value: string | undefined,
+  fallback: number,
+  name: string,
+): number | null {
+  if (value === undefined || value.trim().length === 0) {
+    return fallback;
+  }
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === 'none' || trimmed === 'null' || trimmed === 'unlimited') {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new ConfigurationError(`${name} must be a positive integer, none, null, or unlimited.`);
+  }
+  return parsed;
+}
+
+function parseAgentSessionCodeCharset(value: string | undefined): string {
+  const charset = valueOrDefault(value, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789');
+  if (charset.length < 16) {
+    throw new ConfigurationError('AGENT_SESSION_CODE_CHARSET must contain at least 16 characters.');
+  }
+  if (new Set(charset).size !== charset.length) {
+    throw new ConfigurationError('AGENT_SESSION_CODE_CHARSET must not contain duplicate characters.');
+  }
+  if (/[^A-Za-z0-9]/.test(charset)) {
+    throw new ConfigurationError('AGENT_SESSION_CODE_CHARSET must be alphanumeric only.');
+  }
+  return charset.toUpperCase();
 }
 
 function valueOrDefault(value: string | undefined, fallback: string): string {

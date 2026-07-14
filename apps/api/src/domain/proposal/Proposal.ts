@@ -249,6 +249,9 @@ export class Proposal {
   }
 
   addJudgement(judgement: Judgement): Proposal {
+    const nextStatus = [ProposalStatus.APPROVED, ProposalStatus.REJECTED, ProposalStatus.CONVERTED].includes(this.status)
+      ? this.status
+      : ProposalStatus.JUDGED;
     return new Proposal(
       this.id,
       this.skillId,
@@ -260,7 +263,7 @@ export class Proposal {
       this.entrypoint,
       this.files,
       [...this.judgements, judgement],
-      ProposalStatus.JUDGED,
+      nextStatus,
       this.submittedBy,
       this.createdAt,
       this.rejectionReason,

@@ -60,6 +60,9 @@ HTTP adapter for proposal operations.
 - Finalize-upload responses must distinguish upload finalization from
   auto-publish outcome, including disabled/skipped/published and blocked
   reason when automation was skipped.
+- Finalize-upload `judgementStatus` must reflect the actual aggregate result:
+  `completed`, `partial`, `unavailable`, or `failed`. Upload completion must
+  never imply that automated judgement succeeded.
 - Return errors through normalized JSON contract with `error`, `code`,
   `requestId`.
 - Keep public proposal status guidance English-only; frontend may localize its

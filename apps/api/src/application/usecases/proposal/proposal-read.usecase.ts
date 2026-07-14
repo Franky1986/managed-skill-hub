@@ -20,6 +20,20 @@ import {
   mapProposalToSummary,
 } from './mappers/proposal.mapper';
 
+function adminOnlyNextStepsFor(status: ProposalStatus): string[] {
+  switch (status) {
+    case ProposalStatus.IN_UPLOAD:
+      return ['review incomplete upload', 'delete abandoned upload'];
+    case ProposalStatus.SUBMITTED:
+    case ProposalStatus.JUDGED:
+      return ['review proposal details', 'convert proposal to skill', 'reject proposal with reason'];
+    case ProposalStatus.APPROVED:
+    case ProposalStatus.REJECTED:
+    case ProposalStatus.CONVERTED:
+      return [];
+  }
+}
+
 export interface ProposalNoticeDto {
   hasNewProposals: boolean;
   totalPending: number;
@@ -128,7 +142,7 @@ export class ProposalReadUseCase {
         : adminReviewDone
         ? 'No further action from the submitter is possible. Check convertedSkillId or rejectionReason for the outcome.'
         : 'Poll this endpoint periodically. Once an admin reviews the proposal, convertedSkillId or rejectionReason will be populated.',
-      adminOnlyNextSteps: ['review proposal details', 'convert proposal to skill', 'reject proposal with reason'],
+      adminOnlyNextSteps: adminOnlyNextStepsFor(proposal.status as ProposalStatus),
     };
   }
 
@@ -141,7 +155,8 @@ export class ProposalReadUseCase {
     private readonly autoPublishOnGreen = false,
     private readonly proposalMaxFiles = 30,
     private readonly proposalMaxFileSizeBytes = 10 * 1024 * 1024,
-    private readonly proposalDisallowedPaths: string[] = []
+    private readonly proposalDisallowedPaths: string[] = [],
+    private readonly judgementProvider = 'noop'
   ) {}
 
   async getNotice(): Promise<ProposalNoticeDto> {
@@ -258,6 +273,8 @@ export class ProposalReadUseCase {
             maxFiles: this.proposalMaxFiles,
             maxFileSizeBytes: this.proposalMaxFileSizeBytes,
             disallowedPaths: this.proposalDisallowedPaths,
+            judgementProvider: this.judgementProvider,
+            auditEntries,
             autoPublishState,
           }
         );
@@ -290,6 +307,8 @@ export class ProposalReadUseCase {
         maxFiles: this.proposalMaxFiles,
         maxFileSizeBytes: this.proposalMaxFileSizeBytes,
         disallowedPaths: this.proposalDisallowedPaths,
+        judgementProvider: this.judgementProvider,
+        auditEntries,
         autoPublishState,
       }
     );

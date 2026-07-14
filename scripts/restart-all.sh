@@ -277,6 +277,7 @@ print_local_mysql_urls() {
 }
 
 start_services() {
+  local admin_ui_base_path="${ADMIN_UI_BASE_PATH:-/frontend/admin}"
   log "Starting project in ${PROJECT_ROOT}"
   log "Logs: ${LOG_FILE}"
   cd "$PROJECT_ROOT"
@@ -287,7 +288,7 @@ start_services() {
   log "Frontend: http://localhost:${FRONTEND_PORT}"
   log "API: http://localhost:${API_PORT}"
   print_local_mysql_urls
-  log "Admin login: http://localhost:${FRONTEND_PORT}/admin/login"
+  log "Admin login: http://localhost:${FRONTEND_PORT}${admin_ui_base_path}/login"
   log "Follow log: tail -f ${LOG_FILE}"
 }
 

@@ -30,6 +30,10 @@ logic.
 - Public proposal status contains clear hints for submitters: `reviewNote`,
   `nextStepForSubmitter`, and `adminOnlyNextSteps`. This makes clear that
   agents can only poll status, while approval/publication are admin-only.
+- `adminOnlyNextSteps` is status-dependent and lists only currently valid
+  actions. Open uploads expose administrative inspection/cleanup, reviewable
+  proposals expose convert/reject actions, and terminal states expose no stale
+  lifecycle mutations.
 - Public proposal status also exposes whether the upload has already been
   finalized or is still incomplete in `in_upload`.
 - Public proposal status also exposes whether auto-publish is enabled,
@@ -58,6 +62,9 @@ logic.
   version creation.
 - Include proposal upload state and auto-publish evaluation state in admin
   detail reads so incomplete uploads and automation blockers are visible.
+- Include an explicit judgement execution state for the proposal and each file,
+  derived from persisted judgements and failure audit events. Absence of a
+  result must not be presented as successful judgement.
 - Derive conversion preview with target skill, mode, and next version for admin
   review flow.
 - Treat empty proposal notice/summary results from SQLite as valid truth.
@@ -111,6 +118,9 @@ logic.
   SQLite.
 - Proposal detail includes a chronological lifecycle list with actor, timestamp,
   action, status transition, and target skill/version where known.
+- Proposal and file execution states distinguish `not_started`, `completed`,
+  `unavailable`, and `failed`, include the configured provider and last attempt,
+  and expose only safe error guidance.
 - Proposal detail can provide admins with conversion preview for new skill vs.
   new draft version.
 - Proposal file content remains readable for admin review directly from the
@@ -127,6 +137,8 @@ logic.
 - `GET /proposals/:proposalId/status` returns auto-publish enablement,
   eligibility, and blocked reason derived from the last automation evaluation
   or failure audit entry.
+- `GET /proposals/:proposalId/status` does not advertise conversion or rejection
+  after the proposal has reached `approved`, `rejected`, or `converted`.
 
 ## Tests / Checks
 

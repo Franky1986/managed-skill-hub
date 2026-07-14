@@ -30,6 +30,7 @@ import { buildProposalAggregateFromCatalog } from './catalog-proposal-hydrator';
 import { AutoPublishProposalUseCase } from './auto-publish-proposal.usecase';
 import { isExtractableArtifact, isTextLikeArtifact } from '../skill/public-metadata';
 import { normalizeRelativeArtifactPath } from '../../../domain/files/relative-artifact-path';
+import { JudgementRuntimeEventSink, judgementErrorCategory } from '../judgement/judgement-runtime-event';
 
 interface ProposalUploadConfig {
   maxFiles: number;
@@ -50,7 +51,8 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       maxFileSizeBytes: 10 * 1024 * 1024,
       disallowedPathPrefixes: ['node_modules/', '.venv/', 'venv/', 'vendor/', 'dist-packages/', 'site-packages/'],
     },
-    private readonly autoPublish?: AutoPublishProposalUseCase
+    private readonly autoPublish?: AutoPublishProposalUseCase,
+    private readonly judgementEvents?: JudgementRuntimeEventSink
   ) {}
 
   async submitProposal(draft: SubmitProposalDraft, actor: ProposalActor): Promise<Proposal> {
@@ -342,6 +344,12 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       });
       updated = updated.addJudgement(proposalJudgement);
       await this.repo.saveProposal(updated);
+      this.judgementEvents?.({
+        event: 'judgement_execution',
+        outcome: 'success',
+        operation: 'proposal',
+        proposalId: proposal.id,
+      });
     } catch (error) {
       await this.audit.append(
         AuditEntry.create({
@@ -351,6 +359,13 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           after: { error: (error as Error).message },
         })
       );
+      this.judgementEvents?.({
+        event: 'judgement_execution',
+        outcome: 'failure',
+        operation: 'proposal',
+        proposalId: proposal.id,
+        errorCategory: judgementErrorCategory(error),
+      });
     }
     return updated;
   }
@@ -424,6 +439,13 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
         });
         updated = updated.addJudgement(fileJudgement);
         await this.repo.saveProposal(updated);
+        this.judgementEvents?.({
+          event: 'judgement_execution',
+          outcome: 'success',
+          operation: 'proposal_file',
+          proposalId: proposal.id,
+          filePath: file.path,
+        });
       } catch (error) {
         await this.audit.append(
           AuditEntry.create({
@@ -433,6 +455,14 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
             after: { file: file.path, error: (error as Error).message },
           })
         );
+        this.judgementEvents?.({
+          event: 'judgement_execution',
+          outcome: 'failure',
+          operation: 'proposal_file',
+          proposalId: proposal.id,
+          filePath: file.path,
+          errorCategory: judgementErrorCategory(error),
+        });
       }
     }
     return updated;
@@ -814,6 +844,9 @@ function looksLikePackageArtifactReference(candidate: string): boolean {
   }
 
   const normalized = candidate.replace(/\\/g, '/');
+  if (/^HTTP\/\d+(?:\.\d+)*$/i.test(normalized)) {
+    return false;
+  }
   if (/\{[^}/]+}/.test(normalized)) {
     return false;
   }

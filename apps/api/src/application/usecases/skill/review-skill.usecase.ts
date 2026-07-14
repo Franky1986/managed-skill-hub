@@ -1,6 +1,6 @@
-import { NotFoundError } from '../../../domain/errors';
+import { JudgementRequiredError, NotFoundError, ValidationError } from '../../../domain/errors';
 import { Skill } from '../../../domain/skill/Skill';
-import { SkillCommandPort } from '../../ports/inbound/skill-command.port';
+import { PublishSkillOptions, SkillCommandPort } from '../../ports/inbound/skill-command.port';
 import { FileScannerPort } from '../../ports/outbound/file-scanner.port';
 import { SkillRepositoryPort } from '../../ports/outbound/skill-repository.port';
 import { AuditLogPort } from '../../ports/outbound/audit.port';
@@ -20,7 +20,8 @@ export class ReviewSkillUseCase implements SkillCommandPort {
     private readonly scanner: FileScannerPort,
     private readonly search: SkillSearchPort,
     private readonly catalog?: SkillCatalogPort,
-    private readonly judger?: SkillJudgerPort
+    private readonly judger?: SkillJudgerPort,
+    private readonly publishJudgementPolicy: 'disabled' | 'warn' | 'required' = 'disabled'
   ) {}
 
   async submitForReview(id: string, version: string, actor: string): Promise<Skill> {
@@ -39,8 +40,9 @@ export class ReviewSkillUseCase implements SkillCommandPort {
     return updated;
   }
 
-  async publish(id: string, version: string, actor: string): Promise<Skill> {
+  async publish(id: string, version: string, actor: string, options: PublishSkillOptions = {}): Promise<Skill> {
     const skill = await this.loadSkill(id);
+    await this.enforcePublishJudgementPolicy(id, version, actor, options);
     const previousPublishedVersion = skill.getLatestPublishedVersion()?.version ?? null;
     const { skill: updated, entry } = skill.publishVersion(version, actor);
     await this.repo.save(updated);
@@ -64,6 +66,76 @@ export class ReviewSkillUseCase implements SkillCommandPort {
       })
     );
     return updated;
+  }
+
+  private async enforcePublishJudgementPolicy(
+    skillId: string,
+    version: string,
+    actor: string,
+    options: PublishSkillOptions
+  ): Promise<void> {
+    if (this.publishJudgementPolicy === 'disabled') {
+      return;
+    }
+
+    const missingTargets = await this.findMissingRealJudgements(skillId, version);
+    if (missingTargets.length === 0) {
+      return;
+    }
+
+    if (this.publishJudgementPolicy === 'warn') {
+      await this.audit.append(AuditEntry.create({
+        skillId,
+        skillVersion: version,
+        action: 'publish_without_complete_judgement',
+        actor,
+        after: { missingTargets },
+      }));
+      return;
+    }
+
+    const overrideReason = options.judgementOverrideReason?.trim() ?? '';
+    if (!options.judgementOverrideAllowed) {
+      throw new JudgementRequiredError(missingTargets);
+    }
+    if (!overrideReason) {
+      throw new ValidationError('A judgement override reason is required.');
+    }
+    await this.audit.append(AuditEntry.create({
+      skillId,
+      skillVersion: version,
+      action: 'publish_judgement_override',
+      actor,
+      after: { missingTargets, reason: overrideReason },
+    }));
+  }
+
+  private async findMissingRealJudgements(skillId: string, version: string): Promise<string[]> {
+    if (!this.catalog) {
+      return [`${skillId}:${version}`];
+    }
+    const targets = [`${skillId}:${version}`];
+    const files = await this.storage.listSkillFiles(skillId, version);
+    for (const file of files) {
+      if (isExtractableArtifact(file.mimeType, file.path)) {
+        targets.push(`${skillId}:${version}:${file.path}`);
+      }
+    }
+
+    const missing: string[] = [];
+    for (const targetId of targets) {
+      const targetType = targetId === `${skillId}:${version}` ? 'skill' : 'file';
+      const judgements = await this.catalog.listJudgements(targetType, targetId);
+      const hasRealJudgement = judgements.some((judgement) =>
+        judgement.overallRisk !== 'no_judge_available'
+          && judgement.model !== null
+          && judgement.model !== 'noop'
+      );
+      if (!hasRealJudgement) {
+        missing.push(targetId);
+      }
+    }
+    return missing;
   }
 
   async reject(id: string, version: string, actor: string, reason: string): Promise<Skill> {

@@ -63,11 +63,14 @@ admin pages render only for users with a valid admin session.
 ## Acceptance Criteria
 
 - `/admin`, `/admin/drafts`, `/admin/review`, `/admin/skills/new`,
-  `/admin/skills/:id`, `/admin/proposals`, and `/admin/proposals/:id` are
-  inaccessible without a valid admin session.
+  `/admin/skills/:id`, `/admin/proposals`, `/admin/proposals/:id`, and
+  `/admin/agent-sessions` are inaccessible without a valid admin session.
 - Directly opening an admin URL without a session redirects to `/admin/login`.
 - Successful login redirects to `/admin`.
 - `/admin/login` is reachable without a session.
+- `/agent-auth` is reachable without an admin session and renders a form for
+  creating agent sessions when at least one agent-facing area uses bearer auth.
+- `/agent-auth` shows a message when agent session delegation is disabled.
 - `?lang=de` selects the German UI.
 - `?lang=en` selects the English UI.
 - Stored language preference is reused.

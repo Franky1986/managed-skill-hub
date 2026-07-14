@@ -16,6 +16,7 @@ import { SkillCatalogPort, CatalogSkillVersionRecord } from '../../ports/outboun
 import { Proposal } from '../../../domain/proposal/Proposal';
 import { Judgement, JudgementRisk } from '../../../domain/judgement/Judgement';
 import { SkillJudgerPort, JudgementTarget } from '../../ports/outbound/judger.port';
+import { JudgementRequiredError } from '../../../domain/errors';
 
 describe('ReviewSkillUseCase', () => {
   it('indexes a version when it is published', async () => {
@@ -117,6 +118,52 @@ describe('ReviewSkillUseCase', () => {
     expect(repo.saved[0]?.getVersion('1.0.0').status).toBe(SkillStatus.PUBLISHED);
     expect(search.indexed).toHaveLength(1);
     expect(catalog.listSkillVersionsCalls).toBe(1);
+  });
+
+  it('blocks required publication when real skill and file judgements are missing', async () => {
+    const skill = createWorkflowSkill();
+    const repo = new Repo(skill);
+    const audit = new Audit();
+    const storage = new Storage();
+    const useCase = new ReviewSkillUseCase(
+      repo,
+      audit,
+      storage,
+      new Scanner(),
+      new Search(),
+      new CatalogStub(createCatalogVersion({})),
+      undefined,
+      'required'
+    );
+
+    await expect(useCase.publish('workflow-skill', '1.0.0', 'publisher'))
+      .rejects.toBeInstanceOf(JudgementRequiredError);
+    expect(repo.saved).toHaveLength(0);
+  });
+
+  it('audits an administrator override of required publication judgements', async () => {
+    const skill = createWorkflowSkill();
+    const repo = new Repo(skill);
+    const audit = new Audit();
+    const useCase = new ReviewSkillUseCase(
+      repo,
+      audit,
+      new Storage(),
+      new Scanner(),
+      new Search(),
+      new CatalogStub(createCatalogVersion({})),
+      undefined,
+      'required'
+    );
+
+    await useCase.publish('workflow-skill', '1.0.0', 'admin', {
+      judgementOverrideAllowed: true,
+      judgementOverrideReason: 'Provider outage reviewed manually',
+    });
+
+    expect(audit.entries[0]?.action).toBe('publish_judgement_override');
+    expect(audit.entries[0]?.after).toMatchObject({ reason: 'Provider outage reviewed manually' });
+    expect(repo.saved[0]?.getVersion('1.0.0').status).toBe(SkillStatus.PUBLISHED);
   });
 });
 

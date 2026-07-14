@@ -130,13 +130,32 @@ label and therefore provides no verified identity or owner isolation. A static
 bearer token provides one shared actor for every holder. Per-human ownership is
 available only with OIDC.
 
-The public React catalog does not store agent bearer/OIDC tokens. Keep
-`PUBLIC_READ_AUTH_MODE=none` for an anonymously browsable catalog, or treat a
-protected public-read mode as an agent/API-only deployment until a separate
-browser OIDC flow is introduced. The administrator workbench uses only admin
-session endpoints; its proposal badge uses `/admin/proposals/notice`.
+The public React catalog does not store agent bearer/OIDC tokens. With
+`PUBLIC_READ_AUTH_MODE=none`, it is anonymously browsable. With protected
+public reads, an active admin browser session whose principal has `reader` or
+`admin` may read the published catalog as an alternative to the configured
+agent credential. This exception is read-only and does not apply to discovery
+or proposal routes. The proposal badge uses `/admin/proposals/notice`.
 
 Protected agent routes return `401` with machine-readable `details.authRequired`, `details.authArea`, `details.authScheme`, `details.discoverUrl`, and `details.credentialSetupScriptUrl` so agents can ask the user for setup-script confirmation instead of requesting tokens in chat.
+
+### Agent Session Delegation
+
+Short-lived, area-scoped agent sessions are available when at least one
+agent-facing area uses `bearer`. A human enters area bearer tokens in the
+browser at `/frontend/agent-auth` and receives an 8-character code the agent
+can use as `Authorization: AgentSession <code>`.
+
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `AGENT_SESSION_ENABLED` | no | Feature toggle. Set `false` to disable agent sessions. | `true` |
+| `AGENT_SESSION_TTL_SECONDS` | no | Default lifetime for a new agent session. | `10800` (3 hours) |
+| `AGENT_SESSION_CODE_LENGTH` | no | Number of characters in a session code. | `8` |
+| `AGENT_SESSION_CODE_CHARSET` | no | URL-safe, case-insensitive alphabet for codes. | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` |
+| `AGENT_SESSION_MAX_ACTIVE` | no | Optional per-IP cap on active sessions. `none`/`null`/`unlimited` disables the cap. | `10` |
+
+The area bearer token values themselves remain in `.env.secrets` or a deployment
+secret manager; the human receives them through a separate trusted channel.
 
 ## Authentik/OIDC Profile
 
@@ -228,6 +247,7 @@ Cutover note: filesystem-to-database migration should be copy-only and run durin
 |----------|----------|-------------|---------|
 | `JUDGER_PROVIDER` | yes | Judger backend selector (`noop`, `vercel-ai-sdk`) or custom provider key (`my-custom-judger`). | `noop` |
 | `JUDGER_ADAPTER_PATH` | no | Required when `JUDGER_PROVIDER` is custom/non-built-in. | `./path/to/custom.adapter.ts` |
+| `PUBLISH_JUDGEMENT_POLICY` | no | Publication gate: `disabled` skips the check, `warn` records incomplete judgement and publishes, `required` blocks until every extractable file and the skill version have a real judgement. Administrators may override `required` with an audited reason. | `required` in production, otherwise `warn` |
 | `VERCEL_AI_SDK_MODEL` | no | Active model with provider prefix. | `openai:gpt-4.1` |
 | `OPENAI_API_KEY` | no | OpenAI key when VERCEL model uses OpenAI. | `sk-...` |
 | `VERCEL_AI_SDK_TIMEOUT_MS` | no | Vercel timeout in ms. | `30000` |
@@ -238,6 +258,8 @@ Notes:
 
 - `JUDGER_PROVIDER=noop` marks proposals as `overallRisk=no_judge_available` for proposal/file judgements. This is a clear signal that no real automated judgement was performed yet; auto-publish remains blocked unless `AUTO_APPROVE_WITHOUT_JUDGER=true`.
 - `JUDGER_PROVIDER` can also be any custom identifier when `JUDGER_ADAPTER_PATH` points to a module implementing `SkillJudgerPort`.
+- Built-in providers ignore `JUDGER_ADAPTER_PATH`. Development logs emit `judger_adapter_path_ignored`; production startup rejects this contradictory combination.
+- Proposal details expose `not_started`, `completed`, `unavailable`, or `failed` judgement execution states for the proposal and each file. Provider errors remain server-side and are represented by a safe status message.
 - For a complete example and export contract, see [`docs/setup/JUDGER_ADAPTERS.md`](./JUDGER_ADAPTERS.md).
 
 ## Proposal and Auto-Publish

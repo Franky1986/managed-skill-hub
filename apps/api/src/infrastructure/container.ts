@@ -10,6 +10,11 @@ import { DatabaseAuditLog } from '../adapters/outbound/audit/database/database.a
 import { SqliteSkillSearch } from '../adapters/outbound/search/sqlite/sqlite.search';
 import { SqliteSkillCatalog } from '../adapters/outbound/catalog/sqlite/sqlite.skill-catalog';
 import { MysqlSkillCatalog } from '../adapters/outbound/catalog/mysql/mysql.skill-catalog';
+import { AgentSessionRepositoryPort } from '../application/ports/outbound/agent-session.port';
+import { SqliteAgentSessionRepository } from '../adapters/outbound/catalog/sqlite/sqlite.agent-session.repository';
+import { MysqlAgentSessionRepository } from '../adapters/outbound/catalog/mysql/mysql.agent-session.repository';
+import { ensureSqliteCatalogSchema } from '../adapters/outbound/catalog/sqlite/sqlite.catalog-schema';
+import Database from 'better-sqlite3';
 import { MysqlSkillSearch } from '../adapters/outbound/search/mysql/mysql.search';
 import { MysqlClient } from '../adapters/outbound/mysql/mysql.connection';
 import { ConfigurationError, ValidationError } from '../domain/errors';
@@ -56,6 +61,7 @@ import { SkillCatalogPort } from '../application/ports/outbound/skill-catalog.po
 import { SkillSearchPort } from '../application/ports/outbound/search.port';
 import { AutoPublishProposalUseCase } from '../application/usecases/proposal/auto-publish-proposal.usecase';
 import path from 'path';
+import { mkdirSync } from 'fs';
 import { promises as fs } from 'fs';
 import type { SkillJudgerPort } from '../application/ports/outbound/judger.port';
 import { resolveRepoRoot } from './config';
@@ -73,6 +79,7 @@ export interface Container {
   fileStorage: SkillFileStoragePort;
   auditLog: AuditLogPort;
   principalRepository: PrincipalRepositoryPort;
+  agentSessionRepository: AgentSessionRepositoryPort;
   adminSessions: AdminSessionPort;
   oidcLoginTransactions: OidcLoginTransactionPort;
   authorizationPolicy: AuthorizationPolicy;
@@ -107,6 +114,7 @@ export interface Container {
 
 export interface ContainerBuildOptions {
   recordPrincipalProjectionEvent?: import('../application/security/principal-projection.service').PrincipalProjectionEventSink;
+  recordJudgementEvent?: import('../application/usecases/judgement/judgement-runtime-event').JudgementRuntimeEventSink;
 }
 
 export async function buildContainer(
@@ -116,6 +124,12 @@ export async function buildContainer(
   await validateDataDir(config.dataDir);
 
   const mysqlClient = needsMysqlClient(config) ? new MysqlClient(config) : null;
+  const agentSessionRepository = buildAgentSessionRepository(
+    config.catalogProvider,
+    config.dataDir,
+    path.join(config.dataDir, 'index', 'search.db'),
+    mysqlClient
+  );
   const catalog = buildCatalogAdapter(
     config.catalogProvider,
     config.dataDir,
@@ -151,7 +165,15 @@ export async function buildContainer(
   );
 
   const createSkill = new CreateSkillUseCase(repo, storage, audit);
-  const judgeSkillVersion = new JudgeSkillVersionUseCase(repo, judger, audit, catalog, storage, scanner);
+  const judgeSkillVersion = new JudgeSkillVersionUseCase(
+    repo,
+    judger,
+    audit,
+    catalog,
+    storage,
+    scanner,
+    options.recordJudgementEvent
+  );
   const reviewProposal = new ReviewProposalUseCase(
     repo,
     storage,
@@ -159,9 +181,19 @@ export async function buildContainer(
     createSkill,
     judgeSkillVersion,
     catalog,
-    extractor
+    extractor,
+    options.recordJudgementEvent
   );
-  const reviewSkill = new ReviewSkillUseCase(repo, audit, storage, scanner, search, catalog, judger);
+  const reviewSkill = new ReviewSkillUseCase(
+    repo,
+    audit,
+    storage,
+    scanner,
+    search,
+    catalog,
+    judger,
+    config.publishJudgementPolicy
+  );
   const autoPublishProposal = new AutoPublishProposalUseCase(
     repo,
     storage,
@@ -184,6 +216,7 @@ export async function buildContainer(
     fileStorage: storage,
     auditLog: audit,
     principalRepository: identityPersistence,
+    agentSessionRepository,
     adminSessions: identityPersistence,
     oidcLoginTransactions: identityPersistence,
     authorizationPolicy,
@@ -196,7 +229,7 @@ export async function buildContainer(
       maxFiles: config.proposalMaxFiles,
       maxFileSizeBytes: config.proposalMaxFileSizeBytes,
       disallowedPathPrefixes: config.proposalDisallowedPaths,
-    }, autoPublishProposal),
+    }, autoPublishProposal, options.recordJudgementEvent),
     proposalRead: new ProposalReadUseCase(
       repo,
       storage,
@@ -206,12 +239,21 @@ export async function buildContainer(
       config.autoPublishOnGreen,
       config.proposalMaxFiles,
       config.proposalMaxFileSizeBytes,
-      config.proposalDisallowedPaths
+      config.proposalDisallowedPaths,
+      config.judgerProvider
     ),
     proposalDuplicateCheck: new ProposalDuplicateCheckUseCase(catalog),
     reviewProposal,
     nameSuggestion: new SuggestSkillNameUseCase(repo),
-    judgeProposal: new JudgeProposalUseCase(repo, judger, audit, catalog, storage, scanner),
+    judgeProposal: new JudgeProposalUseCase(
+      repo,
+      judger,
+      audit,
+      catalog,
+      storage,
+      scanner,
+      options.recordJudgementEvent
+    ),
     judgeFile: new JudgeFileUseCase(scanner, judger),
     judgeSkillVersion,
     listJudgements: new ListJudgementsUseCase(repo, audit, catalog),
@@ -334,6 +376,29 @@ function buildCatalogAdapter(
 
   throw new ConfigurationError(
     `CATALOG_PROVIDER is set to '${provider}', but mysql catalog support is not available in this build.`
+  );
+}
+
+function buildAgentSessionRepository(
+  provider: CatalogProvider,
+  dataDir: string,
+  catalogPath: string,
+  mysqlClient: MysqlClient | null
+): AgentSessionRepositoryPort {
+  if (provider === 'sqlite') {
+    mkdirSync(path.dirname(catalogPath), { recursive: true });
+    const db = new Database(catalogPath);
+    ensureSqliteCatalogSchema(db);
+    return new SqliteAgentSessionRepository(db);
+  }
+  if (provider === 'mysql') {
+    if (!mysqlClient) {
+      throw new ConfigurationError('MYSQL client configuration is required for mysql catalog provider.');
+    }
+    return new MysqlAgentSessionRepository(mysqlClient);
+  }
+  throw new ConfigurationError(
+    `CATALOG_PROVIDER is set to '${provider}', but agent session support is not available in this build.`
   );
 }
 

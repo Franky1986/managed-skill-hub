@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi } from '../../api/admin';
 import { ProposalSummary } from '../../api/proposals';
@@ -6,16 +6,23 @@ import { JudgementBadgeRow } from '../../components/JudgementPanel';
 import { useLanguage } from '../../i18n';
 import { formatLocalDateTime } from '../../lib/formatLocalDateTime';
 import { formatOverallRiskLabel, isNoJudgeAvailable, noJudgeHint } from '../../lib/judgement';
+import { useBackgroundPolling } from '../../hooks/useBackgroundPolling';
 
 export function AdminProposalsPage() {
     const { t, language } = useLanguage();
     const [proposals, setProposals] = useState<ProposalSummary[]>([]);
     const [filter, setFilter] = useState<'open' | 'in_upload' | 'rejected' | 'converted' | 'all'>('open');
 
-    useEffect(() => {
+    const refreshProposals = useCallback(async (signal: AbortSignal) => {
         const status = statusForProposalFilter(filter);
-        adminApi.listProposals(undefined, status).then((res) => setProposals(res.data.items ?? []));
+        try {
+            const response = await adminApi.listProposals(undefined, status, signal);
+            setProposals(response.data.items ?? []);
+        } catch {
+            // Keep the last successful list visible during transient background failures.
+        }
     }, [filter]);
+    useBackgroundPolling(refreshProposals);
 
     return (
         <div className="space-y-4">

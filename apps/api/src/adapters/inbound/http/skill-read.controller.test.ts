@@ -6,6 +6,8 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { registerSkillReadRoutes } from './skill-read.controller';
 import { AgentApiAuth } from './agent-api-auth';
 import { registerApiErrorHandler } from './error-response';
+import { AdminAuth } from './admin-auth';
+import { AuthenticatedPrincipal, PrincipalRole } from '../../../application/security/authenticated-principal';
 
 describe('SkillReadController /discover', () => {
   const tempDirs: string[] = [];
@@ -328,6 +330,49 @@ describe('SkillReadController /discover', () => {
     expect(JSON.parse(valid.payload)).toEqual({ items: ['automation'] });
   });
 
+  it('accepts a reader-capable admin session as alternative public read authentication', async () => {
+    const app = Fastify({ logger: false });
+    registerApiErrorHandler(app);
+    const container = {
+      config: {
+        openapiYamlPath: '/nonexistent/openapi.yaml',
+        proposalMaxFiles: 30,
+        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
+        proposalDisallowedPaths: [],
+        autoPublishOnGreen: false,
+        publicReadAuthMode: 'bearer',
+        publicReadBearerToken: 'read-secret',
+        publicReadBearerActor: 'read-agent',
+        proposalAuthMode: 'none',
+        discoveryAuthMode: 'bearer',
+        discoveryBearerToken: 'discovery-secret',
+        discoveryBearerActor: 'discovery-agent',
+      },
+      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
+      skillQuery: {
+        listCategories: async () => ['automation'],
+      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
+    } as import('../../../infrastructure/container').Container;
+    const adminAuth = adminAuthForCookieRoles({
+      'reader-session': ['reader'],
+      'admin-session': ['admin'],
+      'reviewer-session': ['reviewer'],
+    });
+    registerSkillReadRoutes(app, container, new AgentApiAuth(container.config), adminAuth);
+
+    const reader = await app.inject({ method: 'GET', url: '/categories', headers: { cookie: 'test_session=reader-session' } });
+    const admin = await app.inject({ method: 'GET', url: '/categories', headers: { cookie: 'test_session=admin-session' } });
+    const reviewerOnly = await app.inject({ method: 'GET', url: '/categories', headers: { cookie: 'test_session=reviewer-session' } });
+    const invalid = await app.inject({ method: 'GET', url: '/categories', headers: { cookie: 'test_session=invalid' } });
+    const discovery = await app.inject({ method: 'GET', url: '/discover', headers: { cookie: 'test_session=reader-session' } });
+
+    expect(reader.statusCode).toBe(200);
+    expect(admin.statusCode).toBe(200);
+    expect(reviewerOnly.statusCode).toBe(401);
+    expect(invalid.statusCode).toBe(401);
+    expect(discovery.statusCode).toBe(401);
+  });
+
   it('returns known tags on /tags', async () => {
     const app = await buildApp();
     const response = await app.inject({ method: 'GET', url: '/tags' });
@@ -533,3 +578,36 @@ describe('SkillReadController /discover', () => {
     expect(payload.code).toBe('NOT_FOUND');
   });
 });
+
+function adminAuthForCookieRoles(sessionRoles: Record<string, PrincipalRole[]>): AdminAuth {
+  return {
+    mode: 'simple',
+    validate: async (request) => {
+      const sessionId = request.headers.cookie?.match(/(?:^|;\s*)test_session=([^;]+)/)?.[1];
+      const roles = sessionId ? sessionRoles[sessionId] : undefined;
+      if (!roles) {
+        return null;
+      }
+      const principal: AuthenticatedPrincipal = {
+        principalId: `test:${sessionId}`,
+        kind: 'human',
+        externalSubject: null,
+        issuer: null,
+        clientId: null,
+        displayName: sessionId,
+        email: null,
+        groups: [],
+        roles,
+        scheme: 'session',
+      };
+      return {
+        username: sessionId,
+        principal,
+        roles,
+        expiresAt: new Date(Date.now() + 60_000),
+      };
+    },
+    validateMutationOrigin: () => undefined,
+    logout: async () => undefined,
+  };
+}

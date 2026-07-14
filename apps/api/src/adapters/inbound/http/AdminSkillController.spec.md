@@ -36,6 +36,8 @@ HTTP adapter for protected admin operations.
 - Ensure auth guards.
 - Follow OpenAPI contract.
 - Forward commands to `SkillCommandPort`.
+- Forward an optional judgement override reason and authorize it only for the
+  `admin` role; publisher-only sessions cannot bypass a required gate.
 - Trigger admin-side reruns without executing skill code.
 - Make unpublished skill versions and their files readable.
 - Treat file uploads as new draft versions instead of in-place mutation.
@@ -72,6 +74,7 @@ HTTP adapter for protected admin operations.
 - Unauthenticated -> `401`
 - Unauthorized -> `403`
 - Invalid status transition -> `409`
+- Missing required publication judgements -> `409 JUDGEMENT_REQUIRED`
 - Validation error -> `422`
 - Missing file/version -> `404`
 - Error responses contain at least `error`, `code`, `requestId`
@@ -81,6 +84,8 @@ HTTP adapter for protected admin operations.
 
 - Only authenticated admins can execute admin operations.
 - Deprecate accepts an optional public reason.
+- Publish accepts an optional administrator-only, audited judgement override
+  reason.
 - Skill file mutations never perform in-place changes to existing versions.
 - Endpoints match OpenAPI spec.
 

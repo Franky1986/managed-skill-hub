@@ -16,9 +16,16 @@ export interface ProposalFinalizeUploadResponse {
     statusUrl: string;
     checkUrl: string;
     uploadFinalized: boolean;
-    judgementStatus: 'completed';
+    judgementStatus: 'completed' | 'partial' | 'unavailable' | 'failed';
     autoPublishStatus: 'disabled' | 'skipped' | 'published';
     autoPublishBlockedReason: string | null;
+}
+
+export interface JudgementExecutionStatus {
+    state: 'not_started' | 'completed' | 'unavailable' | 'failed';
+    provider: string;
+    attemptedAt: string | null;
+    message: string | null;
 }
 
 export interface HowToProposeResponse {
@@ -148,7 +155,9 @@ export interface ProposalDetail {
         sizeBytes: number;
         sha256: string | null;
         extractable: boolean;
+        judgement: JudgementExecutionStatus;
     }>;
+    judgement: JudgementExecutionStatus;
     judgements: JudgementRecord[];
     rejectionReason: string | null;
     review: ProposalReview;
@@ -234,7 +243,7 @@ export interface DuplicateCheckResponse {
 
 export const proposalsApi = {
     howToPropose: () => apiClient.get<HowToProposeResponse>('/howToPropose'),
-    status: (id: string) => apiClient.get<ProposalPublicStatus>(`/proposals/${id}/status`),
+    status: (id: string, signal?: AbortSignal) => apiClient.get<ProposalPublicStatus>(`/proposals/${id}/status`, { signal }),
     notice: () => apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/proposals/notice'),
     checkDuplicate: (data: {
         skillId?: string;

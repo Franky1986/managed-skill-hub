@@ -26,7 +26,7 @@ requests into inbound port calls and maps results back to JSON or file streams.
 ## Non-Scope
 
 - Admin write operations
-- Admin write operations or admin session authentication
+- Admin session establishment and admin write authorization
 - German API responses
 - Translating existing skill content or metadata
 
@@ -67,6 +67,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
   templates/assets just because they are non-code or later-runtime inputs.
 - Discovery routes are guarded by `DISCOVERY_AUTH_MODE`.
 - Public read routes are guarded by `PUBLIC_READ_AUTH_MODE`.
+- A valid admin browser session with the `reader` or `admin` role is accepted
+  as an alternative credential on public read routes. This fallback does not
+  apply to discovery or proposal routes and does not grant any write access.
 - `GET /agent-credentials/setup.sh` returns a no-secret shell script that writes
   user-local credentials per registry alias/base URL.
 - The controller follows the OpenAPI contract.
@@ -122,6 +125,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
 
 - Endpoints match the OpenAPI specification.
 - Response schemas are validated by tests.
+- Protected public read routes accept either their configured agent credential
+  or a reader-capable admin browser session; invalid sessions and admin sessions
+  without `reader` or `admin` remain subject to configured agent auth.
 - Agent-facing discovery and proposal guidance is English-only.
 - Agent-facing guidance preserves the distinction between English contract
   language and the agent's obligation to answer the user in the user's current

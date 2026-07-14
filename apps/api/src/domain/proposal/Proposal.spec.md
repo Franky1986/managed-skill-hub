@@ -49,6 +49,8 @@ skill or skill version only after approval.
 - A proposal cannot be changed in content after submission.
 - Persisted proposals can be fully rehydrated including files, judgements, and
   status.
+- Adding a judgement advances open proposals to `judged`, but preserves
+  terminal `approved`, `rejected`, and `converted` lifecycle states.
 
 ## Tests / Checks
 

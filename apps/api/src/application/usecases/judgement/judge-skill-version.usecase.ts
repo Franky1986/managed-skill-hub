@@ -8,6 +8,7 @@ import { CatalogSkillVersionRecord, SkillCatalogPort } from '../../ports/outboun
 import { SkillFileStoragePort } from '../../ports/outbound/file-storage.port';
 import { FileScannerPort } from '../../ports/outbound/file-scanner.port';
 import { isTextLikeArtifact } from '../skill/public-metadata';
+import { JudgementRuntimeEventSink, judgementErrorCategory } from './judgement-runtime-event';
 
 const MAX_SKILL_FILE_TEXT_CHARS = 8000;
 
@@ -18,7 +19,8 @@ export class JudgeSkillVersionUseCase {
     private readonly audit: AuditLogPort,
     private readonly catalog?: SkillCatalogPort,
     private readonly storage?: SkillFileStoragePort,
-    private readonly scanner?: FileScannerPort
+    private readonly scanner?: FileScannerPort,
+    private readonly judgementEvents?: JudgementRuntimeEventSink
   ) {}
 
   async execute(
@@ -38,13 +40,34 @@ export class JudgeSkillVersionUseCase {
     };
     const mergedText = [target.text, options.contextText].filter(Boolean).join('\n\n---\n');
 
-    const judgement = await this.judger.judge({
-      type: 'skill',
-      id: `${skillId}:${version}`,
-      title: target.title,
-      text: mergedText,
-      metadata: mergedMetadata,
-    });
+    let judgement: Awaited<ReturnType<SkillJudgerPort['judge']>>;
+    try {
+      judgement = await this.judger.judge({
+        type: 'skill',
+        id: `${skillId}:${version}`,
+        title: target.title,
+        text: mergedText,
+        metadata: mergedMetadata,
+      });
+    } catch (error) {
+      await this.audit.append(AuditEntry.create({
+        skillId,
+        skillVersion: version,
+        action: 'judge_skill_version_failed',
+        actor: options.actor ?? 'system',
+        after: { errorCategory: judgementErrorCategory(error) },
+      }));
+      this.judgementEvents?.({
+        event: 'judgement_execution',
+        outcome: 'failure',
+        operation: 'skill_version',
+        skillId,
+        version,
+        proposalId: readString(options.contextMetadata, 'proposalId'),
+        errorCategory: judgementErrorCategory(error),
+      });
+      throw error;
+    }
 
     await this.audit.append(
       AuditEntry.create({
@@ -59,6 +82,14 @@ export class JudgeSkillVersionUseCase {
       })
     );
     await this.catalog?.upsertSkillJudgement(skillId, version, judgement);
+    this.judgementEvents?.({
+      event: 'judgement_execution',
+      outcome: 'success',
+      operation: 'skill_version',
+      skillId,
+      version,
+      proposalId: readString(options.contextMetadata, 'proposalId'),
+    });
     await this.judgeVersionFiles(skillId, version, options.actor ?? 'system');
 
     return judgement;
@@ -112,6 +143,14 @@ export class JudgeSkillVersionUseCase {
             },
           })
         );
+        this.judgementEvents?.({
+          event: 'judgement_execution',
+          outcome: 'success',
+          operation: 'skill_file',
+          skillId,
+          version,
+          filePath: file.path,
+        });
       } catch (error) {
         await this.audit.append(
           AuditEntry.create({
@@ -122,6 +161,15 @@ export class JudgeSkillVersionUseCase {
             after: { file: file.path, error: (error as Error).message },
           })
         );
+        this.judgementEvents?.({
+          event: 'judgement_execution',
+          outcome: 'failure',
+          operation: 'skill_file',
+          skillId,
+          version,
+          filePath: file.path,
+          errorCategory: judgementErrorCategory(error),
+        });
       }
     }
   }
@@ -211,6 +259,11 @@ function serializeJudgement(judgement: Awaited<ReturnType<SkillJudgerPort['judge
     model: judgement.model,
     createdAt: judgement.createdAt.toISOString(),
   };
+}
+
+function readString(source: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = source?.[key];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function serializeCatalogSkillVersion(

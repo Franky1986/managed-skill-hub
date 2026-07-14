@@ -2,6 +2,7 @@ import { ProposalStatus } from '../../domain/proposal/ProposalStatus';
 import { JudgementDto } from './judgement.dto';
 import { JudgementOverallRisk } from '../../domain/judgement/Judgement';
 import { ReviewLabel } from '../usecases/proposal/review-metadata';
+import { JudgementExecutionStatus } from '../usecases/judgement/judgement-execution-status';
 
 export interface ProposalReviewDto {
   latestJudgementRisk: JudgementOverallRisk | null;
@@ -45,6 +46,7 @@ export interface ProposalFileDto {
   sizeBytes: number;
   sha256: string | null;
   extractable: boolean;
+  judgement: JudgementExecutionStatus;
 }
 
 export interface ProposalConversionPreviewDto {
@@ -71,6 +73,7 @@ export interface ProposalDetailDto {
   submittedBy: string;
   files: ProposalFileDto[];
   judgements: JudgementDto[];
+  judgement: JudgementExecutionStatus;
   rejectionReason: string | null;
   review: ProposalReviewDto;
   conversion: ProposalConversionPreviewDto;
@@ -137,7 +140,7 @@ export interface ProposalFinalizeUploadResponseDto {
   statusUrl: string;
   checkUrl: string;
   uploadFinalized: boolean;
-  judgementStatus: 'completed';
+  judgementStatus: 'completed' | 'partial' | 'unavailable' | 'failed';
   autoPublishStatus: 'disabled' | 'skipped' | 'published';
   autoPublishBlockedReason: string | null;
 }

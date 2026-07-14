@@ -20,13 +20,14 @@ function includesAll(source: string, fragments: string[], label: string): string
 }
 
 async function main(): Promise<void> {
-  const [router, layout, loginPage, authStore, howTo, proposalDetail, judgementPanel, judgementLib, messages, adminProposals, adminSkillPage, adminDashboard, apiClient, adminApi] = await Promise.all([
+  const [router, layout, loginPage, authStore, howTo, proposalDetail, proposalStatus, judgementPanel, judgementLib, messages, adminProposals, adminSkillPage, adminDashboard, apiClient, adminApi, backgroundPolling] = await Promise.all([
     readFile('apps/web/src/router.tsx', 'utf8'),
     readFile('apps/web/src/components/Layout.tsx', 'utf8'),
     readFile('apps/web/src/pages/admin/AdminLoginPage.tsx', 'utf8'),
     readFile('apps/web/src/store/auth.ts', 'utf8'),
     readFile('apps/web/src/pages/HowToProposePage.tsx', 'utf8'),
     readFile('apps/web/src/pages/ProposalDetailPage.tsx', 'utf8'),
+    readFile('apps/web/src/pages/ProposalStatusPage.tsx', 'utf8'),
     readFile('apps/web/src/components/JudgementPanel.tsx', 'utf8'),
     readFile('apps/web/src/lib/judgement.ts', 'utf8'),
     readFile('apps/web/src/i18n/messages.ts', 'utf8'),
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
     readFile('apps/web/src/pages/admin/AdminDashboardPage.tsx', 'utf8'),
     readFile('apps/web/src/api/client.ts', 'utf8'),
     readFile('apps/web/src/api/admin.ts', 'utf8'),
+    readFile('apps/web/src/hooks/useBackgroundPolling.ts', 'utf8'),
   ]);
 
   const results: CheckResult[] = [];
@@ -101,11 +103,11 @@ async function main(): Promise<void> {
         'const canReview =',
         '{canReview && <Link',
         'adminApi',
-        '.proposalNotice()',
-        'if (isLoading || !isAuthenticated || !canReview)',
+        '.proposalNotice(signal)',
+        'const shouldPollProposalNotice = !isLoading && isAuthenticated && canReview',
       ], 'reviewer navigation and admin notice boundary'),
       ...includesAll(adminApi, [
-        "apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice')",
+        "apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice', { signal })",
       ], 'admin proposal notice API'),
       ...includesAll(adminDashboard, ['const canViewOperations =', '{canViewOperations && <section'], 'admin operations visibility'),
       ...includesAll(adminSkillPage, [
@@ -147,6 +149,23 @@ async function main(): Promise<void> {
       ...includesAll(router, ['path="proposals" element={<AdminProposalsPage />}', 'path="proposals/:id" element={<ProposalDetailPage />}', 'path="skills/new" element={<AdminSkillCreatePage />}', 'path="skills/:id" element={<AdminSkillPage />}'], 'admin routes'),
       ...includesAll(adminProposals, ['adminApi.listProposals', '/admin/proposals/', 'fromProposal=1', 'mode=view'], 'admin proposals links'),
       ...includesAll(adminSkillPage, ['adminApi.convertProposal', 'handleFinalizeProposal', 'finalize-proposal', 'skillHub:proposalDecision'], 'admin skill proposal finalization'),
+    ],
+  });
+
+  results.push({
+    id: 'proposal-background-polling',
+    passed: true,
+    evidence: [
+      ...includesAll(backgroundPolling, [
+        'BACKGROUND_POLL_INTERVAL_MS = 10_000',
+        'if (!active || inFlight)',
+        'window.setInterval',
+        'controller?.abort()',
+      ], 'background polling lifecycle'),
+      ...includesAll(layout, ['useBackgroundPolling(refreshProposalNotice, shouldPollProposalNotice)'], 'proposal notice polling'),
+      ...includesAll(adminProposals, ['useBackgroundPolling(refreshProposals)'], 'admin proposal list polling'),
+      ...includesAll(proposalDetail, ['useBackgroundPolling(refreshProposal, Boolean(id))'], 'admin proposal detail polling'),
+      ...includesAll(proposalStatus, ['useBackgroundPolling(refreshStatus, Boolean(id))'], 'public proposal status polling'),
     ],
   });
 

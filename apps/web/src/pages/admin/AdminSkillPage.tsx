@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { adminApi, JudgementRecord } from '../../api/admin';
-import { handleApiError } from '../../api/client';
+import { getApiErrorCode, handleApiError } from '../../api/client';
 import { SkillDetail, SkillFile, skillsApi } from '../../api/skills';
 import { ArtifactInlineViewer } from '../../components/ArtifactInlineViewer';
 import { SkillFileTree } from '../../components/SkillFileTree';
-import { ProposalDetail } from '../../api/proposals';
+import { JudgementExecutionStatus, ProposalDetail } from '../../api/proposals';
 import { useLanguage } from '../../i18n';
 import { formatLocalDateTime } from '../../lib/formatLocalDateTime';
 import { formatOverallRiskLabel, isNoJudgeAvailable, noJudgeHint } from '../../lib/judgement';
@@ -74,6 +74,8 @@ export function AdminSkillPage() {
     const [showDeprecateDialog, setShowDeprecateDialog] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
     const [showRejectDialog, setShowRejectDialog] = useState(false);
+    const [publishOverrideReason, setPublishOverrideReason] = useState('');
+    const [showPublishOverrideDialog, setShowPublishOverrideDialog] = useState(false);
     const [movePath, setMovePath] = useState('');
     const [comparisonVersion, setComparisonVersion] = useState('');
     const [comparisonFileDiff, setComparisonFileDiff] = useState<DiffLine[]>([]);
@@ -531,7 +533,7 @@ export function AdminSkillPage() {
                         )}
                         {!isProposalFlowBlocked && (
                             <>
-                                {selectedVersionRecord?.status === 'draft' && (
+                                {canAdmin && selectedVersionRecord?.status === 'draft' && (
                                     <button
                                         type="button"
                                         onClick={() => void handleVersionAction('submit-review')}
@@ -541,7 +543,7 @@ export function AdminSkillPage() {
                                         Submit Review
                                     </button>
                                 )}
-                                {canRejectSelectedVersion && (
+                                {canReview && canRejectSelectedVersion && (
                                     <button
                                         type="button"
                                         onClick={() => setShowRejectDialog(true)}
@@ -551,7 +553,7 @@ export function AdminSkillPage() {
                                         {t('adminSkill.rejectVersion')}
                                     </button>
                                 )}
-                                {selectedVersionRecord?.status === 'in_review' && (
+                                {canReview && selectedVersionRecord?.status === 'in_review' && (
                                     <button
                                         type="button"
                                         onClick={() => void handleVersionAction('approve')}
@@ -561,7 +563,7 @@ export function AdminSkillPage() {
                                         {t('adminSkill.approveVersion')}
                                     </button>
                                 )}
-                                {selectedVersionRecord?.status === 'approved' && (
+                                {canPublish && selectedVersionRecord?.status === 'approved' && (
                                     <button
                                         type="button"
                                         onClick={() => void handleVersionAction('publish')}
@@ -571,7 +573,7 @@ export function AdminSkillPage() {
                                         {t('adminSkill.publishVersion')}
                                     </button>
                                 )}
-                                {selectedVersionRecord?.status === 'published' && (
+                                {canPublish && selectedVersionRecord?.status === 'published' && (
                                     <button
                                         type="button"
                                         onClick={() => setShowDeprecateDialog(true)}
@@ -583,7 +585,7 @@ export function AdminSkillPage() {
                                 )}
                             </>
                         )}
-                        {selectedVersionRecord && (
+                        {(canReview || canAdmin) && selectedVersionRecord && (
                             <button
                                 type="button"
                                 onClick={() => void handleRejudge()}
@@ -693,7 +695,7 @@ export function AdminSkillPage() {
     }
 
     function renderProposalJudgePanel() {
-        if (!fromProposal || !proposalDetail || !canReview) {
+        if (!fromProposal || !proposalDetail) {
             return null;
         }
 
@@ -704,7 +706,7 @@ export function AdminSkillPage() {
                         <h3 className="text-sm font-medium text-indigo-950">
                             {t('adminSkill.proposalJudge', { id: proposalDetail.id })}
                         </h3>
-                        {canReview && proposalDetail.status !== 'converted' && proposalDetail.status !== 'rejected' && (
+                        {canReview && proposalDetail.status !== 'rejected' && (
                             <button
                                 type="button"
                                 onClick={() => void handleRejudgeProposal()}
@@ -717,6 +719,7 @@ export function AdminSkillPage() {
                             </button>
                         )}
                     </div>
+                    {renderJudgementExecutionStatus(proposalDetail.judgement)}
                     {latestProposalJudgement ? (
                             <div className="space-y-2">
                             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -758,7 +761,7 @@ export function AdminSkillPage() {
                             )}
                         </div>
                     ) : (
-                        <p className="text-sm text-gray-600">{t('adminSkill.noProposalJudge')}</p>
+                        <p className="mt-2 text-sm text-gray-600">{t('adminSkill.noProposalJudge')}</p>
                     )}
                     {proposalDetail.lifecycle.length > 0 && (
                         <details className="mt-3">
@@ -782,6 +785,36 @@ export function AdminSkillPage() {
                         </details>
                     )}
                 </div>
+            </div>
+        );
+    }
+
+    function renderJudgementExecutionStatus(status: JudgementExecutionStatus) {
+        const stateLabel = status.state === 'completed'
+            ? t('adminSkill.judgeState.completed')
+            : status.state === 'unavailable'
+                ? t('adminSkill.judgeState.unavailable')
+                : status.state === 'failed'
+                    ? t('adminSkill.judgeState.failed')
+                    : t('adminSkill.judgeState.notStarted');
+        const stateClass = status.state === 'completed'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+            : status.state === 'failed'
+                ? 'border-red-200 bg-red-50 text-red-900'
+                : status.state === 'unavailable'
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-slate-200 bg-slate-50 text-slate-800';
+
+        return (
+            <div className={`rounded border p-2 text-xs ${stateClass}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong>{stateLabel}</strong>
+                    <span>{t('adminSkill.judgeProvider')}: <code>{status.provider}</code></span>
+                </div>
+                {status.attemptedAt && (
+                    <p className="mt-1">{t('adminSkill.judgeAttemptedAt')}: {formatJudgementDate(status.attemptedAt, language)}</p>
+                )}
+                {status.message && <p className="mt-1">{status.message}</p>}
             </div>
         );
     }
@@ -925,7 +958,9 @@ export function AdminSkillPage() {
 
             {isReadOnlyProposalView && fromProposal && proposalDetail && (
                 <section className="rounded border bg-white p-4">
+                    {proposalDetail.status === 'converted' && renderVersionSelectorBlock()}
                     {renderProposalJudgePanel()}
+                    {proposalDetail.status === 'converted' && renderReferenceVersionJudgePanel()}
                     {notice && <p className="mt-3 text-sm text-green-700">{notice}</p>}
                     {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
                 </section>
@@ -1471,10 +1506,10 @@ export function AdminSkillPage() {
                                     <p>{t('skillDetail.extractable')}: {selectedFile.extractable ? t('common.yes') : t('common.no')}</p>
                                 </div>
 
-                                {selectedFileJudgements.length > 0 && (
+                                {(selectedProposalFile || selectedFileJudgements.length > 0) && (
                                     <details
                                         className="rounded border border-gray-200"
-                                        open={showSelectedFileJudgements}
+                                        open={showSelectedFileJudgements || selectedFileJudgements.length === 0}
                                         onToggle={(event) =>
                                             setShowSelectedFileJudgements((event.currentTarget as HTMLDetailsElement).open)
                                         }
@@ -1483,6 +1518,28 @@ export function AdminSkillPage() {
                                             {t('adminSkill.selectedFileJudgements', { count: selectedFileJudgements.length })}
                                         </summary>
                                         <div className="space-y-2 border-t px-4 py-3">
+                                            {selectedProposalFile && (
+                                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        {renderJudgementExecutionStatus(selectedProposalFile.judgement)}
+                                                    </div>
+                                                    {canReview && selectedProposalFile.extractable && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleRejudgeProposalFile(selectedProposalFile.id)}
+                                                            disabled={Boolean(actionLoading)}
+                                                            className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 disabled:opacity-50"
+                                                        >
+                                                            {actionLoading === `proposal-file-rejudge:${selectedProposalFile.id}`
+                                                                ? t('adminSkill.fileRejudging')
+                                                                : t('adminSkill.rejudgeFile')}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {selectedFileJudgements.length === 0 && (
+                                                <p className="text-xs text-slate-600">{t('adminSkill.noFileJudge')}</p>
+                                            )}
                                             {selectedFileJudgements.map((judgement) => (
                                                 <div
                                                     key={judgement.id}
@@ -1748,7 +1805,7 @@ export function AdminSkillPage() {
 
                 </div>
             </section>
-            {isReadOnlyProposalView && (
+            {isReadOnlyProposalView && proposalDetail?.status !== 'converted' && (
                 <section className="rounded border bg-white p-4">
                     {renderVersionSelectorBlock()}
                     {renderReferenceVersionJudgePanel()}
@@ -1821,6 +1878,41 @@ export function AdminSkillPage() {
                                 className="rounded bg-red-600 px-3 py-2 text-sm text-white disabled:opacity-50"
                             >
                                 {t('adminSkill.rejectVersion')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showPublishOverrideDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded border bg-white p-4 shadow-lg">
+                        <h3 className="text-lg font-medium">{t('adminSkill.publishOverrideTitle')}</h3>
+                        <p className="mt-1 text-sm text-gray-600">{t('adminSkill.publishOverrideCopy')}</p>
+                        <label className="mt-3 block text-sm font-medium text-gray-700" htmlFor="publish-override-reason">
+                            {t('adminSkill.publishOverrideReason')}
+                        </label>
+                        <textarea
+                            id="publish-override-reason"
+                            value={publishOverrideReason}
+                            onChange={(event) => setPublishOverrideReason(event.target.value)}
+                            rows={3}
+                            className="mt-2 w-full rounded border px-3 py-2 text-sm"
+                        />
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowPublishOverrideDialog(false)}
+                                className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700"
+                            >
+                                {t('adminSkill.cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleConfirmPublishOverride()}
+                                disabled={Boolean(actionLoading) || publishOverrideReason.trim().length === 0}
+                                className="rounded bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                            >
+                                {t('adminSkill.publishWithOverride')}
                             </button>
                         </div>
                     </div>
@@ -2030,7 +2122,7 @@ export function AdminSkillPage() {
             } else if (action === 'approve') {
                 await adminApi.approve(id, selectedVersionRecord.version);
             } else if (action === 'publish') {
-                await adminApi.publish(id, selectedVersionRecord.version);
+                await adminApi.publish(id, selectedVersionRecord.version, reason);
             } else if (action === 'reject') {
                 await adminApi.rejectSkillVersion(id, selectedVersionRecord.version, reason ?? '');
             } else {
@@ -2039,6 +2131,9 @@ export function AdminSkillPage() {
             setNotice(t('adminSkill.notice.actionDone', { action }));
             await refreshSkill();
         } catch (actionError) {
+            if (action === 'publish' && canAdmin && getApiErrorCode(actionError) === 'JUDGEMENT_REQUIRED') {
+                setShowPublishOverrideDialog(true);
+            }
             setError(handleApiError(actionError, language));
         } finally {
             setActionLoading(null);
@@ -2069,6 +2164,16 @@ export function AdminSkillPage() {
         setRejectReason('');
     }
 
+    async function handleConfirmPublishOverride() {
+        const trimmed = publishOverrideReason.trim();
+        if (!trimmed) {
+            return;
+        }
+        await handleVersionAction('publish', trimmed);
+        setShowPublishOverrideDialog(false);
+        setPublishOverrideReason('');
+    }
+
     async function handleRejudge() {
         if (!id || !selectedVersionRecord) {
             return;
@@ -2095,14 +2200,43 @@ export function AdminSkillPage() {
         setError(null);
         setNotice(null);
         try {
-            const response = await adminApi.judgeProposal(proposalDetail.id);
-            setProposalDetail((current) => current
-                ? { ...current, judgements: [response.data, ...current.judgements] }
-                : current
-            );
+            await adminApi.judgeProposal(proposalDetail.id);
+            const response = await adminApi.getProposal(proposalDetail.id);
+            setProposalDetail(response.data);
             setNotice(t('adminSkill.notice.proposalRejudged'));
         } catch (actionError) {
             setError(handleApiError(actionError, language));
+            try {
+                const response = await adminApi.getProposal(proposalDetail.id);
+                setProposalDetail(response.data);
+            } catch {
+                // Keep the original provider error visible when status refresh also fails.
+            }
+        } finally {
+            setActionLoading(null);
+        }
+    }
+
+    async function handleRejudgeProposalFile(fileId: string) {
+        if (!proposalDetail) {
+            return;
+        }
+        setActionLoading(`proposal-file-rejudge:${fileId}`);
+        setError(null);
+        setNotice(null);
+        try {
+            await adminApi.judgeProposalFile(proposalDetail.id, fileId);
+            const response = await adminApi.getProposal(proposalDetail.id);
+            setProposalDetail(response.data);
+            setNotice(t('adminSkill.notice.fileRejudged'));
+        } catch (actionError) {
+            setError(handleApiError(actionError, language));
+            try {
+                const response = await adminApi.getProposal(proposalDetail.id);
+                setProposalDetail(response.data);
+            } catch {
+                // Keep the original provider error visible when status refresh also fails.
+            }
         } finally {
             setActionLoading(null);
         }

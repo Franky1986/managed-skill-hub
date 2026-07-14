@@ -3,18 +3,20 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { AgentAuthMode, AppConfig } from '../../../infrastructure/config';
 import { AgentAuthRequiredError } from '../../../domain/errors';
 import {
+  agentSessionPrincipal,
   anonymousAgentPrincipal,
   AuthenticatedPrincipal,
   staticBearerPrincipal,
 } from '../../../application/security/authenticated-principal';
 import { AccessTokenVerifierPort, AgentOidcMetadata } from '../../../application/ports/outbound/access-token-verifier.port';
+import { ValidateAgentSessionUseCase } from '../../../application/usecases/agent-session/validate-agent-session.usecase';
 
 export type AgentAuthArea = 'discovery' | 'public-read' | 'proposal';
 
 export interface AgentAuthContext {
   area: AgentAuthArea;
   actor: string;
-  scheme: 'none' | 'bearer' | 'oidc';
+  scheme: 'none' | 'bearer' | 'oidc' | 'agent-session';
   principal: AuthenticatedPrincipal;
 }
 
@@ -27,7 +29,8 @@ interface AreaConfig {
 export class AgentApiAuth {
   constructor(
     private readonly config: AppConfig,
-    private readonly tokenVerifier?: AccessTokenVerifierPort
+    private readonly tokenVerifier?: AccessTokenVerifierPort,
+    private readonly validateSessionUseCase?: ValidateAgentSessionUseCase
   ) {}
 
   guard(area: AgentAuthArea) {
@@ -89,16 +92,49 @@ export class AgentApiAuth {
     }
 
     const token = readBearerToken(request.headers.authorization);
-    if (!token || !areaConfig.token || !constantTimeEquals(token, areaConfig.token)) {
-      throw this.authRequired(area, 'bearer');
+    if (token && areaConfig.token && constantTimeEquals(token, areaConfig.token)) {
+      return {
+        area,
+        actor: areaConfig.actor,
+        scheme: 'bearer',
+        principal: staticBearerPrincipal(areaConfig.actor),
+      };
     }
 
-    return {
-      area,
-      actor: areaConfig.actor,
-      scheme: 'bearer',
-      principal: staticBearerPrincipal(areaConfig.actor),
-    };
+    if (this.config.agentSessionEnabled && this.validateSessionUseCase) {
+      const sessionCode = readAgentSessionCode(request.headers.authorization);
+      if (sessionCode) {
+        const result = await this.validateSessionUseCase.execute({
+          code: sessionCode,
+          area,
+          usedByIp: request.ip ?? null,
+        });
+        if (result.valid && result.code) {
+          request.log.info({
+            event: 'agent_authentication',
+            outcome: 'success',
+            area,
+            scheme: 'agent-session',
+            sessionCode: result.code,
+          }, 'Agent session authentication succeeded');
+          return {
+            area,
+            actor: `agent-session:${result.code}`,
+            scheme: 'agent-session',
+            principal: agentSessionPrincipal(result.code, result.areas ?? [area]),
+          };
+        }
+        request.log.warn({
+          event: 'agent_authentication',
+          outcome: 'failure',
+          area,
+          scheme: 'agent-session',
+          category: 'invalid_or_expired',
+        }, 'Agent session authentication denied');
+      }
+    }
+
+    throw this.authRequired(area, 'bearer');
   }
 
   metadata() {
@@ -118,6 +154,20 @@ export class AgentApiAuth {
 
   private authSchemes(): AgentAuthScheme[] {
     const schemes: AgentAuthScheme[] = [];
+    if (this.config.agentSessionEnabled && this.anyBearerAuthEnabled()) {
+      const sessionAreas: AgentAuthArea[] = [];
+      if (this.discoveryMode() === 'bearer') sessionAreas.push('discovery');
+      if (this.publicReadMode() === 'bearer') sessionAreas.push('public-read');
+      if (this.proposalMode() === 'bearer') sessionAreas.push('proposal');
+      if (sessionAreas.length > 0) {
+        schemes.push({
+          id: 'agent-session',
+          type: 'agent-session',
+          appliesTo: sessionAreas,
+          instructions: 'Open /frontend/agent-auth in a browser, enter the bearer token provided by your administrator, and paste the returned code into this chat.',
+        });
+      }
+    }
     if (this.publicReadMode() === 'bearer') {
       schemes.push({ id: 'public-read-bearer', type: 'bearer', appliesTo: ['public-read'] });
     }
@@ -178,6 +228,28 @@ export class AgentApiAuth {
     }
   }
 
+  /**
+   * Validates a raw bearer token against the configured token for an agent auth area.
+   * Used by the agent-session creation flow where multiple area tokens are supplied
+   * in separate headers.
+   */
+  validateAreaBearerToken(area: AgentAuthArea, token: string | undefined): boolean {
+    const areaConfig = this.getAreaConfig(area);
+    if (areaConfig.mode !== 'bearer' || !areaConfig.token || !token) {
+      return false;
+    }
+    return constantTimeEquals(token, areaConfig.token);
+  }
+
+  /**
+   * Throws the standard 401 error when an area bearer token is missing or invalid.
+   */
+  throwIfAreaBearerInvalid(area: AgentAuthArea, token: string | undefined): void {
+    if (!this.validateAreaBearerToken(area, token)) {
+      throw this.authRequired(area, 'bearer');
+    }
+  }
+
   private authRequired(area: AgentAuthArea, scheme: 'bearer' | 'oidc'): AgentAuthRequiredError {
     return new AgentAuthRequiredError(
       area,
@@ -198,33 +270,18 @@ export class AgentApiAuth {
       type: 'oauth2',
       flow: 'device_code',
       issuer,
-      openIdConfigurationUrl: metadata?.openIdConfigurationUrl
-        ?? `${issuer.replace(/\/+$/, '')}/.well-known/openid-configuration`,
-      authorizationEndpoint: metadata?.authorizationEndpoint,
-      deviceAuthorizationEndpoint: metadata?.deviceAuthorizationEndpoint,
-      tokenEndpoint: metadata?.tokenEndpoint,
-      clientId: metadata?.clientId ?? this.config.oidcAgentClientId ?? '',
-      scopes: [...scopes],
+      scopes: Array.from(scopes),
+      clientId: this.config.oidcAgentClientId ?? '',
+      metadata: metadata
+        ? {
+            tokenEndpoint: metadata.tokenEndpoint,
+            deviceAuthorizationEndpoint: metadata.deviceAuthorizationEndpoint,
+          }
+        : null,
       appliesTo: areas,
     };
   }
 }
-
-type BearerAgentAuthScheme = { id: string; type: 'bearer'; appliesTo: AgentAuthArea[] };
-type OidcAgentAuthScheme = {
-  id: string;
-  type: 'oauth2';
-  flow: 'device_code';
-  issuer: string;
-  openIdConfigurationUrl: string;
-  authorizationEndpoint?: string;
-  deviceAuthorizationEndpoint?: string;
-  tokenEndpoint?: string;
-  clientId: string;
-  scopes: string[];
-  appliesTo: AgentAuthArea[];
-};
-type AgentAuthScheme = BearerAgentAuthScheme | OidcAgentAuthScheme;
 
 export function getAgentAuthContext(request: FastifyRequest): AgentAuthContext | null {
   return (request as FastifyRequest & { agentAuth?: AgentAuthContext }).agentAuth ?? null;
@@ -241,6 +298,17 @@ function readBearerToken(value: string | undefined): string | null {
   return rest[0] || null;
 }
 
+function readAgentSessionCode(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const [scheme, ...rest] = value.trim().split(/\s+/);
+  if (scheme?.toLowerCase() !== 'agentsession' || rest.length !== 1) {
+    return null;
+  }
+  return rest[0]?.toUpperCase() || null;
+}
+
 function constantTimeEquals(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, 'utf8');
   const rightBuffer = Buffer.from(right, 'utf8');
@@ -250,4 +318,23 @@ function constantTimeEquals(left: string, right: string): boolean {
   }
 
   return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+export interface AgentAuthScheme {
+  id: string;
+  type: 'bearer' | 'oauth2' | 'agent-session';
+  appliesTo: AgentAuthArea[];
+  instructions?: string;
+}
+
+interface OidcAgentAuthScheme extends AgentAuthScheme {
+  type: 'oauth2';
+  flow: 'device_code';
+  issuer: string;
+  scopes: string[];
+  clientId: string;
+  metadata: {
+    tokenEndpoint: string;
+    deviceAuthorizationEndpoint: string;
+  } | null;
 }

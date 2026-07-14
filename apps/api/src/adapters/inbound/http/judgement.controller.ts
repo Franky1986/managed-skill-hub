@@ -23,6 +23,16 @@ export function registerJudgementRoutes(
     }
   });
 
+  app.post('/admin/proposals/:proposalId/files/:fileId/judge', guard, async (request, reply) => {
+    try {
+      const { proposalId, fileId } = request.params as { proposalId: string; fileId: string };
+      const judgement = await container.judgeProposal.executeFile(proposalId, fileId);
+      return reply.send(judgement);
+    } catch (error) {
+      return sendMappedApiError(reply, request, error);
+    }
+  });
+
   app.post('/admin/judge/skill/:skillId/version/:version', guard, async (request, reply) => {
     try {
       const { skillId, version } = request.params as { skillId: string; version: string };
