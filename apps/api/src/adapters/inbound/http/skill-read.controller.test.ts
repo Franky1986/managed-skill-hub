@@ -579,6 +579,53 @@ describe('SkillReadController /discover', () => {
   });
 });
 
+  it('advertises agent-session scheme with url when bearer and agent sessions are enabled', async () => {
+    const app = Fastify({ logger: false });
+    registerApiErrorHandler(app);
+    const container = {
+      config: {
+        openapiYamlPath: '/nonexistent/openapi.yaml',
+        proposalMaxFiles: 30,
+        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
+        proposalDisallowedPaths: ['node_modules/', '.venv/'],
+        autoPublishOnGreen: false,
+        registryId: 'session-registry',
+        registryName: 'Session Registry',
+        publicApiBaseUrl: 'https://skills.example.com/api',
+        publicReadAuthMode: 'bearer',
+        publicReadBearerToken: 'read-secret',
+        publicReadBearerActor: 'read-agent',
+        proposalAuthMode: 'bearer',
+        proposalBearerToken: 'proposal-secret',
+        proposalBearerActor: 'proposal-agent',
+        discoveryAuthMode: 'none',
+        discoveryBearerToken: null,
+        discoveryBearerActor: 'discovery-agent',
+        agentSessionEnabled: true,
+        agentSessionTtlSeconds: 10800,
+        agentSessionCodeLength: 8,
+        agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+        agentSessionMaxActive: null,
+      },
+      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
+      skillQuery: {
+        listCategories: async () => [],
+        listTags: async () => [],
+      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
+    } as import('../../../infrastructure/container').Container;
+    registerSkillReadRoutes(app, container);
+
+    const response = await app.inject({ method: 'GET', url: '/discover' });
+    expect(response.statusCode).toBe(200);
+    const payload = JSON.parse(response.payload);
+    const sessionScheme = payload.authSchemes.find((s: { id: string }) => s.id === 'agent-session');
+    expect(sessionScheme).toBeDefined();
+    expect(sessionScheme.type).toBe('agent-session');
+    expect(sessionScheme.appliesTo).toEqual(['public-read', 'proposal']);
+    expect(sessionScheme.url).toBe('https://skills.example.com/api/frontend/agent-auth');
+    expect(sessionScheme.instructions).toContain('https://skills.example.com/api/frontend/agent-auth');
+  });
+
 function adminAuthForCookieRoles(sessionRoles: Record<string, PrincipalRole[]>): AdminAuth {
   return {
     mode: 'simple',

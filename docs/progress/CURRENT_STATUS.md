@@ -78,6 +78,9 @@ EPIC-012 is implemented:
   `/admin/agent-auth-config` and displays the configured bearer token values
   for copy/paste sharing, then creates sessions by area selection without
   retyping tokens.
+- `/discover` advertises the absolute `/frontend/agent-auth` URL in the
+  `agent-session` auth scheme so agents can present a clickable link to the
+  user instead of only describing the path.
 - OpenAPI, co-located specs, and matrix tests cover the new flow.
 - The feature is toggled by `AGENT_SESSION_ENABLED` and configured through
   `AGENT_SESSION_TTL_SECONDS`, `AGENT_SESSION_CODE_LENGTH`,

@@ -1,3 +1,19 @@
+## 2026-07-14: EPIC-012 Agent Session Delegation — Expose Agent-Auth URL in /discover
+
+- The `/discover` response now advertises a concrete, absolute `url` in the
+  `agent-session` auth scheme, pointing to `/frontend/agent-auth`.
+- Updated `instructions` in the `agent-session` scheme so agents can present
+  the link directly to the user instead of describing a relative path.
+- Updated `/howToPropose` workflow notes: when bearer auth is enabled and
+  agent sessions are active, the first step now tells the agent to delegate
+  access through the agent-auth page URL rather than the setup script.
+- Added `instructions` and `url` to the `RuntimeAuthScheme` OpenAPI schema and
+  regenerated TypeScript types.
+- Added/updated tests to assert the advertised URL and instructions and to
+  cover the new `/howToPropose` step title.
+- Verification: `npm run lint`, `npm run typecheck`, and `npm run test` green
+  for `apps/api`, `apps/web`, and `packages/openapi`.
+
 ## 2026-07-14: EPIC-012 Agent Session Delegation — Admin Token Sharing on Agent-Auth Page
 
 - Added admin-only backend endpoint "/admin/agent-auth-config" that returns the

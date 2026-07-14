@@ -60,7 +60,9 @@ The adapter exposes non-secret metadata for discovery:
 - `credentialSetupScriptUrl`
 
 `credentialSetupScriptUrl` is present only when at least one agent-facing area
-uses static bearer auth. OIDC metadata includes the trusted issuer, public
+uses static bearer auth. When `AGENT_SESSION_ENABLED=true`, the preferred human
+entry point is the `agent-session` scheme URL; the setup script remains a
+fallback for clients that want to store long-lived credentials locally. OIDC metadata includes the trusted issuer, public
 client ID, OpenID configuration URL, Device Authorization and token endpoints,
 scopes, and applicable areas, never a client secret.
 
@@ -80,7 +82,9 @@ When `AGENT_SESSION_ENABLED=true` and at least one agent-facing area uses
 `bearer`, the adapter:
 
 - Advertises an `agent-session` scheme in `/discover` `authSchemes` covering the
-  bearer-enabled areas.
+  bearer-enabled areas. The scheme includes an absolute `url` pointing to
+  `/frontend/agent-auth` and `instructions` that tell the agent to present that
+  link to the user.
 - Accepts `Authorization: AgentSession <code>` on protected agent routes after
   bearer validation fails.
 - Validates the code through `ValidateAgentSessionUseCase` for the requested

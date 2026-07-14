@@ -2868,6 +2868,11 @@ components:
           - bearer
           - oauth2
           - agent-session
+        instructions:
+          type: string
+        url:
+          type: string
+          format: uri
         flow:
           type: string
           enum:

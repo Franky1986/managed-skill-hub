@@ -45,6 +45,7 @@ export interface DiscoveryAuthScheme {
     type: 'bearer' | 'oauth2' | 'agent-session';
     appliesTo: AgentSessionArea[];
     instructions?: string;
+    url?: string;
 }
 
 export interface DiscoveryResponse {

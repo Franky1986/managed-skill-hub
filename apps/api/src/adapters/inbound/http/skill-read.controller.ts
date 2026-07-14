@@ -544,6 +544,13 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
     || authMetadata.readAuthRequired
     || authMetadata.discoveryAuthRequired;
   const stepOffset = agentAuthRequired ? 1 : 0;
+  const agentSessionScheme = authMetadata.authSchemes.find(
+    (scheme) => scheme.type === 'agent-session' && (
+      scheme.appliesTo.includes('proposal')
+      || scheme.appliesTo.includes('public-read')
+      || scheme.appliesTo.includes('discovery')
+    )
+  );
   const authSetupStep = agentAuthRequired
     ? oidcScheme?.type === 'oauth2'
       ? [
@@ -562,20 +569,35 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
           ],
         },
       ]
+      : agentSessionScheme
+      ? [
+        {
+          step: 1,
+          title: 'Delegate access through the agent-auth page',
+          purpose: 'A human creates a short-lived session in the browser without pasting tokens into chat.',
+          checks: [
+            'Read /discover and inspect authSchemes for the agent-session entry.',
+            'Present the agent-session url to the user as a clickable link and ask them to open it.',
+            'The user enters the bearer token shared by the administrator and receives an 8-character session code.',
+            'The user pastes the session code into chat; the agent uses it as Authorization: AgentSession <code>.',
+            'Never ask the user to paste bearer tokens into chat and never print Authorization headers in logs.',
+          ],
+        },
+      ]
       : [
       {
         step: 1,
         title: 'Handle registry authentication outside chat',
         purpose: 'Bearer tokens must not be pasted into the agent conversation.',
         checks: [
-          'Read /discover and inspect readAuthRequired, proposalAuthRequired, discoveryAuthRequired, authSchemes, registryId, apiBaseUrl, and credentialSetupScriptUrl.',
-          'If a protected endpoint returns 401 with details.authRequired=true, use details.authArea and details.credentialSetupScriptUrl to explain which token is needed.',
-          'Ask the user for permission before downloading or running the setup script.',
-          'After confirmation, download credentialSetupScriptUrl, let the user enter tokens in the local browser form or terminal fallback, then read ~/.managed-skill-hub/credentials.json by registry alias or apiBaseUrl.',
-          'Never ask the user to paste bearer tokens into chat and never print Authorization headers in logs.',
-        ],
-      },
-    ]
+            'Read /discover and inspect readAuthRequired, proposalAuthRequired, discoveryAuthRequired, authSchemes, registryId, apiBaseUrl, and credentialSetupScriptUrl.',
+            'If a protected endpoint returns 401 with details.authRequired=true, use details.authArea and details.credentialSetupScriptUrl to explain which token is needed.',
+            'Ask the user for permission before downloading or running the setup script.',
+            'After confirmation, download credentialSetupScriptUrl, let the user enter tokens in the local browser form or terminal fallback, then read ~/.managed-skill-hub/credentials.json by registry alias or apiBaseUrl.',
+            'Never ask the user to paste bearer tokens into chat and never print Authorization headers in logs.',
+          ],
+        },
+      ]
     : [];
 
   return {

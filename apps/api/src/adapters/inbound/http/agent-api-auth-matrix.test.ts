@@ -227,7 +227,7 @@ describe('agent API auth matrix', () => {
         anyOidc
           ? 'Authorize the agent through the human login link'
           : anyBearer
-            ? 'Handle registry authentication outside chat'
+            ? 'Delegate access through the agent-auth page'
             : 'Read this workflow first'
       );
       expect(Boolean(howToPayload.apiNotes.credentialSetupScriptUrl)).toBe(anyBearer);

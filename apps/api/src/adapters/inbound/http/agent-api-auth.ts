@@ -160,11 +160,13 @@ export class AgentApiAuth {
       if (this.publicReadMode() === 'bearer') sessionAreas.push('public-read');
       if (this.proposalMode() === 'bearer') sessionAreas.push('proposal');
       if (sessionAreas.length > 0) {
+        const authUrl = (this.config.publicApiBaseUrl ?? 'http://localhost:3040') + '/frontend/agent-auth';
         schemes.push({
           id: 'agent-session',
           type: 'agent-session',
           appliesTo: sessionAreas,
-          instructions: 'Open /frontend/agent-auth in a browser, enter the bearer token provided by your administrator, and paste the returned code into this chat.',
+          instructions: `Open ${authUrl} in a browser, enter the bearer token provided by your administrator, and paste the returned session code into this chat.`,
+          url: authUrl,
         });
       }
     }
@@ -325,6 +327,7 @@ export interface AgentAuthScheme {
   type: 'bearer' | 'oauth2' | 'agent-session';
   appliesTo: AgentAuthArea[];
   instructions?: string;
+  url?: string;
 }
 
 interface OidcAgentAuthScheme extends AgentAuthScheme {
