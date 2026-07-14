@@ -124,6 +124,19 @@ export class AgentApiAuth {
             principal: agentSessionPrincipal(result.code, result.areas ?? [area]),
           };
         }
+        if (result.reason === 'area_not_allowed' && result.sessionAreas) {
+          request.log.warn({
+            event: 'agent_authentication',
+            outcome: 'failure',
+            area,
+            scheme: 'agent-session',
+            category: 'area_not_allowed',
+            sessionAreas: result.sessionAreas,
+          }, 'Agent session lacks requested area');
+          throw this.authRequired(area, 'bearer', {
+            missingAreas: result.sessionAreas,
+          });
+        }
         request.log.warn({
           event: 'agent_authentication',
           outcome: 'failure',
@@ -157,13 +170,7 @@ export class AgentApiAuth {
       if (this.publicReadMode() === 'bearer') sessionAreas.push('public-read');
       if (this.proposalMode() === 'bearer') sessionAreas.push('proposal');
       if (sessionAreas.length > 0) {
-        const apiBaseUrl = this.config.publicApiBaseUrl ?? 'http://localhost:3040';
-        const defaultPort = Number(this.config.apiPort ?? 3040);
-        const frontendPort = Number(process.env.FRONTEND_PORT ?? 3041);
-        const frontendOrigin = defaultPort === frontendPort
-          ? apiBaseUrl
-          : apiBaseUrl.replace(/:(\d+)$/, ':' + frontendPort).replace(/\/api$/, '');
-        const authUrl = frontendOrigin + '/frontend/agent-auth';
+        const authUrl = this.agentSessionUrl() ?? (this.config.publicApiBaseUrl ?? 'http://localhost:3040') + '/frontend/agent-auth';
         schemes.push({
           id: 'agent-session',
           type: 'agent-session',
@@ -255,12 +262,31 @@ export class AgentApiAuth {
     }
   }
 
-  private authRequired(area: AgentAuthArea, scheme: 'bearer' | 'oidc'): AgentAuthRequiredError {
+  private authRequired(
+    area: AgentAuthArea,
+    scheme: 'bearer' | 'oidc',
+    options?: { missingAreas?: string[] }
+  ): AgentAuthRequiredError {
     return new AgentAuthRequiredError(
       area,
       scheme,
-      this.config.publicApiBaseUrl ? this.config.publicApiBaseUrl + '/discover' : '/discover'
+      this.config.publicApiBaseUrl ? this.config.publicApiBaseUrl + '/discover' : '/discover',
+      options?.missingAreas,
+      this.agentSessionUrl()
     );
+  }
+
+  private agentSessionUrl(): string | undefined {
+    if (!this.config.agentSessionEnabled || !this.anyBearerAuthEnabled()) {
+      return undefined;
+    }
+    const apiBaseUrl = this.config.publicApiBaseUrl ?? 'http://localhost:3040';
+    const defaultPort = Number(this.config.apiPort ?? 3040);
+    const frontendPort = Number(process.env.FRONTEND_PORT ?? 3041);
+    const frontendOrigin = defaultPort === frontendPort
+      ? apiBaseUrl
+      : apiBaseUrl.replace(/:(\d+)$/, ':' + frontendPort).replace(/\/api$/, '');
+    return frontendOrigin + '/frontend/agent-auth';
   }
 
   private oidcScheme(areas: AgentAuthArea[], metadata: AgentOidcMetadata | null): OidcAgentAuthScheme {

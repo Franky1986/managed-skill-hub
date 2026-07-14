@@ -15,9 +15,13 @@ export class AgentAuthRequiredError extends UnauthorizedError {
   constructor(
     public readonly authArea: 'discovery' | 'public-read' | 'proposal',
     public readonly authScheme: 'bearer' | 'oidc',
-    public readonly discoverUrl: string
+    public readonly discoverUrl: string,
+    public readonly missingAreas?: string[],
+    public readonly agentSessionUrl?: string
   ) {
-    super('Agent API authentication required');
+    super(missingAreas && missingAreas.length > 0
+      ? `Agent API authentication required; current session is valid for ${missingAreas.join(', ')} but not for ${authArea}`
+      : 'Agent API authentication required');
   }
 }
 export class StorageError extends DomainError {}

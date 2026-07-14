@@ -50,9 +50,12 @@ EPIC-007 static bearer compatibility remains implemented:
 - Proposal status intentionally follows `PROPOSAL_AUTH_MODE`; there is no separate status token.
 - Discovery/contract endpoints can be protected with a discovery bearer token.
 - `/discover` exposes non-secret registry identity, canonical API base URL, auth
-  flags, and auth schemes. A setup-script URL appears only when static bearer
-  auth is active.
-- Agent-session delegation (`/frontend/agent-auth`) lets humans create short-lived sessions for bearer-protected areas without sharing long-lived tokens in chat.
+  flags, and auth schemes. Static bearer auth is advertised only through the
+  agent-session URL; there is no credential-setup script.
+- Agent-session delegation (`/frontend/agent-auth`) lets humans create short-lived,
+  area-scoped sessions for bearer-protected areas without sharing long-lived tokens
+  in chat. Each session code is valid only for the areas selected at creation time;
+  missing areas now return a 401 that names the allowed areas and the agent-session URL.
 - Proposal bearer auth uses the configured bearer actor as authoritative proposal actor instead of trusting `X-Actor`.
 
 API-gateway and multi-token static credential stores remain optional future

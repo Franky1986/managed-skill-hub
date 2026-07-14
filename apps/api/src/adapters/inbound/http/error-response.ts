@@ -206,20 +206,31 @@ function mapApiError(error: unknown, options: { admin?: boolean }): ApiErrorDefi
     return { statusCode: 409, code: 'CONFLICT', message: error.message, logLevel: 'warn' };
   }
 
-  if (error instanceof AgentAuthRequiredError) {
+  if (error instanceof AgentAuthRequiredError || (error instanceof Error && error.name === 'AgentAuthRequiredError')) {
+    const authError = error as AgentAuthRequiredError;
+    const details = {
+      authRequired: true,
+      authArea: authError.authArea,
+      authScheme: authError.authScheme,
+      discoverUrl: authError.discoverUrl,
+    } as Record<string, unknown>;
+    if (authError.missingAreas && authError.missingAreas.length > 0) {
+      details.sessionAreas = authError.missingAreas;
+      details.agentSessionUrl = authError.agentSessionUrl;
+      details.recommendation = `This session is only valid for ${authError.missingAreas.join(', ')}. Open the agent-session URL, enter the bearer token for ${authError.authArea}, and paste the new session code into chat. You can also enter multiple tokens at once to create a single session that covers several areas.`;
+    } else {
+      details.recommendation = authError.authScheme === 'oidc'
+        ? 'Read /discover for the trusted OIDC Device Authorization login link and start a new authorization when the token has expired.'
+        : 'Read /discover for the agent-session URL, open it in a browser or browser tool to create a short-lived session, and paste the returned session code into chat. Do not paste bearer tokens into chat.';
+      if (authError.agentSessionUrl) {
+        details.agentSessionUrl = authError.agentSessionUrl;
+      }
+    }
     return {
       statusCode: 401,
       code: 'UNAUTHORIZED',
-      message: error.message,
-      details: {
-        authRequired: true,
-        authArea: error.authArea,
-        authScheme: error.authScheme,
-        discoverUrl: error.discoverUrl,
-        recommendation: error.authScheme === 'oidc'
-          ? 'Read /discover for the trusted OIDC Device Authorization login link and start a new authorization when the token has expired.'
-          : 'Read /discover for the agent-session URL, open it in a browser or browser tool to create a short-lived session, and paste the returned session code into chat. Do not paste bearer tokens into chat.',
-      },
+      message: authError.message,
+      details,
       logLevel: 'warn',
     };
   }

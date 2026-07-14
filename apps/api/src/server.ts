@@ -119,6 +119,7 @@ async function start() {
   const apiPrefix = process.env.API_PREFIX ?? '';
   if (apiPrefix) {
     await app.register(async (apiApp) => {
+      registerApiErrorHandler(apiApp);
       registerHealthRoutes(apiApp);
       registerSkillReadRoutes(apiApp, container, agentAuth, auth);
       registerProposalRoutes(apiApp, container, agentAuth, proposalRateLimiter);

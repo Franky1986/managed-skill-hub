@@ -1,3 +1,20 @@
+## 2026-07-14: Area-scoped agent-session errors and proposal actor resolution
+
+- Extended `AgentAuthRequiredError` with the session areas it is valid for and
+  the frontend agent-session URL.
+- `ValidateAgentSessionUseCase` now distinguishes invalid/expired sessions
+  from sessions that simply do not include the requested area.
+- `AgentApiAuth` returns a 401 with `sessionAreas`, `agentSessionUrl`, and a
+  human-readable recommendation when an agent uses a session that lacks the
+  requested area (e.g. a read-only session on a proposal endpoint).
+- `proposal.controller.ts` now resolves the proposal actor for
+  `Authorization: AgentSession <code>` requests, so proposals submitted via
+  agent sessions are attributed to `agent-session:<code>`.
+- Added error-response tests for area-miss and plain agent-auth-required 401s.
+- End-to-end verification: read-only sessions access read endpoints, are
+  rejected from proposal endpoints with a clear area-miss message, proposal-only
+  sessions access proposal endpoints, and combined sessions access both.
+
 ## 2026-07-14: Remove credential-setup script in favor of agent-session delegation
 
 - Removed the `/agent-credentials/setup.sh` endpoint and the

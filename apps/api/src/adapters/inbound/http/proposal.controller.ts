@@ -370,6 +370,9 @@ function resolveProposalActor(request: import('fastify').FastifyRequest): Propos
   if (context?.scheme === 'bearer') {
     return context.actor;
   }
+  if (context?.scheme === 'agent-session') {
+    return context.actor;
+  }
   if (context?.scheme === 'oidc') {
     return {
       label: context.principal.displayName ?? 'Authenticated user',

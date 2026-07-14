@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { ConfigurationError, ForbiddenError, JudgerUnavailableError, ValidationError } from '../../../domain/errors';
+import { AgentAuthRequiredError, ConfigurationError, ForbiddenError, JudgerUnavailableError, ValidationError } from '../../../domain/errors';
 import { sendMappedApiError } from './error-response';
 
 function createReplyStub() {
@@ -89,6 +89,48 @@ describe('error-response', () => {
       requestId: 'req-123',
       originalError: 'database exploded',
     });
+  });
+
+  it('maps agent-session area miss to a 401 with session context and auth URL', () => {
+    const request = createRequestStub();
+    const { reply, state } = createReplyStub();
+
+    sendMappedApiError(
+      reply,
+      request,
+      new AgentAuthRequiredError(
+        'proposal',
+        'bearer',
+        'http://localhost:3040/discover',
+        ['public-read'],
+        'http://localhost:3041/frontend/agent-auth'
+      )
+    );
+
+    expect(state.statusCode).toBe(401);
+    expect(state.payload).toMatchObject({
+      code: 'UNAUTHORIZED',
+      details: {
+        authRequired: true,
+        authArea: 'proposal',
+        authScheme: 'bearer',
+        discoverUrl: 'http://localhost:3040/discover',
+        sessionAreas: ['public-read'],
+        agentSessionUrl: 'http://localhost:3041/frontend/agent-auth',
+      },
+    });
+    expect((state.payload as Record<string, unknown>).details).toHaveProperty('recommendation');
+  });
+
+  it('maps plain agent auth required to a 401 without session context', () => {
+    const request = createRequestStub();
+    const { reply, state } = createReplyStub();
+
+    sendMappedApiError(reply, request, new AgentAuthRequiredError('public-read', 'bearer', 'http://localhost:3040/discover', [], 'http://localhost:3041/frontend/agent-auth'));
+
+    expect(state.statusCode).toBe(401);
+    expect((state.payload as Record<string, unknown>).details).not.toHaveProperty('sessionAreas');
+    expect((state.payload as Record<string, unknown>).details).toHaveProperty('agentSessionUrl');
   });
 
   it('does not expose raw provider failure details to admin clients', () => {

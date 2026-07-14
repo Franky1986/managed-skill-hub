@@ -4,6 +4,8 @@
 
 - [x] Database schema, repository adapters, use cases, and `AgentApiAuth`
       integration for `Authorization: AgentSession <code>`.
+- [x] Area-miss 401 responses that tell the agent which areas the current
+      session covers and how to create a session for the missing area.
 - [x] Hardened `POST /agent-sessions` with per-area bearer-token validation via
       `X-Agent-*-Token` headers.
 - [x] Controller test suite green with in-memory repository.

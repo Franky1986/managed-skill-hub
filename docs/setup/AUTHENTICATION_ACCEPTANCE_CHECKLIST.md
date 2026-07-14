@@ -208,11 +208,9 @@ Keep admin auth independent in `simple` mode.
 - [x] Each protected area returns normalized `401` without credentials.
 - [x] Each area accepts only its own token; using the read token for proposals,
       for example, fails.
-- [x] Discovery advertises bearer auth and exposes the setup-script URL.
-- [x] The generated setup script contains only the fields required by the
-      active bearer areas and contains no secret value.
-- [x] A configured token can be read from the local credential store and used
-      without placing it in agent chat.
+- [x] Discovery advertises bearer auth and exposes the agent-session URL.
+- [x] The agent-session page requires the bearer token for every requested area and does not leak secret values in discovery responses.
+- [x] A human creates a short-lived session at the agent-session URL and shares only the 8-character session code with the agent, never the long-lived bearer token.
 - [ ] A valid admin browser session with `reader` or `admin` can read the
       protected published catalog, but cannot authorize discovery or proposal
       routes; invalid and reviewer-only sessions still require the area's
