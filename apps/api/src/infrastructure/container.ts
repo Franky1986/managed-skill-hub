@@ -194,6 +194,8 @@ export async function buildContainer(
     judger,
     config.publishJudgementPolicy
   );
+  const proposalDuplicateCheck = new ProposalDuplicateCheckUseCase(catalog);
+
   const autoPublishProposal = new AutoPublishProposalUseCase(
     repo,
     storage,
@@ -206,8 +208,10 @@ export async function buildContainer(
       enabled: config.autoPublishOnGreen,
       excludedCategories: config.autoPublishExcludedCategories,
       autoApproveWithoutJudger: config.autoApproveWithoutJudger,
+      similarityThreshold: config.autoPublishSimilarityThreshold,
     },
-    catalog
+    catalog,
+    proposalDuplicateCheck
   );
 
   return {
@@ -242,7 +246,7 @@ export async function buildContainer(
       config.proposalDisallowedPaths,
       config.judgerProvider
     ),
-    proposalDuplicateCheck: new ProposalDuplicateCheckUseCase(catalog),
+    proposalDuplicateCheck,
     reviewProposal,
     nameSuggestion: new SuggestSkillNameUseCase(repo),
     judgeProposal: new JudgeProposalUseCase(

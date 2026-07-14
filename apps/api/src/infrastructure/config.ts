@@ -60,6 +60,7 @@ export interface AppConfig {
   allowOpenProposalsInProduction: boolean;
   autoPublishOnGreen: boolean;
   autoPublishExcludedCategories: string[];
+  autoPublishSimilarityThreshold: number;
   autoApproveWithoutJudger: boolean;
   publishJudgementPolicy: PublishJudgementPolicy;
   publicReadAuthMode: AgentAuthMode;
@@ -275,6 +276,13 @@ export function loadConfig(): AppConfig {
     autoPublishExcludedCategories: parseCsvList(
       process.env.AUTO_PUBLISH_EXCLUDED_CATEGORIES,
       ['security', 'automation', 'filesystem', 'network']
+    ),
+    autoPublishSimilarityThreshold: parseBoundedNumber(
+      process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD,
+      0.7,
+      'AUTO_PUBLISH_SIMILARITY_THRESHOLD',
+      0,
+      1,
     ),
     autoApproveWithoutJudger: parseBoolean(
       process.env.AUTO_APPROVE_WITHOUT_JUDGER,
@@ -883,6 +891,20 @@ function parseBoundedInteger(
   const parsed = value === undefined || value.trim().length === 0 ? fallback : Number(value);
   if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
     throw new ConfigurationError(`${name} must be an integer between ${minimum} and ${maximum}.`);
+  }
+  return parsed;
+}
+
+function parseBoundedNumber(
+  value: string | undefined,
+  fallback: number,
+  name: string,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = value === undefined || value.trim().length === 0 ? fallback : Number(value);
+  if (Number.isNaN(parsed) || parsed < minimum || parsed > maximum) {
+    throw new ConfigurationError(`${name} must be a number between ${minimum} and ${maximum}.`);
   }
   return parsed;
 }

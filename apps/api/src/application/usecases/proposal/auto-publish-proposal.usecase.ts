@@ -10,6 +10,8 @@ import { SkillJudgerPort } from '../../ports/outbound/judger.port';
 import { ReviewProposalUseCase } from './review-proposal.usecase';
 import { SkillCommandPort } from '../../ports/inbound/skill-command.port';
 import { buildProposalAggregateFromCatalog } from './catalog-proposal-hydrator';
+import { ProposalDuplicateCheckUseCase } from './duplicate-check.usecase';
+import { DuplicateCheckInputDto } from '../../dtos/proposal.dto';
 import { isExtractableArtifact } from '../skill/public-metadata';
 import { JudgementRisk } from '../../../domain/judgement/Judgement';
 
@@ -37,6 +39,7 @@ interface AutoPublishConfig {
   enabled: boolean;
   excludedCategories: string[];
   autoApproveWithoutJudger: boolean;
+  similarityThreshold: number;
 }
 
 const AUTO_PUBLISH_ACTOR = 'system:auto-publish';
@@ -51,7 +54,8 @@ export class AutoPublishProposalUseCase {
     private readonly reviewProposal: ReviewProposalUseCase,
     private readonly reviewSkill: SkillCommandPort,
     private readonly config: AutoPublishConfig,
-    private readonly catalog?: SkillCatalogPort
+    private readonly catalog?: SkillCatalogPort,
+    private readonly duplicateCheck?: ProposalDuplicateCheckUseCase
   ) {}
 
   async execute(proposalId: string): Promise<AutoPublishEvaluation> {
@@ -76,6 +80,20 @@ export class AutoPublishProposalUseCase {
 
     const auditEntries = await this.audit.findByProposalId(proposalId);
     const duplicateBlocked = await this.hasDuplicateBlocker(proposal);
+    const semanticDuplicate = await this.hasSemanticDuplicate(proposal);
+    if (semanticDuplicate) {
+      return this.recordEvaluation(proposal.id, {
+        enabled: true,
+        eligible: false,
+        blockedReason: 'manual_review_required',
+        blockedByCategory: null,
+        classifierReason: `Similarity score ${semanticDuplicate.similarityScore.toFixed(2)} to existing ${semanticDuplicate.kind} '${semanticDuplicate.title}' (id: ${semanticDuplicate.id}) exceeds the auto-publish threshold of ${this.config.similarityThreshold ?? 0.7}. A human reviewer must decide whether to create a new skill or update the existing one.`,
+        matchedExcludedCategory: null,
+        autoPublished: false,
+        publishedSkillId: null,
+        publishedVersion: null,
+      });
+    }
     if (proposal.status === 'in_upload') {
       return this.recordEvaluation(proposal.id, {
         enabled: true,
@@ -275,6 +293,35 @@ export class AutoPublishProposalUseCase {
       '',
       parts.join('\n\n'),
     ].join('\n');
+  }
+
+
+  private async hasSemanticDuplicate(proposal: Proposal): Promise<{ kind: 'proposal' | 'skill'; id: string; title: string; similarityScore: number } | null> {
+    if (!this.duplicateCheck || (this.config.similarityThreshold ?? 0.7) <= 0) {
+      return null;
+    }
+    const input: DuplicateCheckInputDto = {
+      skillId: proposal.skillId ?? undefined,
+      title: proposal.title,
+      description: proposal.description,
+      category: proposal.category,
+      tags: proposal.tags,
+      capabilities: proposal.capabilities,
+      entrypoint: proposal.entrypoint ?? undefined,
+      files: proposal.files.map((file) => ({ path: file.path, sha256: file.sha256 })),
+    };
+
+    const result = await this.duplicateCheck.execute(input);
+    const match = result.similarMatches[0];
+    if (match && match.similarityScore >= (this.config.similarityThreshold ?? 0.7)) {
+      return {
+        kind: match.kind,
+        id: match.id,
+        title: match.title,
+        similarityScore: match.similarityScore,
+      };
+    }
+    return null;
   }
 
   private async hasDuplicateBlocker(proposal: Proposal): Promise<boolean> {

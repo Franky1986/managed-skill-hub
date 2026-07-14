@@ -410,4 +410,217 @@ describe('AutoPublishProposalUseCase', () => {
     expect(result.autoPublished).toBe(false);
     expect(convertProposal).not.toHaveBeenCalled();
   });
+  it('blocks auto-publish when a semantic duplicate exceeds the similarity threshold', async () => {
+    const proposal = Proposal.create({
+      id: 'proposal-dup',
+      title: 'Video skill clone',
+      description: 'A safe video helper that is very similar to an existing skill.',
+      category: 'media',
+      tags: ['video'],
+      capabilities: ['trim'],
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    })
+      .addFile(ProposalFile.create({
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 100,
+        sha256: 'abc',
+      }))
+      .finalizeUpload()
+      .addJudgement(greenJudgement('proposal', 'proposal-dup'))
+      .addJudgement(greenJudgement('file', 'proposal-dup:SKILL.md'));
+
+    const convertProposal = vi.fn();
+    const duplicateCheck = {
+      execute: vi.fn(async () => ({
+        submittedContentDigest: null,
+        exactDuplicateProposalId: null,
+        exactDuplicateSkillId: null,
+        similarMatches: [
+          {
+            kind: 'skill',
+            id: 'existing-video-skill:1.0.0',
+            skillId: 'existing-video-skill',
+            title: 'Existing Video Skill',
+            description: 'A safe video helper',
+            category: 'media',
+            tags: ['video'],
+            similarityScore: 0.85,
+            matchedOn: ['title', 'description', 'tags'],
+            differences: {},
+          },
+        ],
+        skillIdCollision: { exists: false, existingSkillId: null, note: '' },
+        resolutionOptions: [],
+        note: '',
+      })),
+    };
+
+    const useCase = new AutoPublishProposalUseCase(
+      {
+        findProposalById: vi.fn(async () => proposal),
+      } as never,
+      {
+        readProposalFile: vi.fn(async () => ({
+          mimeType: 'text/markdown',
+          content: Buffer.from('# hello'),
+        })),
+      } as never,
+      {
+        append: vi.fn(async () => undefined),
+        findByProposalId: vi.fn(async () => []),
+      } as never,
+      {
+        scan: vi.fn(async () => ({ text: '# hello', metadata: {} })),
+      } as never,
+      {
+        judge: vi.fn(),
+        classifyAutoPublishCategory: vi.fn(async () => ({
+          blocked: false,
+          matchedCategory: null,
+          reason: 'not excluded',
+          model: 'test-model',
+        })),
+      } as never,
+      {
+        convertProposal,
+      } as never,
+      {
+        submitForReview: vi.fn(),
+        approve: vi.fn(),
+        publish: vi.fn(),
+      } as never,
+      {
+        enabled: true,
+        excludedCategories: ['security', 'network'],
+        autoApproveWithoutJudger: false,
+        similarityThreshold: 0.7,
+      },
+      {
+        getProposal: vi.fn(async () => null),
+        findProposalByContentDigest: vi.fn(async () => null),
+        findPublishedSkillByContentDigest: vi.fn(async () => null),
+      } as never,
+      duplicateCheck as never
+    );
+
+    const result = await useCase.execute(proposal.id);
+
+    expect(result.enabled).toBe(true);
+    expect(result.eligible).toBe(false);
+    expect(result.blockedReason).toBe('manual_review_required');
+    expect(result.classifierReason).toContain('0.85');
+    expect(result.classifierReason).toContain('existing-video-skill');
+    expect(convertProposal).not.toHaveBeenCalled();
+  });
+
+  it('allows auto-publish when the highest semantic similarity is below the threshold', async () => {
+    const proposal = Proposal.create({
+      id: 'proposal-unique',
+      title: 'Completely unique skill',
+      description: 'Nothing like this exists yet.',
+      category: 'media',
+      tags: ['unique'],
+      capabilities: ['trim'],
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    })
+      .addFile(ProposalFile.create({
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 100,
+        sha256: 'abc',
+      }))
+      .finalizeUpload()
+      .addJudgement(greenJudgement('proposal', 'proposal-unique'))
+      .addJudgement(greenJudgement('file', 'proposal-unique:SKILL.md'));
+
+    const convertProposal = vi.fn(async () => ({
+      id: SkillId.create('unique-skill'),
+      getAllVersions: () => [{ version: '1.0.0' }],
+    }));
+    const duplicateCheck = {
+      execute: vi.fn(async () => ({
+        submittedContentDigest: null,
+        exactDuplicateProposalId: null,
+        exactDuplicateSkillId: null,
+        similarMatches: [
+          {
+            kind: 'skill',
+            id: 'other-skill:1.0.0',
+            skillId: 'other-skill',
+            title: 'Other Skill',
+            description: 'Something else',
+            category: 'media',
+            tags: ['video'],
+            similarityScore: 0.4,
+            matchedOn: ['category'],
+            differences: {},
+          },
+        ],
+        skillIdCollision: { exists: false, existingSkillId: null, note: '' },
+        resolutionOptions: [],
+        note: '',
+      })),
+    };
+
+    const useCase = new AutoPublishProposalUseCase(
+      {
+        findProposalById: vi.fn(async () => proposal),
+      } as never,
+      {
+        readProposalFile: vi.fn(async () => ({
+          mimeType: 'text/markdown',
+          content: Buffer.from('# hello'),
+        })),
+      } as never,
+      {
+        append: vi.fn(async () => undefined),
+        findByProposalId: vi.fn(async () => []),
+      } as never,
+      {
+        scan: vi.fn(async () => ({ text: '# hello', metadata: {} })),
+      } as never,
+      {
+        judge: vi.fn(),
+        classifyAutoPublishCategory: vi.fn(async () => ({
+          blocked: false,
+          matchedCategory: null,
+          reason: 'not excluded',
+          model: 'test-model',
+        })),
+      } as never,
+      {
+        convertProposal,
+      } as never,
+      {
+        submitForReview: vi.fn(async () => ({})),
+        approve: vi.fn(async () => ({})),
+        publish: vi.fn(async () => ({})),
+      } as never,
+      {
+        enabled: true,
+        excludedCategories: ['security', 'network'],
+        autoApproveWithoutJudger: false,
+        similarityThreshold: 0.7,
+      },
+      {
+        getProposal: vi.fn(async () => null),
+        findProposalByContentDigest: vi.fn(async () => null),
+        findPublishedSkillByContentDigest: vi.fn(async () => null),
+      } as never,
+      duplicateCheck as never
+    );
+
+    const result = await useCase.execute(proposal.id);
+
+    expect(result.enabled).toBe(true);
+    expect(result.eligible).toBe(true);
+    expect(result.autoPublished).toBe(true);
+    expect(result.publishedSkillId).toBe('unique-skill');
+  });
+
 });
