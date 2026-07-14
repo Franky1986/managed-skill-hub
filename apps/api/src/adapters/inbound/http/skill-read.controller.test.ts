@@ -626,6 +626,52 @@ describe('SkillReadController /discover', () => {
     expect(sessionScheme.instructions).toContain('Agent auth');
   });
 
+  it('rewrites local API port to frontend port in agent-session url', async () => {
+    const app = Fastify({ logger: false });
+    registerApiErrorHandler(app);
+    const container = {
+      config: {
+        openapiYamlPath: '/nonexistent/openapi.yaml',
+        proposalMaxFiles: 30,
+        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
+        proposalDisallowedPaths: ['node_modules/', '.venv/'],
+        autoPublishOnGreen: false,
+        registryId: 'local-session-registry',
+        registryName: 'Local Session Registry',
+        publicApiBaseUrl: 'http://localhost:3040',
+        publicReadAuthMode: 'bearer',
+        publicReadBearerToken: 'read-secret',
+        publicReadBearerActor: 'read-agent',
+        proposalAuthMode: 'bearer',
+        proposalBearerToken: 'proposal-secret',
+        proposalBearerActor: 'proposal-agent',
+        discoveryAuthMode: 'none',
+        discoveryBearerToken: null,
+        discoveryBearerActor: 'discovery-agent',
+        agentSessionEnabled: true,
+        agentSessionTtlSeconds: 10800,
+        agentSessionCodeLength: 8,
+        agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+        agentSessionMaxActive: null,
+        apiHost: '127.0.0.1',
+        apiPort: 3040,
+      },
+      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
+      skillQuery: {
+        listCategories: async () => [],
+        listTags: async () => [],
+      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
+    } as import('../../../infrastructure/container').Container;
+    registerSkillReadRoutes(app, container);
+
+    const response = await app.inject({ method: 'GET', url: '/discover' });
+    expect(response.statusCode).toBe(200);
+    const payload = JSON.parse(response.payload);
+    const sessionScheme = payload.authSchemes.find((s: { id: string }) => s.id === 'agent-session');
+    expect(sessionScheme).toBeDefined();
+    expect(sessionScheme.url).toBe('http://localhost:3041/frontend/agent-auth');
+  });
+
 function adminAuthForCookieRoles(sessionRoles: Record<string, PrincipalRole[]>): AdminAuth {
   return {
     mode: 'simple',

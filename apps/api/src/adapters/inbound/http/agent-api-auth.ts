@@ -165,7 +165,7 @@ export class AgentApiAuth {
         const frontendPort = Number(process.env.FRONTEND_PORT ?? 3041);
         const frontendOrigin = defaultPort === frontendPort
           ? apiBaseUrl
-          : apiBaseUrl.replace(/:(\d+)$/, ':${frontendPort}').replace(/\/api$/, '');
+          : apiBaseUrl.replace(/:(\d+)$/, ':' + frontendPort).replace(/\/api$/, '');
         const authUrl = frontendOrigin + '/frontend/agent-auth';
         schemes.push({
           id: 'agent-session',
