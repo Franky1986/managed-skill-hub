@@ -160,12 +160,18 @@ export class AgentApiAuth {
       if (this.publicReadMode() === 'bearer') sessionAreas.push('public-read');
       if (this.proposalMode() === 'bearer') sessionAreas.push('proposal');
       if (sessionAreas.length > 0) {
-        const authUrl = (this.config.publicApiBaseUrl ?? 'http://localhost:3040') + '/frontend/agent-auth';
+        const apiBaseUrl = this.config.publicApiBaseUrl ?? 'http://localhost:3040';
+        const defaultPort = Number(this.config.apiPort ?? 3040);
+        const frontendPort = Number(process.env.FRONTEND_PORT ?? 3041);
+        const frontendOrigin = defaultPort === frontendPort
+          ? apiBaseUrl
+          : apiBaseUrl.replace(/:(\d+)$/, ':${frontendPort}').replace(/\/api$/, '');
+        const authUrl = frontendOrigin + '/frontend/agent-auth';
         schemes.push({
           id: 'agent-session',
           type: 'agent-session',
           appliesTo: sessionAreas,
-          instructions: `Open ${authUrl} in a browser, enter the bearer token provided by your administrator, and paste the returned session code into this chat.`,
+          instructions: 'Open the registry frontend in a browser, log in as admin if needed, navigate to Agent auth, and paste the returned session code into this chat.',
           url: authUrl,
         });
       }

@@ -622,8 +622,8 @@ describe('SkillReadController /discover', () => {
     expect(sessionScheme).toBeDefined();
     expect(sessionScheme.type).toBe('agent-session');
     expect(sessionScheme.appliesTo).toEqual(['public-read', 'proposal']);
-    expect(sessionScheme.url).toBe('https://skills.example.com/api/frontend/agent-auth');
-    expect(sessionScheme.instructions).toContain('https://skills.example.com/api/frontend/agent-auth');
+    expect(sessionScheme.url).toBe('https://skills.example.com/frontend/agent-auth');
+    expect(sessionScheme.instructions).toContain('Agent auth');
   });
 
 function adminAuthForCookieRoles(sessionRoles: Record<string, PrincipalRole[]>): AdminAuth {

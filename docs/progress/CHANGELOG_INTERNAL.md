@@ -1,40 +1,22 @@
-## 2026-07-14: EPIC-012 Agent Session Delegation — Expose Agent-Auth URL in /discover
+## 2026-07-14: EPIC-012 Agent Session Delegation — Expose Frontend Agent-Auth URL in /discover
 
-- The `/discover` response now advertises a concrete, absolute `url` in the
-  `agent-session` auth scheme, pointing to `/frontend/agent-auth`.
-- Updated `instructions` in the `agent-session` scheme so agents can present
-  the link directly to the user instead of describing a relative path.
+- The `/discover` response now advertises an absolute `url` in the
+  `agent-session` auth scheme, pointing to the **frontend**
+  `/frontend/agent-auth` endpoint instead of the API backend port.
+- Rewrites `PUBLIC_API_BASE_URL` to the frontend origin when the API and UI
+  ports differ (default: 3040 → 3041). If the configured API base URL ends in
+  `/api`, that suffix is stripped so the link points to the human UI.
+- Updated `instructions` to keep the message tooling-agnostic while still
+  directing the user to the registry frontend and the Agent-auth page.
 - Updated `/howToPropose` workflow notes: when bearer auth is enabled and
   agent sessions are active, the first step now tells the agent to delegate
   access through the agent-auth page URL rather than the setup script.
 - Added `instructions` and `url` to the `RuntimeAuthScheme` OpenAPI schema and
   regenerated TypeScript types.
-- Added/updated tests to assert the advertised URL and instructions and to
-  cover the new `/howToPropose` step title.
+- Added/updated tests to assert the rewritten frontend URL and to cover the new
+  `/howToPropose` step title.
 - Verification: `npm run lint`, `npm run typecheck`, and `npm run test` green
   for `apps/api`, `apps/web`, and `packages/openapi`.
-
-## 2026-07-14: EPIC-012 Agent Session Delegation — Admin Token Sharing on Agent-Auth Page
-
-- Added admin-only backend endpoint "/admin/agent-auth-config" that returns the
-  configured bearer token values for every bearer-protected area so an admin can
-  share them through a separate trusted channel.
-- Extended the public "/frontend/agent-auth" page: authenticated admins see the
-  configured tokens in read-only cards with copy buttons, a sharing warning, and
-  area checkboxes to create sessions without retyping secrets.
-- Non-admin users still see the original per-area token input form.
-- Added i18n messages for the new admin UI strings (en/de).
-- Added controller tests for "/admin/agent-auth-config" covering admin success,
-- Added the new endpoint to `packages/openapi/skill-registry.openapi.yaml`
-  with the `AdminAgentAuthConfigResponse` schema and regenerated TypeScript types.
-  anonymous rejection, and omission of non-bearer/empty-token areas.
-- Updated co-located specs:
-  - apps/api/src/adapters/inbound/http/AgentSessionController.spec.md
-  - apps/web/src/pages/AgentAuthPage.spec.md
-- Verification: `npm run lint`, `npm run typecheck`, and `npm run test` remain green
-  for both `apps/api` and `apps/web`.
-
-# CHANGELOG_INTERNAL
 
 ## 2026-07-14: EPIC-012 Agent Session Delegation Implemented
 

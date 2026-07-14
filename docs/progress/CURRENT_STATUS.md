@@ -80,7 +80,8 @@ EPIC-012 is implemented:
   retyping tokens.
 - `/discover` advertises the absolute `/frontend/agent-auth` URL in the
   `agent-session` auth scheme so agents can present a clickable link to the
-  user instead of only describing the path.
+  user instead of only describing the path. The URL is resolved against the
+  frontend origin, not the API backend port.
 - OpenAPI, co-located specs, and matrix tests cover the new flow.
 - The feature is toggled by `AGENT_SESSION_ENABLED` and configured through
   `AGENT_SESSION_TTL_SECONDS`, `AGENT_SESSION_CODE_LENGTH`,
