@@ -90,6 +90,14 @@ EPIC-012 is implemented:
   `AGENT_SESSION_TTL_SECONDS`, `AGENT_SESSION_CODE_LENGTH`,
   `AGENT_SESSION_CODE_CHARSET`, and `AGENT_SESSION_MAX_ACTIVE`.
 
+## Vercel AI SDK Auto-Judge and Auto-Publish
+
+The `vercel-ai-sdk` judger is active locally with a real OpenAI model.
+Proposal and file judgements complete automatically; a fully green proposal
+with `AUTO_PUBLISH_ON_GREEN=true` is converted, submitted for review, approved,
+and published without manual admin intervention. The published skill is
+immediately discoverable and downloadable with an `AgentSession` code.
+
 ## EPIC-011 Authentik OIDC And Delegated Agent Authentication
 
 The repository runtime implementation is complete and deterministic gates pass:

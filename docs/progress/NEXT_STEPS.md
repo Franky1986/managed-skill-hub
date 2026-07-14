@@ -25,7 +25,7 @@
       builds pass for all workspaces.
 - [x] Run `./scripts/check.sh` end-to-end in an environment without tsx IPC
       pipe/network listen restrictions.
-- [ ] Run the auto-judge/vercel-ai-sdk acceptance gate: configure real model
+- [x] Run the auto-judge/vercel-ai-sdk acceptance gate: configure real model
       credentials, submit a disposable skill, verify real LLM judgement,
       auto-publish eligibility, and publication flow.
 

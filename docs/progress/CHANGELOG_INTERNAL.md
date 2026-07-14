@@ -1,3 +1,23 @@
+## 2026-07-14: Vercel AI SDK auto-judge and auto-publish verified
+
+- Fixed VercelAiSdkSkillJudger to use `generateObject` (native ai SDK v6 API)
+  instead of the legacy `generateText` + `Output.object` combination.
+- Fixed Zod schemas for judgement and auto-publish category responses so that
+  nullable fields (skillPurposeSummary, matchedCategory) are required instead of
+  optional. OpenAI rejects JSON schemas where a property is listed in
+  `properties` but missing from `required`.
+- Verified end-to-end with the user-provided OpenAI API key:
+  - Proposal and file judgements complete with real LLM output from
+    `vercel-ai-sdk:openai:gpt-4.1`.
+  - `AUTO_PUBLISH_ON_GREEN=true` automatically converts and publishes a
+    fully-green skill (`markdown-formatting-guide`).
+  - The auto-published skill appears in public read endpoints and its package
+    downloads successfully with an `AgentSession` code.
+- Note: local `.env` is now configured with `JUDGER_PROVIDER=vercel-ai-sdk` and
+  `AUTO_PUBLISH_ON_GREEN=true`; `OPENAI_API_KEY` is read from `.env.secrets`.
+  Because the ambient shell environment sets `OPENAI_API_KEY=ollama`, the dev
+  server must be started with an explicit override or the ambient value wins.
+
 ## 2026-07-14: End-to-end agent-session and proposal publication verification
 
 - Verified the agent-session flow against the running local stack:
