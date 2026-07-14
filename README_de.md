@@ -81,7 +81,7 @@ English-first Dokumentation und agent-orientierte Verträge mit zweisprachiger W
 2. [`docs/setup/BUILD_AND_CHECKS.md`](./docs/setup/BUILD_AND_CHECKS.md) - Build,
    Checks und lokaler Start
 3. [`docs/setup/TESTING.md`](./docs/setup/TESTING.md) - lokale API- und UI-Tests
-4. [`docs/setup/ENVIRONMENT.md`](./docs/setup/ENVIRONMENT.md) - Root-`.env`,
+4. [`docs/setup/ENVIRONMENT.md`](./docs/setup/ENVIRONMENT.md) - geschichtete Root-`.env` und `.env.secrets`,
    SQLite/MySQL-Provider, Judger-Einstellungen und Auto-Publish-Flags
 5. [`docs/setup/JUDGER_ADAPTERS.md`](./docs/setup/JUDGER_ADAPTERS.md) - OpenAI/Vercel AI SDK oder Custom-Judger-Adapter ergänzen
 6. [`docs/product/AGENT_OPERATIONS.md`](./docs/product/AGENT_OPERATIONS.md) -
@@ -107,9 +107,11 @@ npm ci --legacy-peer-deps
 
 # 3. Lokale Konfiguration erstellen
 cp .env.example .env
+cp .env.secrets.example .env.secrets
+chmod 600 .env .env.secrets
 
 # Lokale Defaults:
-# ADMIN_PASSWORD=admin
+# In .env.secrets: ADMIN_PASSWORD=admin
 # Optionaler BCrypt-Hash:
 # node -e "console.log(require('bcryptjs').hashSync('admin', 10))"
 
@@ -179,7 +181,7 @@ Dabei werden ausgeführt:
 - **API:** OpenAPI-first, öffentlicher Lesezugriff ohne Auth, geschützter Admin-Pfad
 - **Persistenz:** dateibasierte Artefakte in `data/`, SQLite-FTS5-Index, SQLite-Metadatenprojektion
 - **Suche:** Keyword/BM25, Volltext, Regex
-- **Auth:** einfache Admin-Authentifizierung via `.env` für das MVP; Authentik/OIDC später
+- **Auth:** konfigurierbare einfache oder Authentik/OIDC-Authentifizierung mit getrennten Konfigurations- und Secret-Dateien
 - **Judger:** Noop-Standard mit optionalem Vercel-AI-SDK-Provider. Custom-Judger
   können über `JUDGER_ADAPTER_PATH` geladen werden.
 - **Deployment:** `/path/to/deploy-root/src` ist austauschbar, `/path/to/deploy-root/data` ist persistent

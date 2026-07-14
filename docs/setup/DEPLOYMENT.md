@@ -20,14 +20,20 @@
 
 ## Local Preparation
 
-1. Create the root `.env` file:
+1. Create the non-secret root config and local secret file:
    ```bash
    cp .env.example .env
-   # For local/dev-like setups, ADMIN_PASSWORD can be set directly.
+   cp .env.secrets.example .env.secrets
+   chmod 600 .env .env.secrets
+   # For local/dev-like setups, ADMIN_PASSWORD can be set in .env.secrets.
    # For server-like setups, prefer:
    node -e "console.log(require('bcryptjs').hashSync('your-password', 10))"
    # For single-host deploys, set API_PREFIX=/api and VITE_API_BASE_URL=/api in .env.
    ```
+
+   Production archives may contain the non-secret `.env` profile but must not
+   contain `.env.secrets`. Provision secrets separately through the server
+   environment, a secret manager, or a mode-`0600` server-side file.
 
 2. Create the deploy archive:
    ```bash
@@ -102,10 +108,11 @@ MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
 MYSQL_DATABASE=managed_skill_hub
 MYSQL_USER=managed_skill_hub
-MYSQL_PASSWORD=...
 MYSQL_SSL_MODE=preferred
 DATA_DIR=/path/to/deploy-root/data
 ```
+
+Set `MYSQL_PASSWORD` through `.env.secrets` or the deployment secret manager.
 
 The API creates provider tables on startup when it can connect. After switching
 providers, rebuild projections through the admin endpoint documented in
@@ -142,9 +149,7 @@ REGISTRY_NAME=Company Production Skill Registry
 PUBLIC_API_BASE_URL=https://skills.example.com/api
 API_TRUSTED_PROXIES=127.0.0.1,::1
 PUBLIC_READ_AUTH_MODE=bearer
-PUBLIC_READ_BEARER_TOKEN=<secret-manager-32-byte-random-value>
 PROPOSAL_AUTH_MODE=bearer
-PROPOSAL_BEARER_TOKEN=<secret-manager-32-byte-random-value>
 DISCOVERY_AUTH_MODE=none
 PROPOSAL_RATE_LIMIT_WINDOW_MS=60000
 PROPOSAL_RATE_LIMIT_MAX_REQUESTS=120

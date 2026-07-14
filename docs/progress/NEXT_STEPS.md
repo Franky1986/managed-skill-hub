@@ -18,6 +18,9 @@ Before closing future language work, run the German-text search checklist and
 
 ## Product Follow-Ups Outside EPIC-003
 
+- Fill the required Authentik confidential-client values in `.env.secrets`
+  through a human operator or deployment secret manager, then execute the
+  authentication acceptance checklist without exposing that file to agents.
 - Run the EPIC-011 real Authentik staging gate against the target tenant and
   reverse proxy. Obtain fresh anonymous evidence for admin browser login,
   Device Authorization, two-human status/ownership, same-human continuation,

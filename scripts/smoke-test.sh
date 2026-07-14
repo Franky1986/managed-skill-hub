@@ -3,12 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-if [ -f ".env" ]; then
-  set -a
-  # shellcheck source=/dev/null
-  source .env
-  set +a
-fi
+# shellcheck source=./load-env.sh
+source "${SCRIPT_DIR}/load-env.sh"
+load_managed_skill_hub_env "${PROJECT_ROOT}"
 
 API_URL="${API_URL:-http://localhost:3040}"
 ADMIN_USER="${ADMIN_USER:-admin}"
@@ -39,8 +36,8 @@ if [ ! -f ".env" ]; then
   exit 1
 fi
 
-if ! grep -Eq "^ADMIN_PASSWORD=|^ADMIN_PASSWORD_HASH=" ".env"; then
-  log_error "Neither ADMIN_PASSWORD nor ADMIN_PASSWORD_HASH is set in .env."
+if [ -z "${ADMIN_PASSWORD:-}" ] && [ -z "${ADMIN_PASSWORD_HASH:-}" ]; then
+  log_error "Neither ADMIN_PASSWORD nor ADMIN_PASSWORD_HASH is set in the runtime environment or .env.secrets."
   exit 1
 fi
 

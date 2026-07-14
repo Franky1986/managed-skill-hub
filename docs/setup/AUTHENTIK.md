@@ -8,8 +8,9 @@ including OIDC admin login and independent `none`, `bearer`, or `oidc` agent
 areas. Normal CI uses a deterministic local OIDC/JWKS provider.
 
 Production activation remains gated on a real Authentik staging proof for the
-target tenant and reverse proxy. Use `.env.example.authentik` for staging and
-`.env.example.simple` for local or rollback operation. Do not remove the
+target tenant and reverse proxy. Use `.env.example.authentik` for staging,
+`.env.example.simple` for local or rollback operation, and
+`.env.secrets.example` for the separate secret inventory. Do not remove the
 activation warning from the Authentik profile until the real gate passes.
 
 ## Target Outcome
@@ -222,7 +223,13 @@ For staging:
 
 ```bash
 cp .env.example.authentik .env
+cp .env.secrets.example .env.secrets
+chmod 600 .env .env.secrets
 ```
+
+Keep provider URLs, client IDs, scopes, policies, and role mappings in `.env`.
+Set `OIDC_ADMIN_CLIENT_SECRET` and `OIDC_INTROSPECTION_CLIENT_SECRET` only in
+`.env.secrets` or the deployment secret manager.
 
 Replace every example host, callback URI, subject UUID, and secret. Confirm that
 the configured issuers exactly match the `issuer` values in each provider's

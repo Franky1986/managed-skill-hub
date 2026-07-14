@@ -1,5 +1,15 @@
 # CHANGELOG_INTERNAL
 
+## 2026-07-13: Layered Runtime Configuration And Secrets
+
+- Split non-secret runtime configuration (`.env`) from local secret material
+  (`.env.secrets`) with process-environment-first precedence across API, web
+  build/dev, restart, smoke, backup, and restore entrypoints.
+- Added a blank secret inventory and a value-redacting migration tool that
+  moves legacy secret assignments and appends missing non-secret config keys.
+- Removed secret assignments from all agent-editable auth profile templates and
+  documented secret-manager ownership, migration, and deployment handling.
+
 ## 2026-07-13: Authentik Security Review Remediation
 
 - Added an agent-handoff authentication acceptance checklist covering the

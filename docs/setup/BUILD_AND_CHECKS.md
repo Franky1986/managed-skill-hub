@@ -78,10 +78,12 @@ The build creates:
 
 ## Local Start
 
-1. Create root `.env`:
+1. Create the layered root environment:
    ```bash
    cp .env.example .env
-   # Local default: ADMIN_PASSWORD=admin
+   cp .env.secrets.example .env.secrets
+   chmod 600 .env .env.secrets
+   # For local simple auth, set ADMIN_PASSWORD in .env.secrets.
    ```
 
 2. Development mode:

@@ -9,12 +9,9 @@ PID_FILE="${LOG_DIR}/server.pid"
 START_IN_BACKGROUND="${START_IN_BACKGROUND:-1}"
 TMPDIR_TO_CLEAN="${TMPDIR:-/tmp} /private/tmp"
 
-if [ -f "${PROJECT_ROOT}/.env" ]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "${PROJECT_ROOT}/.env"
-  set +a
-fi
+# shellcheck source=./load-env.sh
+source "${SCRIPT_DIR}/load-env.sh"
+load_managed_skill_hub_env "${PROJECT_ROOT}"
 
 FRONTEND_PORT="${FRONTEND_PORT:-3041}"
 API_PORT="${API_PORT:-3040}"

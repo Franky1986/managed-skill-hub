@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfigurationError } from '../domain/errors';
 import {
@@ -105,6 +106,22 @@ describe('content storage provider parsing', () => {
 
     expect(config.contentStorageProvider).toBe('database');
 
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+});
+
+describe('layered environment files', () => {
+  it('loads secrets before non-secret config so exported values remain highest priority', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    const loadEnvFile = vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    loadConfig();
+
+    expect(loadEnvFile.mock.calls.map(([file]) => path.basename(String(file)))).toEqual([
+      '.env.secrets',
+      '.env',
+    ]);
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });

@@ -1,11 +1,13 @@
 # ENVIRONMENT
 
-This repository uses a single runtime configuration file:
+This repository uses two layered runtime files:
 
-- `/.env` in repository root
+- `/.env` for non-secret configuration;
+- `/.env.secrets` for local credentials, keys, and tokens.
 
-Do not keep per-app `.env` files anymore. Keep all configuration in repository
-root `/.env`.
+Do not keep per-app `.env` files. Exported process variables have highest
+precedence, followed by `.env.secrets`, then `.env`. This supports deployment
+secret managers without duplicating the configuration model in JSON.
 
 Available templates:
 
@@ -13,11 +15,14 @@ Available templates:
 - `.env.example.simple`: complete simple-auth profile.
 - `.env.example.authentik`: OIDC staging profile; production activation
   requires the real Authentik gate.
+- `.env.secrets.example`: blank inventory of supported secret keys.
 
 ## Root `.env` (copy this first)
 
 ```bash
 cp .env.example .env
+cp .env.secrets.example .env.secrets
+chmod 600 .env .env.secrets
 ```
 
 For an explicit currently supported simple profile:
@@ -25,6 +30,19 @@ For an explicit currently supported simple profile:
 ```bash
 cp .env.example.simple .env
 ```
+
+Agents may edit `.env` and tracked profile templates because they contain no
+secret assignments. A human operator or deployment secret manager owns
+`.env.secrets`; agents should not read it. Migrate an older mixed file with:
+
+```bash
+./node_modules/.bin/tsx scripts/migrate-env-layout.ts --check
+./node_modules/.bin/tsx scripts/migrate-env-layout.ts --write
+```
+
+The migration reports key names only, moves secrets atomically, and appends
+missing non-secret settings from `.env.example` without changing existing
+values.
 
 ## Core Variables
 
@@ -43,6 +61,11 @@ cp .env.example.simple .env
 | `CORS_ALLOWED_ORIGINS` | no | Comma-separated browser origins allowed to call the API with credentials. Originless CLI/server requests are still allowed. | `http://localhost:3041,http://127.0.0.1:3041` |
 
 ## Auth / Security
+
+Secret variables (`ADMIN_PASSWORD`, `ADMIN_PASSWORD_HASH`, `JWT_SECRET`, bearer
+tokens, OIDC client secrets, database passwords, and API keys) belong in
+`.env.secrets` or an external secret manager. Their related modes, actors,
+client IDs, issuers, scopes, and policies remain in `.env`.
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|

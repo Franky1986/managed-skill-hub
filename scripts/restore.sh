@@ -4,11 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-if [ "${MSH_SKIP_ENV:-false}" != "true" ] && [ -f "${PROJECT_ROOT}/.env" ]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "${PROJECT_ROOT}/.env"
-  set +a
+if [ "${MSH_SKIP_ENV:-false}" != "true" ]; then
+  # shellcheck source=./load-env.sh
+  source "${SCRIPT_DIR}/load-env.sh"
+  load_managed_skill_hub_env "${PROJECT_ROOT}"
 fi
 
 DATA_DIR="${DATA_DIR:-${PROJECT_ROOT}/data}"

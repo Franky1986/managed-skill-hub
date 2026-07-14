@@ -80,7 +80,7 @@ English-first documentation and agent-facing contracts with a bilingual web UI.
    checks, and local startup
 3. [`docs/setup/TESTING.md`](./docs/setup/TESTING.md) - local testing and API
    checks
-4. [`docs/setup/ENVIRONMENT.md`](./docs/setup/ENVIRONMENT.md) - root `.env`,
+4. [`docs/setup/ENVIRONMENT.md`](./docs/setup/ENVIRONMENT.md) - layered root `.env` and `.env.secrets`,
    SQLite/MySQL providers, judger settings, and auto-publish flags
 5. [`docs/setup/AUTHENTIK.md`](./docs/setup/AUTHENTIK.md) - Authentik OIDC
    setup, staging gate, cutover, and rollback playbook
@@ -116,8 +116,10 @@ npm ci --legacy-peer-deps
 
 # 3. Create local configuration
 cp .env.example .env
+cp .env.secrets.example .env.secrets
+chmod 600 .env .env.secrets
 
-# Local defaults:
+# Local simple-auth secret in .env.secrets:
 # ADMIN_PASSWORD=admin
 # Optional BCrypt hash:
 # node -e "console.log(require('bcryptjs').hashSync('admin', 10))"

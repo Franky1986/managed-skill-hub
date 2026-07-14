@@ -92,6 +92,7 @@ co-located `*.spec.md` files.
 | [.github/workflows/validation.yml](../.github/workflows/validation.yml) | CI split for lightweight proof artifacts and scheduled/manual MySQL full validation |
 | [scripts/check.sh](../scripts/check.sh) | Structure checks, lint, typecheck, tests |
 | [scripts/check-agent-auth-matrix.ts](../scripts/check-agent-auth-matrix.ts) | Deterministic auth permutation proof with `.tmp` artifacts |
+| [scripts/migrate-env-layout.ts](../scripts/migrate-env-layout.ts) | Value-redacting migration from mixed `.env` to layered `.env`/`.env.secrets` |
 | [scripts/check-judger-autopublish-matrix.ts](../scripts/check-judger-autopublish-matrix.ts) | Deterministic judger and auto-publish safety proof |
 | [scripts/full-check.sh](../scripts/full-check.sh) | Extended EPIC-008 validation entrypoint with optional smoke/MySQL gates |
 | [scripts/check-public-release-hygiene.sh](../scripts/check-public-release-hygiene.sh) | Public release hygiene proof for metadata, secrets, private files, and history |

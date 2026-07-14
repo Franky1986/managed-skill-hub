@@ -22,6 +22,9 @@ auth defaults, per-process rate limits, and submitter ownership checks. The
 locked dependency graph currently audits with zero known vulnerabilities.
 Remaining production concerns include gateway-level distributed rate limits and
 completion of the environment-specific real Authentik activation gate.
+Runtime configuration is layered so agent-editable `.env` profiles contain no
+secret assignments; `.env.secrets` or exported deployment secrets supply keys
+with higher precedence.
 
 ## EPIC-009 Database-Backed Content Storage
 

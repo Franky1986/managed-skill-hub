@@ -386,14 +386,16 @@ export async function validateDataDir(dataDir: string): Promise<void> {
 function loadEnvFiles(): void {
   const appRoot = path.resolve(__dirname, '..', '..');
   const repoRoot = path.resolve(appRoot, '..', '..');
-  const envFile = path.join(repoRoot, '.env');
-
-  try {
-    process.loadEnvFile(envFile);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT') {
-      throw error;
+  // loadEnvFile preserves exported process values. Secrets load first so the
+  // lower-priority config file cannot replace them with blank placeholders.
+  for (const filename of ['.env.secrets', '.env']) {
+    try {
+      process.loadEnvFile(path.join(repoRoot, filename));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') {
+        throw error;
+      }
     }
   }
 }

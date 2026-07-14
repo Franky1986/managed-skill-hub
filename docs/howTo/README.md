@@ -11,8 +11,9 @@ This folder points agents and operators to task-oriented setup guides.
 
 ## Runtime Providers
 
-- Use `docs/setup/ENVIRONMENT.md` for root `.env` variables, SQLite/MySQL
-  provider flags, judger settings, and auto-publish options.
+- Use `docs/setup/ENVIRONMENT.md` for layered root `.env`/`.env.secrets`
+  variables, SQLite/MySQL provider flags, judger settings, and auto-publish
+  options.
 - Use `docs/product/AGENT_OPERATIONS.md` for local runbooks covering SQLite,
   MySQL, mixed provider modes, judgers, and future provider boundaries.
 
@@ -21,6 +22,8 @@ This folder points agents and operators to task-oriented setup guides.
 - Use `.env.example.simple` for the local/simple profile.
 - Use `docs/setup/AUTHENTIK.md` and `.env.example.authentik` for Authentik OIDC
   staging and the production activation gate.
+- Use `.env.secrets.example` only to initialize the human-owned local secret
+  file; agents should edit the non-secret profile instead.
 - Use `docs/product/AGENT_OIDC_DEVICE_FLOW.md` for the runtime agent linkout,
   polling, token handling, and failure behavior.
 

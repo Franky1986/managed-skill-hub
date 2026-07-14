@@ -17,7 +17,7 @@ log_info() {
 }
 
 # Check central documents.
-for file in README.md AGENTS.md .env.example; do
+for file in README.md AGENTS.md .env.example .env.secrets.example; do
   if [[ ! -f "$file" ]]; then
     log_error "Missing: $file"
   fi

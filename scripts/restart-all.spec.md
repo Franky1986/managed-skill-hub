@@ -22,7 +22,8 @@ frontend) with one command.
 
 ## Responsibilities
 
-- Read `.env` from repository root. `apps/api/.env` is no longer used by runtime.
+- Read layered `.env` and `.env.secrets` files from repository root through
+  `scripts/load-env.sh`. `apps/api/.env` is no longer used by runtime.
 - Stop processes on `API_PORT` (default 3040) and `FRONTEND_PORT` (default
   3041).
 - For local MySQL setups (`CATALOG_PROVIDER=mysql` or `SEARCH_PROVIDER=mysql` with
@@ -36,7 +37,8 @@ frontend) with one command.
 
 ## Inputs / Outputs
 
-- Inputs: environment variables `API_PORT`, `FRONTEND_PORT`, `.env` files.
+- Inputs: environment variables `API_PORT`, `FRONTEND_PORT`, `.env`, and
+  `.env.secrets`.
 - Outputs: running API and web development servers, local MySQL/phpMyAdmin URLs when applicable, log file, PID file.
 
 ## Failure Modes

@@ -11,13 +11,16 @@ echo ""
 
 cd "$PROJECT_ROOT"
 
-echo "[1/4] Checking .env and data directories..."
+echo "[1/4] Checking layered environment and data directories..."
 if [ ! -f ".env" ]; then
   echo "WARNING: .env is missing. Create it from .env.example."
   exit 1
 fi
+if [ ! -f ".env.secrets" ]; then
+  echo "INFO: .env.secrets is absent; required secrets must be exported by the deployment environment."
+fi
 mkdir -p data/{skills,proposals,index,audit,backups,uploads}
-echo "[1/4] .env and data directories OK."
+echo "[1/4] Environment and data directories OK."
 echo ""
 
 echo "[2/4] Installing dependencies ..."

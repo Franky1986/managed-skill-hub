@@ -9,6 +9,7 @@ dist/
 # Environment
 .env
 .env.local
+.env.secrets
 .env.example.private
 scripts/prepare-deploy.sh
 scripts/call-*judger.sh

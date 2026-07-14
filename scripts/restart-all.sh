@@ -19,12 +19,9 @@ log() {
 }
 
 load_env() {
-  if [ -f "${PROJECT_ROOT}/.env" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "${PROJECT_ROOT}/.env"
-    set +a
-  fi
+  # shellcheck source=./load-env.sh
+  source "${SCRIPT_DIR}/load-env.sh"
+  load_managed_skill_hub_env "${PROJECT_ROOT}"
 }
 
 kill_named_processes() {

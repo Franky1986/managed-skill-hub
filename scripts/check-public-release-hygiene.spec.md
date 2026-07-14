@@ -9,7 +9,8 @@
 The script checks:
 
 - Required public metadata files exist.
-- Runtime `.env` files are not tracked.
+- Runtime `.env` and `.env.secrets` files are not tracked.
+- The tracked `.env.secrets.example` contains names and blank values only.
 - Obvious secret-looking values are absent from tracked public files.
 - Internal/private judger implementation paths are not tracked publicly.
 - Public docs do not advertise private service setup.

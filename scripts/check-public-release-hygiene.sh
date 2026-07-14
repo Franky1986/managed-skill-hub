@@ -36,13 +36,13 @@ repository_files() {
 }
 
 public_repository_files() {
-  repository_files README.md README_DE.md AGENTS.md .env.example 'docs/**' 'packages/**' 'apps/**' 'scripts/**' \
+  repository_files README.md README_DE.md AGENTS.md .env.example .env.secrets.example 'docs/**' 'packages/**' 'apps/**' 'scripts/**' \
     | grep -v '^scripts/check-public-release-hygiene\.sh$' \
     | grep -v '^scripts/check-public-release-hygiene\.spec\.md$' \
     | grep -v '^docs/setup/.*INTERNAL.*\.md$'
 }
 
-for file in README.md README_DE.md LICENSE NOTICE CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md .env.example .gitignore; do
+for file in README.md README_DE.md LICENSE NOTICE CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md .env.example .env.secrets.example .gitignore; do
   if [ -f "$file" ]; then
     record_pass "required-file:$file"
   else
@@ -50,7 +50,7 @@ for file in README.md README_DE.md LICENSE NOTICE CONTRIBUTING.md SECURITY.md CO
   fi
 done
 
-tracked_env="$(git ls-files | rg '(^|/)\.env$|apps/api/\.env|apps/web/\.env' || true)"
+tracked_env="$(git ls-files | rg '(^|/)\.env$|(^|/)\.env\.secrets$|apps/api/\.env|apps/web/\.env' || true)"
 if [ -z "$tracked_env" ]; then
   record_pass "no-tracked-runtime-env-files"
 else

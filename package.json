@@ -8,8 +8,8 @@
     "npm": ">=10"
   },
   "scripts": {
-    "dev": "npm run dev --workspace=apps/api & npm run dev --workspace=apps/web",
-    "build:prod": "npm run build:prod --workspaces",
+    "dev": "bash scripts/run-with-env.sh bash -c 'npm run dev --workspace=apps/api & npm run dev --workspace=apps/web & wait'",
+    "build:prod": "NODE_ENV=production bash scripts/run-with-env.sh npm run build:prod --workspaces",
     "check": "./scripts/check.sh",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",

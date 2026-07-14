@@ -14,10 +14,12 @@ Use this guide when you need a deterministic local setup for:
 
 Prerequisites:
 
-- Root `/.env` contains one complete admin/auth profile. Simple mode needs
+- Root `/.env` contains one complete non-secret admin/auth profile. Root
+  `/.env.secrets` contains local credentials and keys. Simple mode needs
   `ADMIN_PASSWORD` locally or `ADMIN_PASSWORD_HASH` plus `JWT_SECRET` in
   production; OIDC mode needs the Authentik admin provider settings instead.
-- Optional shared options in root `.env`: `JUDGER_PROVIDER`, auto-publish flags, etc.
+- Optional shared settings remain in `.env`; provider API keys belong in
+  `.env.secrets` or a deployment secret manager.
 - Build output exists (`npm run build:prod`) when using `node apps/api/dist/server.js`.
 
 ## Authentication Profiles

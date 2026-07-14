@@ -76,6 +76,22 @@ Use non-sensitive aliases for test identities:
 ## Common Preparation
 
 - [ ] Use a dedicated staging deployment and backup its data before testing.
+- [ ] Select the non-secret profile in `.env`; initialize secrets separately:
+
+      ```bash
+      cp .env.example.authentik .env
+      cp .env.secrets.example .env.secrets
+      chmod 600 .env .env.secrets
+      ```
+
+- [ ] For an existing installation, run
+      `./node_modules/.bin/tsx scripts/migrate-env-layout.ts --check`; use
+      `--write` once when migration is required.
+- [ ] Confirm `.env` contains no `_PASSWORD`, `_PASSWORD_HASH`, `_SECRET`,
+      `_TOKEN`, or `_API_KEY` assignments and `.env.secrets` is Git-ignored.
+- [ ] Have a human operator or deployment secret manager populate
+      `.env.secrets`. Testing agents must not read, print, attach, or modify
+      that file.
 - [ ] Record the exact commit and configuration profile without secret values.
 - [ ] Use distinct random values of at least 32 bytes for every production
       static bearer or session secret.
@@ -115,8 +131,8 @@ Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
 
 ## AUTH-01: Simple Admin, Open Agent APIs
 
-Start from `.env.example.simple` with `ADMIN_AUTH_MODE=simple` and all three
-agent areas set to `none`.
+Start from `.env.example.simple` in `.env`, use `.env.secrets` for the local
+admin credentials, and keep all three agent areas set to `none`.
 
 - [ ] `/discover`, `/categories`, and `/proposals/notice` return `200` without
       credentials.
@@ -170,7 +186,9 @@ Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
 
 ## AUTH-04: Authentik Provider And Proxy Readiness
 
-Start from `.env.example.authentik`. Do not activate production traffic yet.
+Start from `.env.example.authentik` in `.env`; supply confidential client
+values only through `.env.secrets` or exported deployment secrets. Do not
+activate production traffic yet.
 
 - [ ] Admin and agent discovery documents use the exact configured issuers.
 - [ ] Authorization, token, device authorization, JWKS, and introspection
@@ -410,4 +428,3 @@ Production Authentik activation requires:
 - all failures retested against the same or newer commit;
 - a proven rollback procedure;
 - no secrets or personal identifiers in committed evidence.
-

@@ -11,7 +11,8 @@ Central API server configuration, especially:
 
 ## Scope
 
-- Load environment variables from `.env` files.
+- Load non-secret configuration from `.env` and local secrets from
+  `.env.secrets`, with exported process variables taking precedence.
 - Resolve `DATA_DIR`, absolute or relative to the project root.
 - Validate that the directory can be written.
 - Parse `CATALOG_PROVIDER`, `SEARCH_PROVIDER`, and `JUDGER_PROVIDER`.
@@ -36,7 +37,8 @@ Central API server configuration, especially:
 
 ## Responsibilities
 
-- `loadConfig()` reads environment variables from `.env` files and calls
+- `loadConfig()` loads `.env.secrets` before `.env` so the Node loader applies
+  `process environment > secrets > config`, then calls
   `resolveDataDir()`.
 - `resolveDataDir()` keeps absolute paths and resolves relative paths against
   the project root.

@@ -45,17 +45,24 @@ real Authentik, and rollback evidence.
 
 ## 3. Configure Environment
 
-### Root `.env` (single source of truth)
+### Layered Root Environment
 
 ```bash
 cp .env.example .env
+cp .env.secrets.example .env.secrets
+chmod 600 .env .env.secrets
 ```
 
-Simplest local option:
+In `.env`:
 
-```bash
-ADMIN_PASSWORD=admin
+```env
 JUDGER_PROVIDER=noop
+```
+
+In `.env.secrets`:
+
+```env
+ADMIN_PASSWORD=admin
 ```
 
 For custom judger setups, follow the provider-neutral adapter contract in
@@ -67,7 +74,7 @@ Alternative with BCrypt hash, using `admin` as the example password:
 node -e "console.log(require('bcryptjs').hashSync('admin', 10))"
 ```
 
-Then store the hash in `.env`:
+Then store the hash in `.env.secrets`:
 
 ```text
 ADMIN_PASSWORD_HASH='$2b$10$...'
@@ -79,19 +86,25 @@ Recommended: set `JWT_SECRET` to a random value:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### Root `.env` For Vercel AI SDK Judger
+### Root Environment For Vercel AI SDK Judger
 
 When the Vercel AI SDK should be used locally:
 
 ```bash
 cp .env.example .env
+cp .env.secrets.example .env.secrets
 ```
 
-Set at least these values in the root `.env`:
+Set the provider/model in `.env`:
 
-```bash
+```env
 JUDGER_PROVIDER=vercel-ai-sdk
 VERCEL_AI_SDK_MODEL=openai:gpt-4.1
+```
+
+Set the API key in `.env.secrets`:
+
+```env
 OPENAI_API_KEY=sk-...
 ```
 
