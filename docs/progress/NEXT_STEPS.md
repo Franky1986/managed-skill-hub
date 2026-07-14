@@ -28,6 +28,8 @@
 - [x] Run the auto-judge/vercel-ai-sdk acceptance gate: configure real model
       credentials, submit a disposable skill, verify real LLM judgement,
       auto-publish eligibility, and publication flow.
+- [x] Add semantic duplicate gate so auto-publish only proceeds for genuinely
+      new skills, not near-duplicates of existing published skills.
 
 ## Production Readiness Verification
 

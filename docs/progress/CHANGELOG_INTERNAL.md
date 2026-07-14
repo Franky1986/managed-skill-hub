@@ -1,3 +1,15 @@
+## 2026-07-14: Auto-publish semantic duplicate gate
+
+- Added `AUTO_PUBLISH_SIMILARITY_THRESHOLD` (default 0.7) to `.env.example`.
+- Wired `ProposalDuplicateCheckUseCase` into `AutoPublishProposalUseCase`.
+- Auto-publish now runs the duplicate check before converting a proposal;
+  if the best semantic match reaches the threshold, auto-publish is blocked
+  with `manual_review_required` and a clear reason string.
+- Added unit tests for blocked (0.85) and allowed (0.4) similarity scores.
+- Local dev server runs with `JUDGER_PROVIDER=vercel-ai-sdk`,
+  `AUTO_PUBLISH_ON_GREEN=true`, auth disabled, and unlimited agent sessions,
+  ready for manual proposal/review UI testing.
+
 ## 2026-07-14: Vercel AI SDK auto-judge and auto-publish verified
 
 - Fixed VercelAiSdkSkillJudger to use `generateObject` (native ai SDK v6 API)
