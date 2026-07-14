@@ -1,4 +1,4 @@
-import { Output, generateText, type LanguageModel } from 'ai';
+import { generateObject, type LanguageModel } from 'ai';
 import {
   AutoPublishCategoryCheckInput,
   AutoPublishCategoryCheckResult,
@@ -29,25 +29,20 @@ interface VercelAiSdkSkillJudgerConfig {
   maxRetries: number;
 }
 
-interface GenerateTextResult {
-  output?: unknown;
-  text?: string;
-}
-
-type GenerateStructuredText = (options: {
+// generateObject accepts FlexibleSchema; keep the call site typed loosely enough
+// to avoid TypeScript type-instantiation depth errors with deeply nested Zod objects.
+type GenerateObjectCaller = (options: {
   model: LanguageModel;
   system: string;
   prompt: string;
-  output: unknown;
+  schema: unknown;
   maxRetries: number;
   abortSignal: AbortSignal;
-}) => Promise<GenerateTextResult>;
-
-const generateStructuredText = generateText as unknown as GenerateStructuredText;
-const createObjectOutput = Output.object as unknown as (options: { schema: unknown }) => unknown;
+}) => Promise<{ object: unknown }>;
 
 export class VercelAiSdkSkillJudger implements SkillJudgerPort {
   private readonly model: LanguageModel;
+  private readonly generateObject: GenerateObjectCaller;
 
   constructor(private readonly config: VercelAiSdkSkillJudgerConfig) {
     try {
@@ -55,21 +50,22 @@ export class VercelAiSdkSkillJudger implements SkillJudgerPort {
     } catch (error) {
       throw new ValidationError(`Invalid Vercel AI SDK judger model configuration: ${(error as Error).message}`);
     }
+    this.generateObject = generateObject as unknown as GenerateObjectCaller;
   }
 
   async judge(target: JudgementTarget): Promise<Judgement> {
-    let output: string | Record<string, unknown>;
+    let output: Record<string, unknown>;
     try {
-      const result = await generateStructuredText({
+      const result = await this.generateObject({
         model: this.model,
         system: buildJudgementSystemPrompt(),
         prompt: buildJudgementUserPrompt(target, this.config.maxTextChars),
-        output: createObjectOutput({ schema: judgementResponseZodSchema }),
+        schema: judgementResponseZodSchema,
         maxRetries: this.config.maxRetries,
         abortSignal: AbortSignal.timeout(this.config.timeoutMs),
       });
 
-      output = normalizeOutput(result.output ?? result.text);
+      output = result.object as Record<string, unknown>;
     } catch (error) {
       if (isTimeoutError(error)) {
         throw new JudgerTimeoutError(`Vercel AI SDK judger timed out after ${this.config.timeoutMs} ms`);
@@ -87,18 +83,18 @@ export class VercelAiSdkSkillJudger implements SkillJudgerPort {
   }
 
   async classifyAutoPublishCategory(input: AutoPublishCategoryCheckInput): Promise<AutoPublishCategoryCheckResult> {
-    let output: string | Record<string, unknown>;
+    let output: Record<string, unknown>;
     try {
-      const result = await generateStructuredText({
+      const result = await this.generateObject({
         model: this.model,
         system: buildAutoPublishCategorySystemPrompt(),
         prompt: buildAutoPublishCategoryUserPrompt(input, this.config.maxTextChars),
-        output: createObjectOutput({ schema: autoPublishCategoryResponseZodSchema }),
+        schema: autoPublishCategoryResponseZodSchema,
         maxRetries: this.config.maxRetries,
         abortSignal: AbortSignal.timeout(this.config.timeoutMs),
       });
 
-      output = normalizeOutput(result.output ?? result.text);
+      output = result.object as Record<string, unknown>;
     } catch (error) {
       if (isTimeoutError(error)) {
         throw new JudgerTimeoutError(`Vercel AI SDK auto-publish classifier timed out after ${this.config.timeoutMs} ms`);
@@ -115,18 +111,6 @@ export class VercelAiSdkSkillJudger implements SkillJudgerPort {
 
     return parseAutoPublishCategoryOutput(output, `Vercel AI SDK (${this.config.model})`, `vercel-ai-sdk:${this.config.model}`);
   }
-}
-
-function normalizeOutput(output: unknown): string | Record<string, unknown> {
-  if (typeof output === 'string') {
-    return output;
-  }
-
-  if (output && typeof output === 'object' && !Array.isArray(output)) {
-    return output as Record<string, unknown>;
-  }
-
-  return '';
 }
 
 function isTimeoutError(error: unknown): boolean {
@@ -148,8 +132,10 @@ function isProtocolError(error: unknown): boolean {
     lowerName.includes('schema') ||
     lowerName.includes('parse') ||
     lowerName.includes('output') ||
+    lowerName.includes('object') ||
     lowerMessage.includes('schema') ||
     lowerMessage.includes('output') ||
+    lowerMessage.includes('object') ||
     code === 'INVALID_OUTPUT' ||
     statusCode === 422
   );

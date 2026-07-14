@@ -33,7 +33,7 @@ const judgementResponseSchema = {
 
 export const judgementResponseZodSchema = z.object({
   summary: z.string(),
-  skillPurposeSummary: z.string().nullable().optional(),
+  skillPurposeSummary: z.string().nullable(),
   dimensions: z.object({
     harmful: z.object({
       risk: z.enum([JudgementRisk.LOW, JudgementRisk.MEDIUM, JudgementRisk.HIGH, JudgementRisk.CRITICAL]),

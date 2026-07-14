@@ -4,7 +4,7 @@ import { JudgerProtocolError } from '../../../domain/errors';
 
 export const autoPublishCategoryResponseZodSchema = z.object({
   blocked: z.boolean(),
-  matchedCategory: z.string().nullable().optional(),
+  matchedCategory: z.string().nullable(),
   reason: z.string(),
 });
 
