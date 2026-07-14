@@ -1,3 +1,16 @@
+## 2026-07-14: Remove credential-setup script in favor of agent-session delegation
+
+- Removed the `/agent-credentials/setup.sh` endpoint and the
+  `credentialSetupScriptUrl` field from discovery, 401 error details,
+  `/howToPropose`, and the frontend HowToPropose page.
+- Agent-session delegation (`/frontend/agent-auth`) is now the single
+  human-in-the-loop path for static bearer auth.
+- Updated agent-facing bootstrap docs, acceptance checklists, and roadmap docs
+  to describe the agent-session flow instead of the setup script.
+- Updated OpenAPI spec and regenerated TypeScript types.
+- Verification: `npm run lint`, `npm run typecheck`, and `npm run test` green
+  for `apps/api`, `apps/web`, and `packages/openapi`.
+
 ## 2026-07-14: EPIC-012 Agent Session Delegation — Expose Frontend Agent-Auth URL in /discover
 
 - The `/discover` response now advertises an absolute `url` in the

@@ -203,7 +203,6 @@ describe('agent API auth matrix', () => {
         proposalAuthRequired: testCase.proposal !== 'none',
         discoveryAuthRequired: testCase.discovery !== 'none',
       });
-      expect(Boolean(discoveryPayload.credentialSetupScriptUrl)).toBe(anyBearer);
       const oidcScheme = discoveryPayload.authSchemes.find((scheme: { type: string }) => scheme.type === 'oauth2');
       expect(Boolean(oidcScheme)).toBe(anyOidc);
       if (oidcScheme) {
@@ -230,11 +229,9 @@ describe('agent API auth matrix', () => {
             ? 'Delegate access through the agent-auth page'
             : 'Read this workflow first'
       );
-      expect(Boolean(howToPayload.apiNotes.credentialSetupScriptUrl)).toBe(anyBearer);
       expect(Boolean(howToPayload.apiNotes.authSetupFlow)).toBe(anyAuth);
       if (anyOidc) {
         expect(howToPayload.apiNotes.authSetupFlow).toContain('Device Authorization');
-        expect(howToPayload.apiNotes.authSetupFlow).not.toContain('credentials.json');
       }
 
       await assertArea(app, '/categories', 'read', testCase.read);
@@ -264,12 +261,6 @@ describe('agent API auth matrix', () => {
         }
       }
 
-      const setupScript = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
-      expect(setupScript.statusCode).toBe(200);
-      expect(setupScript.payload).toContain(`MSH_REQUIRE_READ='${testCase.read === 'bearer'}'`);
-      expect(setupScript.payload).toContain(`MSH_REQUIRE_PROPOSAL='${testCase.proposal === 'bearer'}'`);
-      expect(setupScript.payload.includes('Read bearer token')).toBe(testCase.read === 'bearer');
-      expect(setupScript.payload.includes('Proposal bearer token')).toBe(testCase.proposal === 'bearer');
 
       await app.close();
     });

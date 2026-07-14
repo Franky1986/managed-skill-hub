@@ -15,8 +15,7 @@ export class AgentAuthRequiredError extends UnauthorizedError {
   constructor(
     public readonly authArea: 'discovery' | 'public-read' | 'proposal',
     public readonly authScheme: 'bearer' | 'oidc',
-    public readonly discoverUrl: string,
-    public readonly credentialSetupScriptUrl: string | undefined
+    public readonly discoverUrl: string
   ) {
     super('Agent API authentication required');
   }

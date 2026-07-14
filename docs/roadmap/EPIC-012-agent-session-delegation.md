@@ -22,7 +22,7 @@ administrators.
 ## Why This Epic Exists
 
 The existing bearer-only flow requires the user to download and run a shell
-script (`/agent-credentials/setup.sh`) and enter tokens into a local form. For
+agent-session URL (`/frontend/agent-auth`) and enter tokens into a browser form. For
 many users this feels suspicious and is operationally inconvenient. It also
 prevents the agent from driving the workflow in a single conversation: the human
 must leave the chat, run a script, and return.

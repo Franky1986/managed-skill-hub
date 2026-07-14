@@ -137,7 +137,7 @@ public reads, an active admin browser session whose principal has `reader` or
 agent credential. This exception is read-only and does not apply to discovery
 or proposal routes. The proposal badge uses `/admin/proposals/notice`.
 
-Protected agent routes return `401` with machine-readable `details.authRequired`, `details.authArea`, `details.authScheme`, `details.discoverUrl`, and `details.credentialSetupScriptUrl` so agents can ask the user for setup-script confirmation instead of requesting tokens in chat.
+Protected agent routes return `401` with machine-readable `details.authRequired`, `details.authArea`, `details.authScheme`, and `details.discoverUrl` so agents can redirect the user to the advertised auth scheme (agent-session URL or OIDC Device Authorization) instead of requesting tokens in chat.
 
 ### Agent Session Delegation
 

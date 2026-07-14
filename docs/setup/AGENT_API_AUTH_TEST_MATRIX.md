@@ -69,8 +69,7 @@ its selected mode:
 | `bearer` | `401` until the exact static token is supplied | bearer scheme | read/proposal field only for that bearer area |
 | `oidc` | `401` until the verifier accepts an access token for that area | one Device Authorization scheme with accumulated scopes/areas | none |
 
-`credentialSetupScriptUrl` is present if and only if at least one area uses
-`bearer`. OIDC-only deployments never prompt for or persist a static token.
+`authSchemes` includes an `agent-session` entry with a frontend URL when at least one area uses `bearer` and `AGENT_SESSION_ENABLED=true`. OIDC-only deployments advertise an `oauth2` device-code scheme and never prompt for a static token.
 Discovery OIDC remains valid but requires issuer/client bootstrap out of band;
 normal Device Flow deployments keep discovery open.
 
@@ -93,7 +92,17 @@ details:
     "authArea": "public-read | proposal | discovery",
     "authScheme": "bearer | oidc",
     "discoverUrl": "https://example/api/discover",
-    "credentialSetupScriptUrl": "https://example/api/agent-credentials/setup.sh",
+    "authSchemes": [
+      {
+        "id": "agent-session",
+        "type": "agent-session",
+        "appliesTo": ["public-read", "proposal"],
+        "instructions": "Open http://localhost:3041/frontend/agent-auth in a browser, enter the bearer token provided by your administrator, and paste the returned session code into this chat.",
+        "url": "http://localhost:3041/frontend/agent-auth"
+      },
+      { "id": "public-read-bearer", "type": "bearer", "appliesTo": ["public-read"] },
+      { "id": "proposal-bearer", "type": "bearer", "appliesTo": ["proposal"] }
+    ]
     "recommendation": "Do not paste bearer tokens into agent chat..."
   }
 }
@@ -103,16 +112,14 @@ Bearer agent behavior:
 
 1. Do not ask the user to paste bearer tokens into chat.
 2. Explain which area is blocked from `details.authArea`.
-3. Ask for permission to download/run `details.credentialSetupScriptUrl`.
+3. Open the `agent-session` URL from `/discover` in a browser or browser tool, let the user enter the bearer token, and paste the returned session code into chat.
 4. Let the generated script open the local browser setup form, or use
    `--terminal` as fallback.
 5. Read `~/.managed-skill-hub/credentials.json` by registry alias or normalized
    API base URL.
 6. Retry the blocked call with the matching bearer token.
 
-OIDC responses omit `credentialSetupScriptUrl` unless another area uses bearer
-and direct the agent to `/discover` and the Device Authorization guide. The
-agent starts a new trusted linkout and never asks for a token in chat.
+OIDC responses advertise an `oauth2` device-code scheme and direct the agent to `/discover` and the Device Authorization guide. The agent starts a new trusted linkout and never asks for a token in chat.
 
 ## UI Expectations
 
@@ -120,14 +127,13 @@ When no agent-facing auth is enabled:
 
 - How-to UI does not show an auth/setup panel.
 - `/howToPropose.requiredSteps[0]` is `Read this workflow first`.
-- `/discover` omits `credentialSetupScriptUrl`.
+- `/discover` omits `agent-session` and lists only `bearer` schemes when `AGENT_SESSION_ENABLED=false`.
 
 When static bearer auth is enabled:
 
 - How-to UI shows the auth/setup panel.
 - The panel shows read/proposal auth status from `apiNotes`.
-- The setup-script download is visible only when `credentialSetupScriptUrl` is
-  present.
+- The `/frontend/agent-auth` page is the canonical human entry point when `agent-session` is advertised.
 - `/howToPropose.requiredSteps[0]` is
   `Handle registry authentication outside chat`.
 
@@ -162,11 +168,11 @@ DISCOVERY_AUTH_MODE=none
 Expected checks:
 
 ```bash
-curl -s http://localhost:3040/discover | jq '{readAuthRequired, proposalAuthRequired, credentialSetupScriptUrl}'
+curl -s http://localhost:3040/discover | jq '{readAuthRequired, proposalAuthRequired, authSchemes}'
 curl -i http://localhost:3040/categories
 curl -i http://localhost:3040/proposals/notice
 curl -i -H 'Authorization: Bearer proposal-token' http://localhost:3040/proposals/notice
-curl -s http://localhost:3040/agent-credentials/setup.sh | rg 'Read bearer token|Proposal bearer token|entry.readToken|entry.proposalToken|MSH_REQUIRE_'
+curl -s http://localhost:3041/frontend/agent-auth | head
 ```
 
 Expected result:

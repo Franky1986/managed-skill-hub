@@ -72,15 +72,7 @@ export function HowToProposePage() {
                             </div>
                         </div>
                     </div>
-                    {guide.apiNotes?.credentialSetupScriptUrl && (
-                        <a
-                            href={guide.apiNotes.credentialSetupScriptUrl}
-                            className="inline-flex items-center justify-center rounded-xl bg-primary px-lg py-md text-on-primary font-semibold shadow-ambient hover:brightness-105"
-                            download
-                        >
-                            {t('howTo.auth.downloadSetup')}
-                        </a>
-                    )}
+
                 </div>
                 {guide.apiNotes?.authSetupFlow && (
                     <p className="mt-md rounded-xl border border-outline-variant bg-surface px-lg py-md text-sm text-on-surface-variant">

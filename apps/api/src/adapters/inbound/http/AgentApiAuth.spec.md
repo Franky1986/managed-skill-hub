@@ -31,7 +31,7 @@ changing domain or use-case logic.
 - Token comparison uses constant-time comparison.
 - Missing, malformed, or invalid bearer tokens produce normalized `401` errors
   with `details.authRequired`, `details.authArea`, `details.authScheme`,
-  `details.discoverUrl`, and `details.credentialSetupScriptUrl`.
+  `details.discoverUrl`, and an agent-session URL when sessions are enabled.
 - Bearer tokens are never logged or returned in metadata.
 - Proposal status follows `PROPOSAL_AUTH_MODE`; there is no separate status auth.
 - When proposal bearer auth succeeds, the bearer actor is authoritative for
@@ -57,12 +57,7 @@ The adapter exposes non-secret metadata for discovery:
 - `proposalAuthRequired`
 - `discoveryAuthRequired`
 - `authSchemes`
-- `credentialSetupScriptUrl`
-
-`credentialSetupScriptUrl` is present only when at least one agent-facing area
-uses static bearer auth. When `AGENT_SESSION_ENABLED=true`, the preferred human
-entry point is the `agent-session` scheme URL; the setup script remains a
-fallback for clients that want to store long-lived credentials locally. OIDC metadata includes the trusted issuer, public
+OIDC metadata includes the trusted issuer, public
 client ID, OpenID configuration URL, Device Authorization and token endpoints,
 scopes, and applicable areas, never a client secret.
 
@@ -75,6 +70,8 @@ scopes, and applicable areas, never a client secret.
 - Do not let agent bearer tokens grant admin privileges.
 - Do not print or persist bearer tokens in logs, responses, generated scripts, or
   proposal artifacts.
+- Do not advertise a credential-setup script; agent sessions and OIDC are the
+  supported human-in-the-loop authentication flows.
 
 ## Agent Session Delegation
 

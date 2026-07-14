@@ -146,9 +146,6 @@ export class AgentApiAuth {
       proposalAuthRequired: this.proposalMode() !== 'none',
       discoveryAuthRequired: this.discoveryMode() !== 'none',
       authSchemes: this.authSchemes(),
-      credentialSetupScriptUrl: this.anyBearerAuthEnabled()
-        ? (this.config.publicApiBaseUrl ?? 'http://localhost:3040') + '/agent-credentials/setup.sh'
-        : undefined,
     };
   }
 
@@ -262,8 +259,7 @@ export class AgentApiAuth {
     return new AgentAuthRequiredError(
       area,
       scheme,
-      this.config.publicApiBaseUrl ? this.config.publicApiBaseUrl + '/discover' : '/discover',
-      scheme === 'bearer' ? this.metadata().credentialSetupScriptUrl : undefined
+      this.config.publicApiBaseUrl ? this.config.publicApiBaseUrl + '/discover' : '/discover'
     );
   }
 

@@ -66,7 +66,6 @@ The response contains:
 - `registryId`, `registryName`, `apiBaseUrl`: identity and base URL for this registry instance
 - `readAuthRequired`, `proposalAuthRequired`, `discoveryAuthRequired`: runtime auth requirements
 - `authSchemes`: bearer schemes that apply to `public-read`, `proposal`, or `discovery`
-- `credentialSetupScriptUrl`: no-secret setup script URL when any agent-facing auth is enabled
 - `documentation`: links to human-readable guide and OpenAPI spec
 - `capabilities`: what the registry can do
 - `entrypoints`: concrete endpoints with `id`, `name`, `description`, `methods`, `path` and `url`
@@ -80,8 +79,11 @@ Before any proposal upload, the agent must read `GET /howToPropose`. This is not
 
 Deployments can protect read, proposal, or discovery endpoints with static
 bearer auth or OIDC. Agents must not ask users to paste credentials or tokens
-into normal chat. Use the generated setup path only for static bearer modes.
-In particular, agents must never ask users to paste bearer tokens into chat.
+into normal chat. For static bearer modes, use the agent-session scheme advertised in
+`/discover` whenever it is available: open the URL in a browser or browser tool,
+let the user enter the bearer token, and use the returned short-lived session code
+as `Authorization: AgentSession <code>`. In particular, agents must never ask users
+to paste bearer tokens into chat.
 
 The OIDC mode uses Authentik Device Authorization. When
 `/discover` advertises an OIDC device scheme, agents must follow
@@ -92,14 +94,20 @@ Agents must use only schemes that the live discovery response advertises.
 
 Recommended lookup order for clients:
 
-1. explicit runtime env vars such as `MANAGED_SKILL_HUB_READ_TOKEN` and `MANAGED_SKILL_HUB_PROPOSAL_TOKEN`
-2. user-global `~/.managed-skill-hub/credentials.json` selected by registry alias or normalized API base URL
+1. short-lived session codes created through the agent-session URL from `/discover`
+2. explicit runtime env vars such as `MANAGED_SKILL_HUB_READ_TOKEN` and `MANAGED_SKILL_HUB_PROPOSAL_TOKEN`
 3. OS keychain or OAuth cache when a client supports it
 4. project-local developer-only files such as `.env.agent.local`
 
 When `proposalAuthRequired=true`, use the proposal token for duplicate checks, proposal creation, file uploads, finalize-upload, notices, and status polling. Proposal status is not a separate auth domain. When `readAuthRequired=true`, use the read token for published skill listing, search, metadata, files, and package downloads.
 
-When an endpoint returns `401` with `details.authRequired=true`, inspect `details.authArea`, `details.discoverUrl`, and `details.credentialSetupScriptUrl`. Ask the user for confirmation before downloading or running the setup script. The user enters tokens in the local browser form or terminal fallback, not in chat. After setup, read `~/.managed-skill-hub/credentials.json` by registry alias or normalized `apiBaseUrl` and retry the request with the matching bearer token.
+When an endpoint returns `401` with `details.authRequired=true`, inspect
+`details.authArea` and `details.discoverUrl`. Read `/discover` to find the
+applicable auth scheme: use the `agent-session` URL when sessions are enabled, or
+follow the OIDC Device Authorization flow when an `oauth2` scheme is advertised.
+Only when no agent-session or OIDC scheme is available, obtain the bearer token
+from the administrator through a separate trusted channel and use it directly in
+the `Authorization: Bearer <token>` header. Never request tokens in chat.
 
 Consumers may work with multiple ManagedSkillHub instances at the same time, for example `local`, `team-sandbox`, and `company-prod`. Always show or log the selected registry alias and URL, but never print full tokens.
 

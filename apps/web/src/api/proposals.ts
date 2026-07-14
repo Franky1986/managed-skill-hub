@@ -76,7 +76,6 @@ export interface HowToProposeResponse {
         readAuthRequired?: boolean;
         proposalAuthRequired?: boolean;
         discoveryAuthRequired?: boolean;
-        credentialSetupScriptUrl?: string | null;
         authorizationHeader?: string | null;
         authSetupFlow?: string;
         checkDuplicateNote?: string;

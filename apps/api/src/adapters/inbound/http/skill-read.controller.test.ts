@@ -187,22 +187,9 @@ describe('SkillReadController /discover', () => {
       readAuthRequired: true,
       proposalAuthRequired: true,
       discoveryAuthRequired: false,
-      credentialSetupScriptUrl: 'https://skills.example.com/api/agent-credentials/setup.sh',
     });
+    expect(payload).not.toHaveProperty('credentialSetupScriptUrl');
     expect(payload.authSchemes.map((scheme: { id: string }) => scheme.id)).toEqual(['public-read-bearer', 'proposal-bearer']);
-
-    const script = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
-    expect(script.statusCode).toBe(200);
-    expect(script.payload).toContain('REGISTRY_ID=');
-    expect(script.payload).toContain('company-prod');
-    expect(script.payload).toContain('MSH_REQUIRE_READ=');
-    expect(script.payload).toContain('MSH_REQUIRE_PROPOSAL=');
-    expect(script.payload).toContain('Default mode opens a local browser form');
-    expect(script.payload).toContain('Use --terminal for terminal prompts');
-    expect(script.payload).toContain('openBrowser(url)');
-    expect(script.payload).toContain('.managed-skill-hub');
-    expect(script.payload).not.toContain('read-secret');
-    expect(script.payload).not.toContain('proposal-secret');
   });
 
   it('includes auth setup guidance when agent auth is active', async () => {
@@ -232,71 +219,9 @@ describe('SkillReadController /discover', () => {
     const payload = JSON.parse(response.payload);
 
     expect(payload.requiredSteps[0].title).toBe('Handle registry authentication outside chat');
-    expect(payload.requiredSteps[0].checks.join(' ')).toContain('Never ask the user to paste bearer tokens into chat');
-    expect(payload.apiNotes.authSetupFlow).toContain('setup script opens a local browser form');
-    expect(payload.apiNotes.credentialSetupScriptUrl).toBe('https://skills.example.com/api/agent-credentials/setup.sh');
-  });
-
-  it('customizes the setup script for proposal-only auth', async () => {
-    const app = Fastify({ logger: false });
-    registerApiErrorHandler(app);
-    const container = {
-      config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: [],
-        autoPublishOnGreen: false,
-        registryId: 'proposal-only',
-        registryName: 'Proposal Only Registry',
-        publicApiBaseUrl: 'https://skills.example.com/api',
-        publicReadAuthMode: 'none',
-        proposalAuthMode: 'bearer',
-        proposalBearerToken: 'proposal-secret',
-        discoveryAuthMode: 'none',
-      },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
-      skillQuery: {} as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
-    registerSkillReadRoutes(app, container, new AgentApiAuth(container.config));
-
-    const script = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
-
-    expect(script.payload).toContain("MSH_REQUIRE_READ='false'");
-    expect(script.payload).toContain("MSH_REQUIRE_PROPOSAL='true'");
-    expect(script.payload).toContain('Proposal bearer token');
-    expect(script.payload).not.toContain('readToken) entry.readToken');
-  });
-
-  it('customizes the setup script for read-only auth', async () => {
-    const app = Fastify({ logger: false });
-    registerApiErrorHandler(app);
-    const container = {
-      config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: [],
-        autoPublishOnGreen: false,
-        registryId: 'read-only',
-        registryName: 'Read Only Registry',
-        publicApiBaseUrl: 'https://skills.example.com/api',
-        publicReadAuthMode: 'bearer',
-        publicReadBearerToken: 'read-secret',
-        proposalAuthMode: 'none',
-        discoveryAuthMode: 'none',
-      },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
-      skillQuery: {} as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
-    registerSkillReadRoutes(app, container, new AgentApiAuth(container.config));
-
-    const script = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
-
-    expect(script.payload).toContain("MSH_REQUIRE_READ='true'");
-    expect(script.payload).toContain("MSH_REQUIRE_PROPOSAL='false'");
-    expect(script.payload).toContain('Read bearer token');
-    expect(script.payload).not.toContain('proposalToken) entry.proposalToken');
+    expect(payload.requiredSteps[0].checks.join(' ')).toContain('Never paste it into chat');
+    expect(payload.apiNotes.authSetupFlow).toContain('obtain the required bearer token from the administrator');
+    expect(payload.apiNotes.credentialSetupScriptUrl).toBeUndefined();
   });
 
   it('guards public read endpoints when PUBLIC_READ_AUTH_MODE is bearer', async () => {

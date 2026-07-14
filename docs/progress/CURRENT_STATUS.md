@@ -52,7 +52,7 @@ EPIC-007 static bearer compatibility remains implemented:
 - `/discover` exposes non-secret registry identity, canonical API base URL, auth
   flags, and auth schemes. A setup-script URL appears only when static bearer
   auth is active.
-- `/agent-credentials/setup.sh` generates a no-secret local setup script that stores user credentials per registry alias/base URL outside agent conversation.
+- Agent-session delegation (`/frontend/agent-auth`) lets humans create short-lived sessions for bearer-protected areas without sharing long-lived tokens in chat.
 - Proposal bearer auth uses the configured bearer actor as authoritative proposal actor instead of trusting `X-Actor`.
 
 API-gateway and multi-token static credential stores remain optional future

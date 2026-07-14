@@ -56,7 +56,6 @@ export interface DiscoveryResponse {
     proposalAuthRequired: boolean;
     discoveryAuthRequired: boolean;
     authSchemes: DiscoveryAuthScheme[];
-    credentialSetupScriptUrl?: string;
 }
 
 export const agentSessionsApi = {

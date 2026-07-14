@@ -232,14 +232,9 @@ Profile selectors (no secrets):
 
 Observed HTTP results:
 - `GET /discover` without credentials → `200`, advertises
-  `credentialSetupScriptUrl` and bearer schemes for `public-read` and
-  `proposal`.
-- `GET /agent-credentials/setup.sh` → `200`, `Content-Type: text/x-shellscript`,
-  attachment disposition; script contains prompts for read and proposal tokens
-  but no server-side secret values.
-- `bash setup-managed-skill-hub.sh --terminal` with environment-supplied
-  tokens writes `~/.managed-skill-hub/credentials.json` with mode `600` and
-  parent directory mode `700`.
+  an `agent-session` scheme with a frontend URL and bearer schemes for `public-read` and `proposal`.
+- `GET /frontend/agent-auth` renders the token entry form and returns an 8-character session code when a valid bearer token is entered.
+- `Authorization: AgentSession <code>` authenticates read and proposal endpoints within the granted areas.
 - `GET /skills` without token → `401`; with read token → `200`; with wrong
   token → `401`; with proposal token → `401` (cross-area isolation).
 - `POST /proposals` without token → `401`; with proposal token and valid body

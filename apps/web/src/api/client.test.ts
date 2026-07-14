@@ -45,12 +45,12 @@ describe('handleApiError', () => {
           details: {
             authRequired: true,
             authArea: 'proposal',
-            credentialSetupScriptUrl: 'https://skills.example.com/api/agent-credentials/setup.sh',
+
           },
         },
       },
     };
 
-    expect(handleApiError(error)).toContain('setup: https://skills.example.com/api/agent-credentials/setup.sh');
+    expect(handleApiError(error)).toContain('auth area: proposal');
   });
 });

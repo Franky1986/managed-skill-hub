@@ -57,9 +57,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
   fingerprint diff, then ask the user for explicit confirmation.
 - `GET /howToPropose.metadataLanguageGuidance` recommends English for new
   proposal metadata while allowing uploaded content files in any language.
-- `GET /howToPropose` includes an auth setup flow telling agents to ask for
-  user confirmation, run the generated setup script, and read local credentials
-  instead of requesting tokens in chat.
+- `GET /howToPropose` includes an auth setup flow telling agents to use the
+  advertised `agent-session` URL or OIDC Device Authorization flow, and never to
+  request tokens in chat.
 - `GET /howToPropose.packageHandling` tells agents to upload source artifacts
   and dependency manifests/lockfiles, never initialized package-manager
   outputs such as `node_modules/`, `.venv/`, `venv/`, `vendor/`,
@@ -70,8 +70,6 @@ requests into inbound port calls and maps results back to JSON or file streams.
 - A valid admin browser session with the `reader` or `admin` role is accepted
   as an alternative credential on public read routes. This fallback does not
   apply to discovery or proposal routes and does not grant any write access.
-- `GET /agent-credentials/setup.sh` returns a no-secret shell script that writes
-  user-local credentials per registry alias/base URL.
 - The controller follows the OpenAPI contract.
 - Only `published` skills are reachable through the public read path.
 - Categories and tags are exposed for retrieval and proposal preparation.

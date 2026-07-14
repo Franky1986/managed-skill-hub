@@ -53,7 +53,6 @@ export function handleApiError(error: unknown, language: LanguageCode = 'en'): s
         authRequired?: boolean;
         authArea?: string;
         authScheme?: string;
-        credentialSetupScriptUrl?: string | null;
         discoverUrl?: string;
         recommendation?: string;
       } | unknown;
@@ -65,12 +64,8 @@ export function handleApiError(error: unknown, language: LanguageCode = 'en'): s
     const extras: string[] = [];
 
     if (payload?.details && typeof payload.details === 'object' && 'authRequired' in payload.details && payload.details.authRequired) {
-      const details = payload.details as { authArea?: string; credentialSetupScriptUrl?: string | null; recommendation?: string };
-      extras.push(
-        details.credentialSetupScriptUrl
-          ? `auth area: ${details.authArea ?? 'agent-api'}, setup: ${details.credentialSetupScriptUrl}`
-          : `auth area: ${details.authArea ?? 'agent-api'}`
-      );
+      const details = payload.details as { authArea?: string; recommendation?: string };
+      extras.push(`auth area: ${details.authArea ?? 'agent-api'}`);
     }
 
     if (payload?.originalError && payload.originalError !== message) {

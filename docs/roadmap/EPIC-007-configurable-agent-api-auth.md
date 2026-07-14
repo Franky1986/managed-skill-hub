@@ -318,30 +318,9 @@ registry URL and active auth requirements.
 
 Planned endpoint shape:
 
-```text
-GET /agent-credentials/setup.sh
-```
+Agent session delegation (see EPIC-012) is the preferred human-in-the-loop flow. The `/frontend/agent-auth` page opens in a browser, the user enters the bearer token for the requested area, and the agent receives an 8-character session code to use as `Authorization: AgentSession <code>`.
 
-The generated script should include:
-
-- the canonical registry API URL for this deployment
-- the registry display name or suggested alias for this deployment
-- which tokens are required by current config
-- prompts only for required tokens
-- an optional prompt for proposal token only when proposal auth is enabled
-- no prompt for read token when public read auth is disabled
-- validation calls against `/discover` and, where possible, low-risk endpoints
-- write or update logic for only this registry entry in
-  `~/.managed-skill-hub/credentials.json`
-- restrictive permissions (`chmod 700 ~/.managed-skill-hub`, `chmod 600 credentials.json`)
-- masked confirmation output including the alias and URL, not full tokens
-
-Example user flow:
-
-```bash
-curl -fsSL https://skills.example.com/api/agent-credentials/setup.sh -o setup-managed-skill-hub.sh
-bash setup-managed-skill-hub.sh
-```
+The auth setup flow must never ask users to paste tokens into chat.
 
 For deployments where discovery is protected, the setup script endpoint may stay
 open while containing no secret material. It only tells the user where the

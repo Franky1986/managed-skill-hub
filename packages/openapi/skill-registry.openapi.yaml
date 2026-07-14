@@ -255,24 +255,6 @@ paths:
                         package complete and starts judgement
         '401':
           $ref: '#/components/responses/UnauthorizedError'
-  /agent-credentials/setup.sh:
-    get:
-      operationId: getAgentCredentialSetupScript
-      tags:
-      - Discovery
-      summary: Download a local ManagedSkillHub credential setup script
-      description: Generates a no-secret shell script for this registry URL and active
-        auth requirements. By default the script opens a local browser form with only
-        the token fields required by the current config; --terminal uses terminal
-        prompts. It updates ~/.managed-skill-hub/credentials.json per registry alias/base
-        URL.
-      responses:
-        '200':
-          description: Shell setup script
-          content:
-            text/x-shellscript:
-              schema:
-                type: string
   /skills/suggest-name:
     get:
       operationId: suggestSkillName
@@ -2767,10 +2749,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RuntimeAuthScheme'
-        credentialSetupScriptUrl:
-          type:
-          - string
-          - 'null'
         workflowNotes:
           type: object
           properties:
@@ -3063,10 +3041,6 @@ components:
               type: boolean
             discoveryAuthRequired:
               type: boolean
-            credentialSetupScriptUrl:
-              type:
-              - string
-              - 'null'
             authorizationHeader:
               type:
               - string
@@ -4992,10 +4966,6 @@ components:
               - agent-session
             discoverUrl:
               type: string
-            credentialSetupScriptUrl:
-              type:
-              - string
-              - 'null'
             recommendation:
               type: string
         originalError:

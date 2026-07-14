@@ -83,9 +83,9 @@ describe('AgentApiAuth', () => {
       authArea: 'public-read',
       authScheme: 'bearer',
       discoverUrl: 'https://skills.example.com/api/discover',
-      credentialSetupScriptUrl: 'https://skills.example.com/api/agent-credentials/setup.sh',
     });
-    expect(missingPayload.details.recommendation).toContain('Do not paste bearer tokens');
+    expect(missingPayload.details).not.toHaveProperty('credentialSetupScriptUrl');
+    expect(missingPayload.details.recommendation).toContain('agent-session URL');
     expect(invalid.statusCode).toBe(401);
   });
 
@@ -108,8 +108,8 @@ describe('AgentApiAuth', () => {
       apiBaseUrl: 'https://skills.example.com/api',
       readAuthRequired: true,
       proposalAuthRequired: true,
-      credentialSetupScriptUrl: 'https://skills.example.com/api/agent-credentials/setup.sh',
     });
+    expect(auth.metadata().credentialSetupScriptUrl).toBeUndefined();
     expect(auth.metadata().authSchemes.map((scheme) => scheme.id)).toEqual(['public-read-bearer', 'proposal-bearer']);
   });
 

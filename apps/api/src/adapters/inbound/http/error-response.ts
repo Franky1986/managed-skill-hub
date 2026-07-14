@@ -216,10 +216,9 @@ function mapApiError(error: unknown, options: { admin?: boolean }): ApiErrorDefi
         authArea: error.authArea,
         authScheme: error.authScheme,
         discoverUrl: error.discoverUrl,
-        credentialSetupScriptUrl: error.credentialSetupScriptUrl,
         recommendation: error.authScheme === 'oidc'
           ? 'Read /discover for the trusted OIDC Device Authorization login link and start a new authorization when the token has expired.'
-          : 'Do not paste bearer tokens into agent chat. Ask the user for permission to download and run the setup script, then read credentials from the local credential store.',
+          : 'Read /discover for the agent-session URL, open it in a browser or browser tool to create a short-lived session, and paste the returned session code into chat. Do not paste bearer tokens into chat.',
       },
       logLevel: 'warn',
     };

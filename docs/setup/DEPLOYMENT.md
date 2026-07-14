@@ -164,8 +164,7 @@ limits at nginx or the API gateway.
 
 After deployment, validate `/discover`. It should return the expected
 `registryId`, `apiBaseUrl`, auth flags, and active auth schemes. A
-`credentialSetupScriptUrl` is present only when at least one area uses static
-bearer auth. OIDC consumers use the advertised Device Authorization metadata.
+The `agent-session` URL is advertised when at least one area uses static bearer auth and agent sessions are enabled. OIDC consumers use the advertised Device Authorization metadata.
 
 ## Authentik/OIDC Deployment
 
