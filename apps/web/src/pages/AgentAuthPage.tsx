@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { agentSessionsApi, AgentSessionArea } from '../api/agent-sessions';
 import { handleApiError } from '../api/client';
+import { Link } from 'react-router-dom';
+import { hasAdminRole, useAuthStore } from '../store/auth';
 import { useLanguage } from '../i18n';
 
 interface AreaField {
@@ -117,11 +119,26 @@ export function AgentAuthPage() {
         );
     }
 
+    const { isAuthenticated, roles } = useAuthStore();
+    const isAdmin = isAuthenticated && hasAdminRole(roles, 'admin');
+
     return (
         <div className="max-w-2xl mx-auto space-y-6">
             <section className="rounded border bg-white p-6 shadow-sm">
-                <h1 className="text-2xl font-semibold mb-2">{t('agentAuth.title')}</h1>
-                <p className="text-sm text-slate-600 mb-4">{t('agentAuth.instructions')}</p>
+                <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                    <div>
+                        <h1 className="text-2xl font-semibold mb-2">{t('agentAuth.title')}</h1>
+                        <p className="text-sm text-slate-600">{t('agentAuth.instructions')}</p>
+                    </div>
+                    {isAdmin && (
+                        <Link
+                            to="/admin/agent-sessions"
+                            className="inline-flex items-center rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                            {t('agentAuth.manageSessions')}
+                        </Link>
+                    )}
+                </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {fields.map((field) => (
                         <div key={field.area}>

@@ -4,6 +4,7 @@ import { adminApi } from '../api/admin';
 import { hasAdminRole, useAuthStore } from '../store/auth';
 import { useLanguage, type LanguageCode } from '../i18n';
 import { useBackgroundPolling } from '../hooks/useBackgroundPolling';
+import { agentSessionsApi } from '../api/agent-sessions';
 
 interface LayoutProps {
     children: ReactNode;
@@ -11,6 +12,7 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
     const [proposalNotice, setProposalNotice] = useState<{ hasNewProposals: boolean; totalPending: number } | null>(null);
+    const [agentAuthAreas, setAgentAuthAreas] = useState<string[]>([]);
     const location = useLocation();
     const navigate = useNavigate();
     const { isAuthenticated, isLoading, checkSession, logout, roles } = useAuthStore();
@@ -30,6 +32,12 @@ export function Layout({ children }: LayoutProps) {
 
     useEffect(() => {
         void checkSession();
+        agentSessionsApi.discover().then((res) => {
+            const scheme = res.data.authSchemes?.find((s) => s.type === 'agent-session');
+            setAgentAuthAreas(scheme?.appliesTo ?? []);
+        }).catch(() => {
+            setAgentAuthAreas([]);
+        });
     }, [checkSession]);
 
     const shouldPollProposalNotice = !isLoading && isAuthenticated && canReview;
@@ -88,7 +96,7 @@ export function Layout({ children }: LayoutProps) {
                         <Link to="/" className={navLinkClass('/')}>{t('app.nav.explore')}</Link>
                         <Link to="/search" className={navLinkClass('/search')}>{t('app.nav.search')}</Link>
                         <Link to="/how-to-propose" className={navLinkClass('/how-to-propose')}>{t('app.nav.howToPropose')}</Link>
-                        <Link to="/agent-auth" className={navLinkClass('/agent-auth')}>{t('app.nav.agentAuth')}</Link>
+                        {agentAuthAreas.length > 0 && <Link to="/agent-auth" className={navLinkClass('/agent-auth')}>{t('app.nav.agentAuth')}</Link>}
                     </div>
 
                     <div className="ml-auto flex flex-wrap justify-end items-center gap-sm sm:gap-2">
