@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { agentSessionsApi, AgentSessionArea } from '../api/agent-sessions';
+import { agentSessionsApi, AdminAgentAuthToken, AgentSessionArea } from '../api/agent-sessions';
 import { handleApiError } from '../api/client';
 import { Link } from 'react-router-dom';
 import { hasAdminRole, useAuthStore } from '../store/auth';
@@ -30,13 +30,18 @@ export function AgentAuthPage() {
     const [copied, setCopied] = useState(false);
     const { isAuthenticated, roles } = useAuthStore();
     const isAdmin = isAuthenticated && hasAdminRole(roles, 'admin');
+    const [adminTokens, setAdminTokens] = useState<AdminAgentAuthToken[]>([]);
+    const [selectedAreas, setSelectedAreas] = useState<Set<AgentSessionArea>>(new Set());
+    const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
     useEffect(() => {
         setLoading(true);
-        agentSessionsApi
-            .discover()
-            .then((response) => {
-                const schemes = response.data.authSchemes ?? [];
+        Promise.all([
+            agentSessionsApi.discover(),
+            isAdmin ? agentSessionsApi.getAdminAgentAuthConfig() : Promise.resolve({ data: { tokens: [] } }),
+        ])
+            .then(([discoverResponse, configResponse]) => {
+                const schemes = discoverResponse.data.authSchemes ?? [];
                 const sessionScheme = schemes.find((s) => s.type === 'agent-session');
                 const areas = (sessionScheme?.appliesTo ?? []).filter(isAgentSessionArea);
                 setAvailableAreas(areas);
@@ -47,13 +52,29 @@ export function AgentAuthPage() {
                         token: '',
                     }))
                 );
+                setSelectedAreas(new Set(areas));
+
+                const tokens = configResponse.data.tokens ?? [];
+                setAdminTokens(tokens);
             })
             .catch((err) => setError(handleApiError(err, language)))
             .finally(() => setLoading(false));
-    }, [language]);
+    }, [language, isAdmin]);
 
     function updateToken(area: AgentSessionArea, value: string) {
         setFields((prev) => prev.map((f) => (f.area === area ? { ...f, token: value } : f)));
+    }
+
+    function toggleArea(area: AgentSessionArea) {
+        setSelectedAreas((prev) => {
+            const next = new Set(prev);
+            if (next.has(area)) {
+                next.delete(area);
+            } else {
+                next.add(area);
+            }
+            return next;
+        });
     }
 
     async function handleSubmit(event: React.FormEvent) {
@@ -64,16 +85,28 @@ export function AgentAuthPage() {
         try {
             const areas: AgentSessionArea[] = [];
             const request: { discoveryToken?: string; readToken?: string; proposalToken?: string } = {};
-            for (const field of fields) {
-                if (field.token.trim()) {
-                    areas.push(field.area);
-                    request[`${field.area === 'discovery' ? 'discovery' : field.area === 'public-read' ? 'read' : 'proposal'}Token` as const] = field.token.trim();
+
+            if (isAdmin && adminTokens.length > 0) {
+                for (const area of selectedAreas) {
+                    if (!availableAreas.includes(area)) continue;
+                    areas.push(area);
+                    const token = adminTokens.find((t) => t.area === area)?.value ?? '';
+                    request[`${area === 'discovery' ? 'discovery' : area === 'public-read' ? 'read' : 'proposal'}Token` as const] = token;
+                }
+            } else {
+                for (const field of fields) {
+                    if (field.token.trim()) {
+                        areas.push(field.area);
+                        request[`${field.area === 'discovery' ? 'discovery' : field.area === 'public-read' ? 'read' : 'proposal'}Token` as const] = field.token.trim();
+                    }
                 }
             }
+
             if (areas.length === 0) {
                 setError(t('agentAuth.error.noArea'));
                 return;
             }
+
             const response = await agentSessionsApi.createSession({ areas, ...request });
             setSessionCode(response.data.code);
             setSessionAreas(response.data.areas);
@@ -86,12 +119,16 @@ export function AgentAuthPage() {
         }
     }
 
-    async function copyToClipboard() {
-        if (!sessionCode) return;
+    async function copyToClipboard(value: string, kind: 'code' | 'token') {
         try {
-            await navigator.clipboard.writeText(sessionCode);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 2000);
+            await navigator.clipboard.writeText(value);
+            if (kind === 'code') {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 2000);
+            } else {
+                setCopiedToken(value);
+                window.setTimeout(() => setCopiedToken(null), 2000);
+            }
         } catch {
             // Ignore clipboard errors silently.
         }
@@ -121,13 +158,15 @@ export function AgentAuthPage() {
         );
     }
 
+    const showAdminTokens = isAdmin && adminTokens.length > 0;
+
     return (
         <div className="max-w-2xl mx-auto space-y-6">
             <section className="rounded border bg-white p-6 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
                     <div>
                         <h1 className="text-2xl font-semibold mb-2">{t('agentAuth.title')}</h1>
-                        <p className="text-sm text-slate-600">{t('agentAuth.instructions')}</p>
+                        <p className="text-sm text-slate-600">{showAdminTokens ? t('agentAuth.adminInstructions') : t('agentAuth.instructions')}</p>
                     </div>
                     {isAdmin && (
                         <Link
@@ -138,26 +177,66 @@ export function AgentAuthPage() {
                         </Link>
                     )}
                 </div>
+
+                {showAdminTokens && (
+                    <div className="mb-6 space-y-3">
+                        <h2 className="text-sm font-semibold text-slate-700">{t('agentAuth.adminTokensTitle')}</h2>
+                        <p className="text-xs text-amber-700">{t('agentAuth.adminTokenWarning')}</p>
+                        {adminTokens.map((token) => (
+                            <div key={token.area} className="rounded border border-slate-200 bg-slate-50 p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="text-sm font-medium text-slate-700">{t(AREA_CONFIG[token.area].labelKey)}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => void copyToClipboard(token.value, 'token')}
+                                        className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                                    >
+                                        {copiedToken === token.value ? t('agentAuth.copied') : t('agentAuth.copyToken')}
+                                    </button>
+                                </div>
+                                <code className="mt-2 block break-all text-xs font-mono text-slate-600">{token.value}</code>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {fields.map((field) => (
-                        <div key={field.area}>
-                            <label htmlFor={`token-${field.area}`} className="block text-sm font-medium text-slate-700 mb-1">
-                                {t(field.labelKey)}
-                            </label>
-                            <input
-                                id={`token-${field.area}`}
-                                type="password"
-                                autoComplete="off"
-                                value={field.token}
-                                onChange={(e) => updateToken(field.area, e.target.value)}
-                                className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                placeholder={t('agentAuth.tokenPlaceholder')}
-                            />
-                            <p className="mt-1 text-xs text-slate-500">
-                                {t('agentAuth.areaHelp', { area: field.area })}
-                            </p>
+                    {showAdminTokens ? (
+                        <div className="space-y-2">
+                            <p className="text-sm font-medium text-slate-700">{t('agentAuth.selectAreas')}</p>
+                            {availableAreas.map((area) => (
+                                <label key={area} className="flex items-center gap-2 text-sm text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedAreas.has(area)}
+                                        onChange={() => toggleArea(area)}
+                                        className="rounded border-slate-300"
+                                    />
+                                    {t(AREA_CONFIG[area].labelKey)}
+                                </label>
+                            ))}
                         </div>
-                    ))}
+                    ) : (
+                        fields.map((field) => (
+                            <div key={field.area}>
+                                <label htmlFor={`token-${field.area}`} className="block text-sm font-medium text-slate-700 mb-1">
+                                    {t(field.labelKey)}
+                                </label>
+                                <input
+                                    id={`token-${field.area}`}
+                                    type="password"
+                                    autoComplete="off"
+                                    value={field.token}
+                                    onChange={(e) => updateToken(field.area, e.target.value)}
+                                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder={t('agentAuth.tokenPlaceholder')}
+                                />
+                                <p className="mt-1 text-xs text-slate-500">
+                                    {t('agentAuth.areaHelp', { area: field.area })}
+                                </p>
+                            </div>
+                        ))
+                    )}
                     <button
                         type="submit"
                         disabled={submitting}
@@ -178,7 +257,7 @@ export function AgentAuthPage() {
                         </code>
                         <button
                             type="button"
-                            onClick={copyToClipboard}
+                            onClick={() => void copyToClipboard(sessionCode, 'code')}
                             className="rounded border border-green-300 bg-white px-3 py-2 text-sm text-green-800 hover:bg-green-100"
                         >
                             {copied ? t('agentAuth.copied') : t('agentAuth.copyCode')}

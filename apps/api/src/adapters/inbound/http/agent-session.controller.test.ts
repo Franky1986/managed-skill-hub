@@ -280,4 +280,65 @@ describe('AgentSessionController', () => {
     });
     expect(JSON.parse(listAfter.payload).sessions).toHaveLength(0);
   });
+
+  it('returns configured bearer token values to an admin', async () => {
+    const app = await buildApp(buildConfig());
+    const login = await app.inject({
+      method: 'POST',
+      url: '/admin/login',
+      payload: { username: 'admin', password: 'admin' },
+    });
+    expect(login.statusCode).toBe(200);
+    const cookies = login.headers['set-cookie'] as string | string[];
+    const cookieHeader = Array.isArray(cookies) ? cookies[0] : cookies;
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/agent-auth-config',
+      headers: { cookie: cookieHeader },
+    });
+    expect(response.statusCode).toBe(200);
+    const payload = JSON.parse(response.payload);
+    expect(payload.tokens).toEqual([
+      { area: 'discovery', value: 'discovery-secret' },
+      { area: 'public-read', value: 'read-secret' },
+      { area: 'proposal', value: 'proposal-secret' },
+    ]);
+  });
+
+  it('rejects agent-auth-config for anonymous users', async () => {
+    const app = await buildApp(buildConfig());
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/agent-auth-config',
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('omits non-bearer or empty-token areas from admin auth config', async () => {
+    const app = await buildApp(
+      buildConfig({
+        discoveryAuthMode: 'none' as const,
+        discoveryBearerToken: null,
+        proposalBearerToken: '',
+      })
+    );
+    const login = await app.inject({
+      method: 'POST',
+      url: '/admin/login',
+      payload: { username: 'admin', password: 'admin' },
+    });
+    expect(login.statusCode).toBe(200);
+    const cookies = login.headers['set-cookie'] as string | string[];
+    const cookieHeader = Array.isArray(cookies) ? cookies[0] : cookies;
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/agent-auth-config',
+      headers: { cookie: cookieHeader },
+    });
+    expect(response.statusCode).toBe(200);
+    const payload = JSON.parse(response.payload);
+    expect(payload.tokens).toEqual([{ area: 'public-read', value: 'read-secret' }]);
+  });
 });

@@ -140,4 +140,24 @@ export function registerAgentSessionRoutes(
       return sendMappedApiError(reply, request, error);
     }
   });
+
+  // Admin: read current area bearer tokens so an admin can share them through an out-of-band channel.
+  app.get('/admin/agent-auth-config', { preHandler: adminGuard(adminAuth, 'admin') }, async (request, reply) => {
+    try {
+      const tokens: { area: AgentSessionArea; value: string }[] = [];
+      if (container.config.discoveryAuthMode === 'bearer' && container.config.discoveryBearerToken) {
+        tokens.push({ area: 'discovery', value: container.config.discoveryBearerToken });
+      }
+      if (container.config.publicReadAuthMode === 'bearer' && container.config.publicReadBearerToken) {
+        tokens.push({ area: 'public-read', value: container.config.publicReadBearerToken });
+      }
+      if (container.config.proposalAuthMode === 'bearer' && container.config.proposalBearerToken) {
+        tokens.push({ area: 'proposal', value: container.config.proposalBearerToken });
+      }
+      request.log.info({ event: 'agent_auth_config_viewed', areas: tokens.map((t) => t.area) }, 'Admin viewed agent auth config');
+      return reply.send({ tokens });
+    } catch (error) {
+      return sendMappedApiError(reply, request, error);
+    }
+  });
 }

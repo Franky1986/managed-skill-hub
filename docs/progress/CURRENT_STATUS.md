@@ -74,6 +74,10 @@ EPIC-012 is implemented:
 - Session lifecycle (create, validate, list, revoke) is stored in the configured
   catalog database and can be inspected/revoked by admins at
   `/frontend/admin/agent-sessions`.
+- When an admin opens `/frontend/agent-auth`, the page loads
+  `/admin/agent-auth-config` and displays the configured bearer token values
+  for copy/paste sharing, then creates sessions by area selection without
+  retyping tokens.
 - OpenAPI, co-located specs, and matrix tests cover the new flow.
 - The feature is toggled by `AGENT_SESSION_ENABLED` and configured through
   `AGENT_SESSION_TTL_SECONDS`, `AGENT_SESSION_CODE_LENGTH`,

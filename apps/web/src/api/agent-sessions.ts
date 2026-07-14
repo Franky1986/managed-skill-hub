@@ -31,6 +31,15 @@ export interface AgentSessionListResponse {
     sessions: AgentSession[];
 }
 
+export interface AdminAgentAuthToken {
+    area: AgentSessionArea;
+    value: string;
+}
+
+export interface AdminAgentAuthConfigResponse {
+    tokens: AdminAgentAuthToken[];
+}
+
 export interface DiscoveryAuthScheme {
     id: string;
     type: 'bearer' | 'oauth2' | 'agent-session';
@@ -71,4 +80,7 @@ export const agentSessionsApi = {
 
     revokeSession: (code: string) =>
         apiClient.delete(`/admin/agent-sessions/${encodeURIComponent(code)}`),
+
+    getAdminAgentAuthConfig: () =>
+        apiClient.get<AdminAgentAuthConfigResponse>('/admin/agent-auth-config'),
 };

@@ -67,6 +67,13 @@ requiring the end user to download or execute a setup script.
 - Failure: `401`/`403` for non-admin sessions, `404` if the session is missing
   or already revoked.
 
+### `GET /admin/agent-auth-config`
+
+- Success `200`: `{ tokens: [{ area: AgentSessionArea, value: string }] }`.
+- Failure: `401`/`403` for non-admin sessions.
+- Only includes areas where the corresponding `*AuthMode` is `bearer` and the
+  token is non-empty.
+
 ## Dependencies
 
 - `AgentApiAuth` for per-area bearer-token validation.
@@ -83,10 +90,17 @@ requiring the end user to download or execute a setup script.
   exists.
 - Empty or invalid area list → `422`.
 - Admin list/revoke without admin role → `403`.
+- Admin reads auth config without admin role → `403`.
+- Non-bearer area or missing token omitted from `GET /admin/agent-auth-config`
+  rather than returned as empty.
 
 ## Security Notes
 
-- Bearer tokens are never echoed, logged, or stored inside the controller.
+- Bearer tokens are never echoed, logged, or stored inside the controller
+  except on the dedicated admin-only `GET /admin/agent-auth-config` endpoint,
+  which reads them directly from the runtime config.
+- The admin-only endpoint is intended for out-of-band sharing with trusted users;
+  it must not be exposed to agents or to non-admin sessions.
 - A valid discovery token must not be sufficient to create a read or proposal
   session; each area is checked independently.
 - Session codes are short-lived, single-purpose, and revocable by administrators.

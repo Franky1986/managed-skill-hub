@@ -8,7 +8,8 @@
       `X-Agent-*-Token` headers.
 - [x] Controller test suite green with in-memory repository.
 - [x] React pages built:
-      - `/frontend/agent-auth` (public, token inputs, code display, copy button)
+      - `/frontend/agent-auth` (public token inputs for non-admins; admin view
+        shows configured bearer tokens and area-selection session creation)
       - `/frontend/admin/agent-sessions` (admin-only list + revoke)
 - [x] `packages/openapi/skill-registry.openapi.yaml` updated with
       `/agent-sessions`, `/admin/agent-sessions`, and the `agent-session` auth

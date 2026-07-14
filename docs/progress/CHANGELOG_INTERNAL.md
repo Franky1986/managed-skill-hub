@@ -1,3 +1,21 @@
+## 2026-07-14: EPIC-012 Agent Session Delegation — Admin Token Sharing on Agent-Auth Page
+
+- Added admin-only backend endpoint "/admin/agent-auth-config" that returns the
+  configured bearer token values for every bearer-protected area so an admin can
+  share them through a separate trusted channel.
+- Extended the public "/frontend/agent-auth" page: authenticated admins see the
+  configured tokens in read-only cards with copy buttons, a sharing warning, and
+  area checkboxes to create sessions without retyping secrets.
+- Non-admin users still see the original per-area token input form.
+- Added i18n messages for the new admin UI strings (en/de).
+- Added controller tests for "/admin/agent-auth-config" covering admin success,
+  anonymous rejection, and omission of non-bearer/empty-token areas.
+- Updated co-located specs:
+  - apps/api/src/adapters/inbound/http/AgentSessionController.spec.md
+  - apps/web/src/pages/AgentAuthPage.spec.md
+- Verification: `npm run lint`, `npm run typecheck`, and `npm run test` remain green
+  for both `apps/api` and `apps/web`.
+
 # CHANGELOG_INTERNAL
 
 ## 2026-07-14: EPIC-012 Agent Session Delegation Implemented
