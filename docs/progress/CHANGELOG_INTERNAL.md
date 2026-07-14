@@ -6,8 +6,10 @@
 - Rewrites `PUBLIC_API_BASE_URL` to the frontend origin when the API and UI
   ports differ (default: 3040 → 3041). If the configured API base URL ends in
   `/api`, that suffix is stripped so the link points to the human UI.
-- Updated `instructions` to keep the message tooling-agnostic while still
-  directing the user to the registry frontend and the Agent-auth page.
+- Updated `instructions` to explicitly invite agents with an in-app browser,
+  browser MCP, or similar tooling to open the page directly and notify the user
+  that the auth page is ready, while still allowing the URL to be shown as a
+  clickable link as a fallback.
 - Updated `/howToPropose` workflow notes: when bearer auth is enabled and
   agent sessions are active, the first step now tells the agent to delegate
   access through the agent-auth page URL rather than the setup script.

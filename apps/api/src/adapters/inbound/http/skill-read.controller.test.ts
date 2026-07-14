@@ -623,7 +623,7 @@ describe('SkillReadController /discover', () => {
     expect(sessionScheme.type).toBe('agent-session');
     expect(sessionScheme.appliesTo).toEqual(['public-read', 'proposal']);
     expect(sessionScheme.url).toBe('https://skills.example.com/frontend/agent-auth');
-    expect(sessionScheme.instructions).toContain('Agent auth');
+    expect(sessionScheme.instructions).toContain('session code');
   });
 
   it('rewrites local API port to frontend port in agent-session url', async () => {

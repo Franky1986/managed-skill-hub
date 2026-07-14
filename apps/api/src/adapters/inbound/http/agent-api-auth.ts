@@ -171,7 +171,7 @@ export class AgentApiAuth {
           id: 'agent-session',
           type: 'agent-session',
           appliesTo: sessionAreas,
-          instructions: 'Open the registry frontend in a browser, log in as admin if needed, navigate to Agent auth, and paste the returned session code into this chat.',
+          instructions: 'Open this URL with an in-app browser, browser MCP, or a local browser tab so the user can see the page, then enter the bearer token from the administrator. Paste the returned 8-character session code into the chat. If no browser tool is available, show the URL as a clickable link and ask the user to open it manually.',
           url: authUrl,
         });
       }

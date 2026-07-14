@@ -577,7 +577,8 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
           purpose: 'A human creates a short-lived session in the browser without pasting tokens into chat.',
           checks: [
             'Read /discover and inspect authSchemes for the agent-session entry.',
-            'Present the agent-session url to the user as a clickable link and ask them to open it.',
+            'If the agent has an in-app browser, browser MCP, or similar tool, open the agent-session url directly and tell the user the auth page is ready for them.',
+            'Otherwise present the agent-session url to the user as a clickable link and ask them to open it.',
             'The user enters the bearer token shared by the administrator and receives an 8-character session code.',
             'The user pastes the session code into chat; the agent uses it as Authorization: AgentSession <code>.',
             'Never ask the user to paste bearer tokens into chat and never print Authorization headers in logs.',

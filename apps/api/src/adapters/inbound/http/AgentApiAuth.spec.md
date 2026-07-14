@@ -86,7 +86,9 @@ When `AGENT_SESSION_ENABLED=true` and at least one agent-facing area uses
   `/frontend/agent-auth` and `instructions` that tell the agent to present that
   link to the user. When the public API base URL includes a different port than
   the frontend port, the URL is rewritten to the frontend origin so the link
-  opens the human-facing UI instead of the API backend.
+  opens the human-facing UI instead of the API backend. The instructions
+  explicitly invite agents with an in-app browser or browser MCP to open the
+  page directly and notify the user that the auth page is ready.
 - Accepts `Authorization: AgentSession <code>` on protected agent routes after
   bearer validation fails.
 - Validates the code through `ValidateAgentSessionUseCase` for the requested
