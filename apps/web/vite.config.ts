@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const API_BASE_URL = process.env.VITE_API_BASE_URL ?? 'http://localhost:3040';
 const USE_API_PROXY = process.env.VITE_USE_API_PROXY !== 'false';
+const FRONTEND_HOST = process.env.FRONTEND_HOST ?? '127.0.0.1';
 const envDir = path.resolve(__dirname, '..');
 
 export default defineConfig({
@@ -48,7 +49,7 @@ export default defineConfig({
   ],
   server: {
     port: Number(process.env.FRONTEND_PORT ?? 3041),
-    host: true,
+    host: FRONTEND_HOST,
     proxy: USE_API_PROXY
       ? {
           '/api': {

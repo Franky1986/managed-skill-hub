@@ -281,6 +281,7 @@ Notes:
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
+| `FRONTEND_HOST` | no | Vite bind address. Keep `127.0.0.1` for nginx-fronted deployments; use an explicit non-loopback address only for intentional LAN development. | `127.0.0.1` |
 | `VITE_API_BASE_URL` | yes | Backend base URL. | `http://localhost:3040` |
 | `VITE_USE_API_PROXY` | no | Set `false` to bypass Vite proxy. | `true` |
 

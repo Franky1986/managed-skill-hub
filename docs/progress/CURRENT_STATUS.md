@@ -10,6 +10,10 @@
 published skills through public read endpoints, provides a protected admin
 workbench for skill/proposal review, and stores managed content through configurable filesystem or database-backed adapters with relational metadata/search projections for read paths.
 
+The API and Vite frontend default to loopback binding (`127.0.0.1`). Reverse
+proxy deployments must keep `FRONTEND_HOST=127.0.0.1` so nginx remains the only
+external entry point.
+
 ## Security Hardening Baseline
 
 The current public-release hardening baseline includes restrictive configured

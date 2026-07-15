@@ -1,5 +1,11 @@
 # NEXT_STEPS
 
+## Deployment Hardening
+
+- [ ] Rebuild the CBT deployment archive after the loopback-only frontend
+      binding change and verify that nginx is the only externally reachable
+      entry point.
+
 ## EPIC-012 Agent Session Delegation
 
 - [x] Database schema, repository adapters, use cases, and `AgentApiAuth`

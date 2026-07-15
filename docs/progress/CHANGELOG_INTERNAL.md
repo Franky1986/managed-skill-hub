@@ -1304,3 +1304,9 @@ avoid sandbox background-process termination.
   adapters, tests, and deployment scripts were created.
 - Build chain was stabilized with lint, typecheck, tests, production build, and
   `./scripts/check.sh`.
+## 2026-07-15: Loopback-only Frontend Binding For Reverse-Proxy Deployments
+
+- Replaced Vite's `host: true` default with configurable `FRONTEND_HOST`,
+  defaulting to `127.0.0.1`.
+- Added the bind-address setting to environment templates and deployment
+  guidance so ports `3040` and `3041` stay local when nginx fronts the service.

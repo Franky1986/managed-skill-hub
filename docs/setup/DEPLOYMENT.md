@@ -29,6 +29,7 @@
    # For server-like setups, prefer:
    node -e "console.log(require('bcryptjs').hashSync('your-password', 10))"
    # For single-host deploys, set API_PREFIX=/api and VITE_API_BASE_URL=/api in .env.
+   # Keep FRONTEND_HOST=127.0.0.1 so nginx is the only external entry point.
    ```
 
    Production archives may contain the non-secret `.env` profile but must not
