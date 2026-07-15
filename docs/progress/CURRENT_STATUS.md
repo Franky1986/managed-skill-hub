@@ -156,6 +156,11 @@ for the first public release. They can be enabled by operators who accept the
 additional acceptance work, but they are not release blockers for the default
 deployment profile.
 
+Public-release hygiene supports an ignored operator denylist for confidential
+identifiers. The final visibility gate must run with `PUBLIC_RELEASE_STRICT=1`
+against the rewritten release history; normal CI intentionally does not publish
+the confidential denylist.
+
 Default release profile:
 - `ADMIN_AUTH_MODE=simple`
 - `PUBLIC_READ_AUTH_MODE=bearer` (or `none` for fully open catalogs)
@@ -336,7 +341,7 @@ EPIC-004 is in progress:
   `JUDGER_PROVIDER`.
 - Provider-specific custom adapter settings are parsed by the adapter itself and
   do not leak into the provider-neutral `AppConfig`.
-- JUDGE-03 is accepted against the local custom-provider custom adapter: proposal
+- JUDGE-03 is accepted against a local custom provider: proposal
   and file judgements persisted across restart, conversion generated skill and
   file judgements, and the normal required-policy review/approve/publish path
   completed. Failure, retry, alternate-policy, override, and independent-role

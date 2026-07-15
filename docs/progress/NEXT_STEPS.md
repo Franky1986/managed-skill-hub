@@ -52,6 +52,8 @@
 For the default release profile, complete:
 
 - [x] Automated baseline: `./scripts/check.sh`, `npm run build:prod`, `npm audit`.
+- [ ] Run the strict confidential-identifier gate on the final rewritten Git
+      history with the ignored operator denylist before changing visibility.
 - [ ] Restart both services with the default simple-admin / bearer-agent profile.
 - [x] Verify the semantic duplicate gate blocks auto-publish for a near-duplicate
       skill and allows it for a genuinely new skill.

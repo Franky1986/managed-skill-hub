@@ -1,5 +1,11 @@
 ## 2026-07-15: Public Release Review Remediation
 
+- Removed confidential provider identifiers, implementation paths, disposable
+  skill IDs, and provider-specific acceptance evidence from tracked public
+  documentation while preserving generic custom-judger guidance.
+- Hardened the public-release hygiene check against tracked internal adapter
+  paths and added an optional ignored denylist for confidential identifiers in
+  the current tree and reachable Git history.
 - Fixed filesystem audit reads for cross-linked proposal/skill entries so a
   converted proposal's public status retains its `convertedSkillId`.
 - Added adapter regression coverage and acceptance-spec guidance for entries
@@ -213,7 +219,7 @@ avoid sandbox background-process termination.
     agentSessionUrl, and a clear recommendation.
   - Combined read+proposal sessions cover both areas.
 - Identified and published an existing but unreviewed skill
-  (sample-integration) through the admin workflow so the agent can download it.
+  (`sample-integration`) through the admin workflow so the agent can download it.
 - Set AGENT_SESSION_MAX_ACTIVE=unlimited in local .env to avoid hitting the
   default 10-session cap during repeated agent-driven tests.
 - Remaining: activate Vercel AI SDK judger for real auto-judge/auto-publish tests.
@@ -390,9 +396,9 @@ avoid sandbox background-process termination.
   guidance for submitted/judged proposals, with regression coverage for every
   proposal lifecycle status.
 
-## 2026-07-14: custom-provider Judger Acceptance And Published Read Proof
+## 2026-07-14: Custom Judger Acceptance And Published Read Proof
 
-- Accepted JUDGE-03 against the real custom-provider custom adapter with persisted
+- Accepted JUDGE-03 against a real custom provider with persisted
   proposal and file results across restart.
 - Verified conversion, submit-review, approval, and publication of
   `sample-custom-judger-skill@1.0.0`; every lifecycle mutation returned `200` and

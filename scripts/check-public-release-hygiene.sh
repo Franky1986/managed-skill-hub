@@ -70,6 +70,73 @@ public_repository_files() {
     | grep -v '^docs/setup/.*INTERNAL.*\.md$'
 }
 
+check_private_denylist() {
+  local denylist_file="${PUBLIC_RELEASE_DENYLIST_FILE:-.public-release-denylist}"
+  local strict_mode="${PUBLIC_RELEASE_STRICT:-false}"
+
+  if [ ! -f "$denylist_file" ]; then
+    if [ "$strict_mode" = "1" ] || [ "$strict_mode" = "true" ]; then
+      record_fail "private-denylist-present-in-strict-mode"
+    else
+      record_pass "private-denylist-optional-in-nonstrict-mode"
+    fi
+    return
+  fi
+
+  record_pass "private-denylist-present"
+
+  local pattern
+  local revision
+  local file
+  local pattern_count=0
+  local current_match=false
+  local history_match=false
+
+  while IFS= read -r pattern || [ -n "$pattern" ]; do
+    pattern="${pattern%$'\r'}"
+    case "$pattern" in
+      ''|'#'*) continue ;;
+    esac
+
+    pattern_count=$((pattern_count + 1))
+
+    if git grep -I -q -i -E "$pattern" -- .; then
+      current_match=true
+    fi
+
+    while IFS= read -r file; do
+      if rg -I -q -i -e "$pattern" -- "$file" 2>/dev/null; then
+        current_match=true
+      fi
+    done < <(git ls-files --others --exclude-standard)
+
+    for revision in $(git rev-list --all); do
+      if git grep -I -q -i -E "$pattern" "$revision" -- .; then
+        history_match=true
+        break
+      fi
+    done
+  done <"$denylist_file"
+
+  if [ "$pattern_count" -eq 0 ]; then
+    record_fail "private-denylist-has-patterns"
+    return
+  fi
+  record_pass "private-denylist-has-patterns"
+
+  if $current_match; then
+    record_fail "no-private-denylist-matches-current"
+  else
+    record_pass "no-private-denylist-matches-current"
+  fi
+
+  if $history_match; then
+    record_fail "no-private-denylist-matches-history"
+  else
+    record_pass "no-private-denylist-matches-history"
+  fi
+}
+
 for file in README.md README_de.md LICENSE NOTICE CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md .env.example .env.secrets.example .gitignore scripts/create-deploy-archive.sh; do
   if [ -f "$file" ]; then
     record_pass "required-file:$file"
@@ -95,8 +162,10 @@ check_no_output "no-tracked-private-release-files" bash -c 'git ls-files \
   "scripts/prepare-deploy.sh"'
 check_no_output "no-tracked-ignored-files" git ls-files -ci --exclude-standard
 check_no_output "no-public-provider-specific-custom-env" rg -n 'JUDGER_CUSTOM_(HOST|TOKEN|ALIAS|PROCEDURE|VERSION|ROUTE)' $(public_repository_files)
+check_no_output "no-public-internal-adapter-paths" rg -n -i 'JUDGER_ADAPTER_PATH[[:space:]]*=[^[:space:]]*internal/adapter|apps/api/src/internal/adapter/' $(public_repository_files)
 check_no_output "no-private-absolute-user-paths-in-docs" rg -n '/Users/frankrichter|/Users/[^/[:space:]]+/projects|/home/[^/[:space:]]+/projects' $(public_repository_files)
 check_no_output "no-private-conversation-links" rg -n 'chatgpt\.com/c/' $(public_repository_files)
+check_private_denylist
 
 history_private_files="$({
   for revision in $(git rev-list --all); do
@@ -114,7 +183,7 @@ fi
 
 history_private_references="$({
   for revision in $(git rev-list --all); do
-    git grep -I -l -E 'JUDGER_CUSTOM_(HOST|TOKEN|ALIAS|PROCEDURE|VERSION|ROUTE)|chatgpt\.com/c/|/Users/[^/[:space:]]+/projects' "$revision" -- . \
+    git grep -I -l -E 'JUDGER_CUSTOM_(HOST|TOKEN|ALIAS|PROCEDURE|VERSION|ROUTE)|JUDGER_ADAPTER_PATH[[:space:]]*=[^[:space:]]*internal/adapter|apps/api/src/internal/adapter/|chatgpt\.com/c/|/Users/[^/[:space:]]+/projects' "$revision" -- . \
       ':(exclude).gitignore' \
       ':(exclude)scripts/check-public-release-hygiene.sh' \
       ':(exclude)scripts/check-public-release-hygiene.spec.md' \
@@ -130,6 +199,7 @@ fi
 
 check_ignored_glob "prepare-deploy-ignored" "scripts/prepare-deploy.sh"
 check_ignored_glob "private-env-example-ignored" ".env.example.private"
+check_ignored_glob "private-release-denylist-ignored" ".public-release-denylist"
 check_ignored_glob "private-judger-helper-ignored" "scripts/call-*judger.sh"
 check_ignored_glob "private-judger-doc-ignored" "docs/setup/*INTERNAL*.md"
 check_ignored_glob "private-adapter-ignored" "apps/api/src/internal/adapter/*/*.judger.ts"

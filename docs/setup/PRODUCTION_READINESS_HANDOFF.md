@@ -33,7 +33,7 @@ checklists in place; do not create a parallel source of truth.
   - published-read authentication: `bearer`
   - proposal authentication: `none`
   - judgement provider: `custom`
-- The custom-provider custom judger successfully produced persisted proposal, skill
+- A private custom judger successfully produced persisted proposal, skill
   version, and file judgements.
 - Proposal `prop-1784027524931-vrxjd2qfe` was converted to
   `sample-custom-judger-skill@1.0.0`, reviewed, approved, and published.

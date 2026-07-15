@@ -95,7 +95,7 @@ Do not configure a provider API key for this negative test.
 
 - [ ] Startup succeeds locally and logs `judger_adapter_path_ignored`.
 - [ ] Startup identifies `vercel-ai-sdk` as the active provider; it never claims
-      the custom-provider custom adapter is active.
+      the configured custom provider is active.
 - [ ] Finalization succeeds even though judgement cannot complete.
 - [ ] The finalize response does not report `completed`.
 - [ ] The admin proposal view shows `failed` for the proposal and affected
@@ -125,8 +125,8 @@ Status: `[ ] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
 
 ## JUDGE-03: Real Provider Success
 
-Configure either a valid `vercel-ai-sdk` provider or the custom-provider custom
-adapter. Store its secret only in `.env.secrets`.
+Configure either a valid `vercel-ai-sdk` provider or a private custom adapter.
+Store its secret only in `.env.secrets`.
 
 - [x] Startup logs the intended provider without an ignored-adapter warning.
 - [x] Finalization reports `completed` only when proposal and all files have a
@@ -139,7 +139,7 @@ adapter. Store its secret only in `.env.secrets`.
 
 Status: `[x] PASS` `[ ] FAIL` `[ ] BLOCKED` `[ ] NOT RUN`
 
-Technical observation on 2026-07-14: the custom-provider custom adapter started as
+Technical observation on 2026-07-14: the private custom adapter started as
 the selected provider and proposal `prop-1784022747999-cpey7h9t4` produced
 successful structured proposal and `SKILL.md` judgement events before finalize
 returned `judged` with low risk. Persistence across a subsequent restart and
@@ -148,7 +148,7 @@ the remaining browser assertions still require operator acceptance.
 Retest observation on 2026-07-14: proposal
 `prop-1784027524931-vrxjd2qfe` persisted across restart with a completed
 proposal judgement (`low`) and completed `SKILL.md` judgement (`medium`) from
-the custom-provider adapter. The public aggregate correctly reported `medium`, the
+the custom provider. The public aggregate correctly reported `medium`, the
 original `HTTP/1.1` text remained stored, and upload finalization succeeded.
 Manual browser confirmation of all rendered provider/time/result fields is
 confirmed by the operator. Result reference:
