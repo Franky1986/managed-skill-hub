@@ -23,6 +23,10 @@ Vite preview instead of running the development server with `NODE_ENV=production
 The CBT private profile uses this mode while local development retains the
 default `dev` mode.
 
+Frontend file-download and export URL builders preserve the configured API
+prefix when `VITE_API_BASE_URL` is relative (for example `/api`) or absolute.
+This keeps admin proposal previews working behind a same-host nginx prefix.
+
 ## Security Hardening Baseline
 
 The current public-release hardening baseline includes restrictive configured

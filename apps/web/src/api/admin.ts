@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, buildApiUrl } from './client';
 import { ArtifactProbeResponse, ExtractedSkillFileContent, SkillDetail, SkillFile } from './skills';
 import { SkillSummary } from './skills';
 import type { ProposalDetail, ProposalSummary, ProposalUpdatePayload } from './proposals';
@@ -123,8 +123,7 @@ export const adminApi = {
             transformResponse: [(value) => value],
         }),
     getSkillFileUrl: (id: string, fileId: string, version?: string) => {
-        const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3040';
-        const url = new URL(`/admin/skills/${id}/files/${encodeURIComponent(fileId)}`, base);
+        const url = new URL(buildApiUrl(`/admin/skills/${id}/files/${encodeURIComponent(fileId)}`));
         if (version) {
             url.searchParams.set('version', version);
         }
@@ -213,8 +212,7 @@ export const adminApi = {
     getObservabilityMetrics: () =>
         apiClient.get<ObservabilitySnapshot>('/admin/observability/metrics'),
     getObservabilityExportUrl: (format: 'json' | 'csv' = 'json') => {
-        const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3040';
-        const url = new URL('/admin/observability/metrics/export', base);
+        const url = new URL(buildApiUrl('/admin/observability/metrics/export'));
         url.searchParams.set('format', format);
         return url.toString();
     },
@@ -248,8 +246,7 @@ export const adminApi = {
     reextractProposalFile: (proposalId: string, fileId: string) =>
         apiClient.post<ExtractedSkillFileContent>(`/admin/proposals/${proposalId}/files/${encodeURIComponent(fileId)}/re-extract`, {}, { headers: { 'Content-Type': 'application/json' } }),
     getProposalFileUrl: (proposalId: string, fileId: string) => {
-        const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3040';
-        return new URL(`/admin/proposals/${proposalId}/files/${encodeURIComponent(fileId)}`, base).toString();
+        return buildApiUrl(`/admin/proposals/${proposalId}/files/${encodeURIComponent(fileId)}`);
     },
     deleteProposal: (proposalId: string) =>
         apiClient.delete(`/admin/proposals/${proposalId}`),

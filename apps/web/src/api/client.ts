@@ -27,6 +27,19 @@ function getApiBaseUrl(): string {
 
 const API_BASE_URL = getApiBaseUrl();
 
+/**
+ * Build a browser-loadable API URL while preserving an optional API prefix.
+ * `new URL('/admin/...', '/api')` is invalid, and a leading slash would also
+ * discard `/api` when the configured base is an absolute URL with that path.
+ */
+export function buildApiUrl(path: string, apiBase = API_BASE_URL): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  const baseUrl = new URL(apiBase || '/api', origin);
+  const basePath = baseUrl.pathname.replace(/\/+$/, '');
+  const targetPath = path.replace(/^\/+/, '');
+  return new URL(`${basePath}/${targetPath}`.replace(/\/+/g, '/'), baseUrl.origin).toString();
+}
+
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,

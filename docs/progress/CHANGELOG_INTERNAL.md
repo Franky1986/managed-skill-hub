@@ -1,3 +1,12 @@
+# 2026-07-15: Preserve API prefixes in frontend resource URLs
+
+- Centralized browser API URL construction for skill files, proposal files, and
+  observability exports.
+- Fixed relative `/api` deployment bases causing `Invalid base URL` errors when
+  opening proposal file previews in the admin UI.
+- Added coverage for relative and absolute API bases; the web suite now passes
+  38 tests.
+
 # 2026-07-15: Use the built frontend bundle for deployment startup
 
 - Added configurable `FRONTEND_START_MODE` support to `restart-server.sh`.

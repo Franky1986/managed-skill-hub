@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, buildApiUrl } from './client';
 import type { JudgementRecord } from './judgements';
 
 function buildDiscoveryParams(category?: string, tags: string[] = [], limit = 50, offset = 0): URLSearchParams {
@@ -148,8 +148,7 @@ export const skillsApi = {
             params: { version },
         }),
     getFileUrl: (id: string, fileId: string, version?: string) => {
-        const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3040';
-        const url = new URL(`/skills/${id}/files/${encodeURIComponent(fileId)}`, base);
+        const url = new URL(buildApiUrl(`/skills/${id}/files/${encodeURIComponent(fileId)}`));
         if (version) {
             url.searchParams.set('version', version);
         }

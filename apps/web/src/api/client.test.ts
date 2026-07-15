@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { handleApiError } from './client';
+import { buildApiUrl, handleApiError } from './client';
+
+describe('buildApiUrl', () => {
+  it('preserves a relative API prefix in a browser deployment', () => {
+    expect(buildApiUrl('/admin/proposals/proposal-1/files/SKILL.md')).toBe(
+      'http://localhost/api/admin/proposals/proposal-1/files/SKILL.md'
+    );
+  });
+
+  it('preserves the path prefix of an absolute API base', () => {
+    expect(buildApiUrl('/admin/proposals/proposal-1', 'https://frontend.example.test/api')).toBe(
+      'https://frontend.example.test/api/admin/proposals/proposal-1'
+    );
+  });
+});
 
 describe('handleApiError', () => {
   it('formats normalized API errors with debug extras', () => {
