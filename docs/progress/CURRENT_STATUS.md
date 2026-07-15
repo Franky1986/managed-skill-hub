@@ -169,7 +169,7 @@ The repository runtime implementation is complete and deterministic gates pass:
   tokens.
 - Discovery, published read, and proposal areas independently compose all 27
   `none|bearer|oidc` combinations. OIDC advertises public Device Authorization
-  metadata while static credential setup remains bearer-only.
+  metadata while bearer areas advertise short-lived agent-session delegation.
 - Access tokens are verified with `openid-client` and `jose` against exact
   issuer, audience, `azp`, Authentik `uid`, asymmetric signature, time, area
   scope, human policy, token/group bounds, and trusted-origin JWKS. Token class

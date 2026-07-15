@@ -17,6 +17,10 @@
 - Verification: 94 co-located specs, 441 API tests, 36 web tests, all deterministic
   proof scripts, production builds, 25 public-release hygiene checks, and the
   moderate lockfile audit pass; the audit reports zero vulnerabilities.
+- Reconciled the remaining active auth documentation with EPIC-012: operational
+  setup, test matrix, acceptance checklist, HTTP spec, and current roadmap status
+  now describe agent-session/OIDC delegation instead of the retired generated
+  credential setup script.
 
 ## 2026-07-15: Agent And Admin Duplicate UX Hardening
 

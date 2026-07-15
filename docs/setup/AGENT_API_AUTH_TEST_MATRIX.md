@@ -180,7 +180,9 @@ Expected result:
 - discovery says `readAuthRequired=false`, `proposalAuthRequired=true`
 - `/categories` is `200`
 - proposal notice is `401` without token and `200` with token
-- setup script contains proposal-token fields only
+- discovery advertises an `agent-session` scheme applying only to `proposal`
+- the agent-auth page can create a proposal-only session code, and that code
+  cannot authorize public-read routes
 
 The short literal above is a development-only matrix fixture. Production
 startup rejects static bearer values shorter than 32 bytes and known example

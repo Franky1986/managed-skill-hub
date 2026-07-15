@@ -361,7 +361,7 @@ Required checks:
 - Admin-only navigation entries are hidden for anonymous users.
 - Proposal detail shows not-judged/unavailable judgement states distinctly.
 - Admin can open a proposal, create a draft, and reach the expected review views.
-- UI copy for generated setup scripts matches the API's config-aware response.
+- UI copy for agent-session and OIDC guidance matches the API's config-aware response.
 
 Artifacts:
 

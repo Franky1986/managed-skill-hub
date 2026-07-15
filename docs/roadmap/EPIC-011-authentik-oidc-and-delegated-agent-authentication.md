@@ -507,7 +507,8 @@ IDs, client secret, cookies, full claims, or email addresses in routine logs.
 2. Add OIDC mode to discovery, public-read, and proposal guards.
 3. Extend `/discover`, `/howToPropose`, normalized errors, and OpenAPI.
 4. Update agent contract proof for Device Authorization metadata.
-5. Preserve static bearer credential setup for bearer-mode deployments.
+5. Preserve static bearer modes through the agent-session delegation flow from
+   EPIC-012; do not restore the retired credential setup script.
 
 ### Phase 5: Proposal Principal Ownership And Privacy
 

@@ -57,7 +57,7 @@ values.
 | `API_PREFIX` | no | Optional API path prefix for single-host deployments. | `` or `/api` |
 | `REGISTRY_ID` | no | Stable local alias suggested to clients for this ManagedSkillHub instance. | `local` |
 | `REGISTRY_NAME` | no | Human-readable registry name exposed by `/discover`. | `ManagedSkillHub Local` |
-| `PUBLIC_API_BASE_URL` | no | Externally reachable API base URL used in discovery and generated setup scripts. | `http://localhost:3040` |
+| `PUBLIC_API_BASE_URL` | no | Externally reachable API base URL used in discovery and agent-session URL resolution. | `http://localhost:3040` |
 | `CORS_ALLOWED_ORIGINS` | no | Comma-separated browser origins allowed to call the API with credentials. Originless CLI/server requests are still allowed. | `http://localhost:3041,http://127.0.0.1:3041` |
 
 ## Auth / Security
@@ -118,11 +118,12 @@ development open.
 
 When `PROPOSAL_AUTH_MODE=bearer`, the authenticated bearer actor is used for proposal submission/upload/finalization instead of trusting `X-Actor`. Proposal status uses the same proposal auth mode; there is no separate status token.
 
-Static bearer credentials should be stored per registry alias/base URL outside
-agent conversations, for example in `~/.managed-skill-hub/credentials.json`.
-The generated setup script configures only areas that actually use bearer mode.
-OIDC areas use the advertised Device Authorization linkout and do not write
-tokens into this credential file.
+Static bearer credentials must be distributed through a trusted channel and
+must never be pasted into agent conversations. For interactive delegation, open
+the `agent-session` URL advertised by `/discover`; the human enters only the
+tokens for requested bearer areas and gives the agent the returned short-lived
+session code. OIDC areas use the advertised Device Authorization flow instead.
+There is no generated credential setup script.
 
 Generate static production tokens from a cryptographic random source, for
 example `openssl rand -base64 32`. `none` trusts the caller-provided `X-Actor`

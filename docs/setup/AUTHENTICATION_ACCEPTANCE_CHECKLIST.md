@@ -183,7 +183,7 @@ admin credentials, and keep all three agent areas set to `none`.
 - [ ] `/discover`, `/categories`, and `/proposals/notice` return `200` without
       credentials.
 - [ ] Discovery reports all three areas as not requiring authentication and
-      omits the credential setup URL.
+      omits the `agent-session` scheme.
 - [ ] Wrong simple-admin credentials fail; correct credentials create a secure
       admin session in the browser.
 - [ ] The admin proposal badge uses the admin session and does not call the
@@ -364,7 +364,9 @@ PROPOSAL_AUTH_MODE=oidc
 
 - [ ] Discovery remains anonymous and advertises the bearer read area and OIDC
       proposal area accurately.
-- [ ] The credential setup script requests only the static read token.
+- [ ] Discovery advertises an `agent-session` scheme for `public-read` only.
+- [ ] The agent-auth page accepts the static read token outside chat and creates
+      a read-only session code.
 - [ ] The read token cannot authorize proposals.
 - [ ] The OIDC proposal token cannot authorize reads unless it separately has
       the configured read scope and the read area is changed to OIDC.

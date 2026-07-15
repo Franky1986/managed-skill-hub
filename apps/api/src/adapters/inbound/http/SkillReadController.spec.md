@@ -41,8 +41,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
 - `GET /discover` detects whether it was called through an `/api/` prefix and
   returns entrypoint URLs with that prefix when appropriate.
 - `GET /discover` returns English-only agent-facing guidance.
-- `GET /discover` exposes non-secret auth metadata and a credential setup script
-  URL when any agent-facing auth mode is enabled.
+- `GET /discover` exposes non-secret auth metadata. When a bearer-protected area
+  is enabled, it advertises the absolute agent-session URL; OIDC areas advertise
+  Device Authorization metadata. No credential setup script is exposed.
 - `GET /discover.workflowNotes.conversationLanguage` tells agents to communicate
   with the user in the language the user is currently using unless asked
   otherwise.
