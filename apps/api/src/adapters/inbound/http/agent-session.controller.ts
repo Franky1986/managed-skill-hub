@@ -80,7 +80,7 @@ export function registerAgentSessionRoutes(
       });
       request.log.info({
         event: 'agent_session_created',
-        code: result.code,
+        sessionId: result.sessionId,
         areas: result.areas,
         expiresAt: result.expiresAt.toISOString(),
       }, 'Agent session created');
@@ -106,6 +106,7 @@ export function registerAgentSessionRoutes(
       });
       return reply.send({
         sessions: sessions.map((session) => ({
+          id: session.id,
           code: session.code,
           areas: session.areas,
           createdAt: session.createdAt.toISOString(),
@@ -123,10 +124,10 @@ export function registerAgentSessionRoutes(
   });
 
   // Admin: revoke a session.
-  app.delete('/admin/agent-sessions/:code', { preHandler: adminGuard(adminAuth, 'admin') }, async (request, reply) => {
+  app.delete('/admin/agent-sessions/:sessionId', { preHandler: adminGuard(adminAuth, 'admin') }, async (request, reply) => {
     try {
-      const { code } = request.params as { code: string };
-      const revoked = await revokeUseCase.execute(code);
+      const { sessionId } = request.params as { sessionId: string };
+      const revoked = await revokeUseCase.execute(sessionId);
       if (!revoked) {
         return sendApiError(reply, request, {
           statusCode: 404,
@@ -134,7 +135,7 @@ export function registerAgentSessionRoutes(
           message: 'Session not found or already revoked',
         });
       }
-      request.log.info({ event: 'agent_session_revoked', code }, 'Agent session revoked');
+      request.log.info({ event: 'agent_session_revoked', sessionId }, 'Agent session revoked');
       return reply.status(204).send();
     } catch (error) {
       return sendMappedApiError(reply, request, error);

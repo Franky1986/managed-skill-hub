@@ -168,6 +168,7 @@ export function ensureSqliteCatalogSchema(db: Database.Database): void {
 
 
     CREATE TABLE IF NOT EXISTS agent_sessions (
+      session_id TEXT NOT NULL,
       code TEXT PRIMARY KEY,
       areas TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -206,6 +207,18 @@ export function ensureSqliteCatalogSchema(db: Database.Database): void {
 function ensureAgentSessionColumns(db: Database.Database): void {
   const columns = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as Array<{ name: string }>;
   const names = new Set(columns.map((column) => column.name));
+  if (!names.has('session_id')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN session_id TEXT;`);
+  }
+  db.exec(`
+    UPDATE agent_sessions
+    SET session_id = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-'
+      || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-'
+      || lower(hex(randomblob(6)))
+    WHERE session_id IS NULL OR trim(session_id) = '';
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_sessions_session_id
+      ON agent_sessions (session_id);
+  `);
   if (!names.has('revoked_at')) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN revoked_at TEXT;`);
   }

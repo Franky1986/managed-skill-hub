@@ -154,6 +154,13 @@ can use as `Authorization: AgentSession <code>`.
 | `AGENT_SESSION_CODE_LENGTH` | no | Number of characters in a session code. | `8` |
 | `AGENT_SESSION_CODE_CHARSET` | no | URL-safe, case-insensitive alphabet for codes. | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` |
 | `AGENT_SESSION_MAX_ACTIVE` | no | Optional per-IP cap on active sessions. `none`/`null`/`unlimited` disables the cap. | `10` |
+| `AGENT_SESSION_AUTH_RATE_LIMIT_WINDOW_MS` | no | Window for per-IP invalid session-code attempts. | `60000` |
+| `AGENT_SESSION_AUTH_RATE_LIMIT_MAX_FAILURES` | no | Invalid session-code attempts allowed per IP and window before further lookups fail closed. | `30` |
+| `AGENT_SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS` | no | Maximum in-memory origin buckets retained by the session-auth limiter. | `10000` |
+
+Production startup rejects bearer-backed agent-session configurations below 40
+bits of code entropy. Session codes are credentials; logs, attribution, and
+admin revocation URLs use a separate random session ID.
 
 The area bearer token values themselves remain in `.env.secrets` or a deployment
 secret manager; the human receives them through a separate trusted channel.

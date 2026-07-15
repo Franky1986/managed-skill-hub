@@ -21,6 +21,7 @@ use cases remain independent of SQLite/MySQL specifics.
 export type AgentSessionArea = 'discovery' | 'public-read' | 'proposal';
 
 export interface AgentSession {
+  id: string;
   code: string;
   areas: AgentSessionArea[];
   createdAt: Date;
@@ -37,7 +38,7 @@ export interface AgentSessionRepositoryPort {
   findByCode(code: string): Promise<AgentSession | null>;
   updateLastUsed(code: string, lastUsedAt: Date, lastUsedIp: string | null): Promise<void>;
   list(options?: { includeExpired?: boolean; includeRevoked?: boolean; limit?: number; offset?: number }): Promise<AgentSession[]>;
-  revoke(code: string, revokedAt: Date): Promise<boolean>;
+  revoke(sessionId: string, revokedAt: Date): Promise<boolean>;
   countActiveByIp(ip: string): Promise<number>;
 }
 ```
@@ -49,7 +50,9 @@ export interface AgentSessionRepositoryPort {
 
 ## Invariants
 
-- `code` is the sole public identifier.
+- `id` is a random, non-secret administrative and attribution identifier.
+- `code` is the authentication credential and must not be used in logs, actor
+  identifiers, audit attribution, or URLs.
 - `areas` is a non-empty array of valid `AgentSessionArea` values.
 - `expiresAt` is always greater than `createdAt`.
 - Adapters must not mutate the domain object unexpectedly.

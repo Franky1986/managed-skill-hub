@@ -13,7 +13,8 @@ requiring the end user to download or execute a setup script.
   tokens.
 - `GET /admin/agent-sessions` — admin-only list of sessions with sanitized
   metadata.
-- `DELETE /admin/agent-sessions/:code` — admin-only revocation of a session.
+- `DELETE /admin/agent-sessions/:sessionId` — admin-only revocation of a session
+  through its non-secret internal identifier.
 
 ## Non-Scope
 
@@ -40,8 +41,8 @@ requiring the end user to download or execute a setup script.
   values.
 - Create exactly one session row and return an 8-character code, the granted
   areas, and the fixed expiry time.
-- Log `agent_session_created` with the code, areas, and expiry, but never the
-  bearer token values.
+- Log `agent_session_created` with the non-secret session ID, areas, and expiry,
+  but never bearer values or session codes.
 - Allow admins to list and revoke sessions; expose creation time, expiry,
   last-used time, IP addresses, and user agent, but never raw bearer values.
 
@@ -61,7 +62,7 @@ requiring the end user to download or execute a setup script.
 - Success `200`: `{ sessions: AgentSession[] }`.
 - Failure: `401`/`403` for non-admin sessions.
 
-### `DELETE /admin/agent-sessions/:code`
+### `DELETE /admin/agent-sessions/:sessionId`
 
 - Success `204`.
 - Failure: `401`/`403` for non-admin sessions, `404` if the session is missing
@@ -104,5 +105,8 @@ requiring the end user to download or execute a setup script.
 - A valid discovery token must not be sufficient to create a read or proposal
   session; each area is checked independently.
 - Session codes are short-lived, single-purpose, and revocable by administrators.
+- Session codes never appear in structured logs, actor/principal identifiers,
+  audit attribution, or revocation URLs. Those surfaces use the random session
+  ID instead.
 - The controller does not set a session cookie for the agent; agents use the
   `Authorization: AgentSession <code>` header.

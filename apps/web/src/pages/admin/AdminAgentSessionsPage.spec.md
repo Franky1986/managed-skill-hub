@@ -10,7 +10,8 @@ to revoke active sessions immediately.
 - Route `/frontend/admin/agent-sessions` (admin-only).
 - Listing sessions from `GET /admin/agent-sessions`.
 - Background polling every 10 seconds.
-- Revocation through `DELETE /admin/agent-sessions/:code`.
+- Revocation through `DELETE /admin/agent-sessions/:sessionId` so credentials do
+  not enter browser, proxy, or access-log URLs.
 
 ## Non-Scope
 
@@ -29,7 +30,7 @@ to revoke active sessions immediately.
 ## Inputs / Outputs
 
 - Inputs: `GET /admin/agent-sessions` response.
-- Outputs: rendered list, `DELETE /admin/agent-sessions/:code` calls.
+- Outputs: rendered list, `DELETE /admin/agent-sessions/:sessionId` calls.
 
 ## Dependencies
 

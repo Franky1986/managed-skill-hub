@@ -11,11 +11,12 @@ export class SqliteAgentSessionRepository implements AgentSessionRepositoryPort 
   async create(session: AgentSession): Promise<void> {
     const stmt = this.db.prepare(`
       INSERT INTO agent_sessions (
-        code, areas, created_at, expires_at, revoked_at, last_used_at,
+        session_id, code, areas, created_at, expires_at, revoked_at, last_used_at,
         created_by_ip, last_used_ip, user_agent
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
+      session.id,
       session.code,
       JSON.stringify(session.areas),
       session.createdAt.toISOString(),
@@ -66,11 +67,11 @@ export class SqliteAgentSessionRepository implements AgentSessionRepositoryPort 
     return rows.map(mapRow);
   }
 
-  async revoke(code: string, revokedAt: Date): Promise<boolean> {
+  async revoke(sessionId: string, revokedAt: Date): Promise<boolean> {
     const stmt = this.db.prepare(`
-      UPDATE agent_sessions SET revoked_at = ? WHERE code = ? AND revoked_at IS NULL
+      UPDATE agent_sessions SET revoked_at = ? WHERE session_id = ? AND revoked_at IS NULL
     `);
-    const result = stmt.run(revokedAt.toISOString(), code);
+    const result = stmt.run(revokedAt.toISOString(), sessionId);
     return result.changes > 0;
   }
 
@@ -86,6 +87,7 @@ export class SqliteAgentSessionRepository implements AgentSessionRepositoryPort 
 }
 
 interface AgentSessionRow {
+  session_id: string;
   code: string;
   areas: string;
   created_at: string;
@@ -99,6 +101,7 @@ interface AgentSessionRow {
 
 function mapRow(row: AgentSessionRow): AgentSession {
   return {
+    id: row.session_id,
     code: row.code,
     areas: JSON.parse(row.areas) as AgentSessionArea[],
     createdAt: new Date(row.created_at),

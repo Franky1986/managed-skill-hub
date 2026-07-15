@@ -11,10 +11,11 @@ export class MysqlAgentSessionRepository implements AgentSessionRepositoryPort {
   async create(session: AgentSession): Promise<void> {
     await this.client.execute(`
       INSERT INTO agent_sessions (
-        code, areas, created_at, expires_at, revoked_at, last_used_at,
+        session_id, code, areas, created_at, expires_at, revoked_at, last_used_at,
         created_by_ip, last_used_ip, user_agent
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
+      session.id,
       session.code,
       JSON.stringify(session.areas),
       toMysqlDate(session.createdAt),
@@ -66,14 +67,17 @@ export class MysqlAgentSessionRepository implements AgentSessionRepositoryPort {
     return rows.map(mapRow);
   }
 
-  async revoke(code: string, revokedAt: Date): Promise<boolean> {
-    const existing = await this.findByCode(code);
-    if (!existing || existing.revokedAt !== null) {
+  async revoke(sessionId: string, revokedAt: Date): Promise<boolean> {
+    const existingRows = await this.client.query<AgentSessionRow>(
+      'SELECT * FROM agent_sessions WHERE session_id = ?',
+      [sessionId]
+    );
+    if (!existingRows[0] || existingRows[0].revoked_at !== null) {
       return false;
     }
     await this.client.execute(`
-      UPDATE agent_sessions SET revoked_at = ? WHERE code = ? AND revoked_at IS NULL
-    `, [toMysqlDate(revokedAt), code]);
+      UPDATE agent_sessions SET revoked_at = ? WHERE session_id = ? AND revoked_at IS NULL
+    `, [toMysqlDate(revokedAt), sessionId]);
     return true;
   }
 
@@ -87,6 +91,7 @@ export class MysqlAgentSessionRepository implements AgentSessionRepositoryPort {
 }
 
 interface AgentSessionRow {
+  session_id: string;
   code: string;
   areas: string;
   created_at: Date;
@@ -100,6 +105,7 @@ interface AgentSessionRow {
 
 function mapRow(row: AgentSessionRow): AgentSession {
   return {
+    id: row.session_id,
     code: row.code,
     areas: JSON.parse(row.areas) as AgentSessionArea[],
     createdAt: new Date(row.created_at),

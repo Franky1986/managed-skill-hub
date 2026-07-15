@@ -18,6 +18,8 @@ survive API restarts and remain visible to administrators.
 ## Responsibilities
 
 - Map the `AgentSession` domain object to and from the `agent_sessions` table.
+- Backfill a random UUID-shaped `session_id` for legacy rows and use it for
+  non-secret revocation.
 - Store `areas` as a JSON array string.
 - Convert `Date` values to ISO strings on write and back to `Date` on read.
 - Treat `null` `revoked_at`/`last_used_at` as absent values.
@@ -29,7 +31,8 @@ survive API restarts and remain visible to administrators.
 
 ```sql
 CREATE TABLE agent_sessions (
-  code VARCHAR(16) PRIMARY KEY,
+  session_id TEXT NOT NULL UNIQUE,
+  code VARCHAR(32) PRIMARY KEY,
   areas TEXT NOT NULL,
   created_at DATETIME NOT NULL,
   expires_at DATETIME NOT NULL,
@@ -47,7 +50,7 @@ CREATE TABLE agent_sessions (
 - `findByCode(code): Promise<AgentSession | null>`
 - `updateLastUsed(code, lastUsedAt, lastUsedIp): Promise<void>`
 - `list({ includeExpired, includeRevoked, limit, offset }): Promise<AgentSession[]>`
-- `revoke(code, revokedAt): Promise<boolean>`
+- `revoke(sessionId, revokedAt): Promise<boolean>`
 - `countActiveByIp(ip): Promise<number>`
 
 ## Failure Modes

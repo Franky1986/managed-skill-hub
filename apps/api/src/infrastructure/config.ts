@@ -106,6 +106,9 @@ export interface AppConfig {
   agentSessionCodeLength: number;
   agentSessionCodeCharset: string;
   agentSessionMaxActive: number | null;
+  agentSessionAuthRateLimitWindowMs: number;
+  agentSessionAuthRateLimitMaxFailures: number;
+  agentSessionAuthRateLimitMaxBuckets: number;
 }
 
 export function loadConfig(): AppConfig {
@@ -202,6 +205,27 @@ export function loadConfig(): AppConfig {
       process.env.AGENT_SESSION_MAX_ACTIVE,
       10,
       'AGENT_SESSION_MAX_ACTIVE'
+    ),
+    agentSessionAuthRateLimitWindowMs: parseBoundedInteger(
+      process.env.AGENT_SESSION_AUTH_RATE_LIMIT_WINDOW_MS,
+      60_000,
+      'AGENT_SESSION_AUTH_RATE_LIMIT_WINDOW_MS',
+      1_000,
+      3_600_000
+    ),
+    agentSessionAuthRateLimitMaxFailures: parseBoundedInteger(
+      process.env.AGENT_SESSION_AUTH_RATE_LIMIT_MAX_FAILURES,
+      30,
+      'AGENT_SESSION_AUTH_RATE_LIMIT_MAX_FAILURES',
+      1,
+      10_000
+    ),
+    agentSessionAuthRateLimitMaxBuckets: parseBoundedInteger(
+      process.env.AGENT_SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS,
+      10_000,
+      'AGENT_SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS',
+      100,
+      1_000_000
     ),
     adminLoginRateLimitWindowMs: parseBoundedInteger(
       process.env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS,
@@ -647,6 +671,19 @@ function validateProductionSecurityConfig(config: AppConfig): void {
       );
     }
   }
+
+  const hasBearerAgentArea = [
+    config.discoveryAuthMode,
+    config.publicReadAuthMode,
+    config.proposalAuthMode,
+  ].includes('bearer');
+  const agentSessionEntropyBits = config.agentSessionCodeLength
+    * Math.log2(config.agentSessionCodeCharset.length);
+  if (config.agentSessionEnabled && hasBearerAgentArea && agentSessionEntropyBits < 40) {
+    throw new ConfigurationError(
+      'Agent session codes must provide at least 40 bits of entropy when NODE_ENV=production.'
+    );
+  }
 }
 
 function validateOidcConfiguration(config: AppConfig): void {
@@ -802,7 +839,7 @@ function parseNullablePositiveInteger(
 }
 
 function parseAgentSessionCodeCharset(value: string | undefined): string {
-  const charset = valueOrDefault(value, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789');
+  const charset = valueOrDefault(value, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789').toUpperCase();
   if (charset.length < 16) {
     throw new ConfigurationError('AGENT_SESSION_CODE_CHARSET must contain at least 16 characters.');
   }
@@ -812,7 +849,7 @@ function parseAgentSessionCodeCharset(value: string | undefined): string {
   if (/[^A-Za-z0-9]/.test(charset)) {
     throw new ConfigurationError('AGENT_SESSION_CODE_CHARSET must be alphanumeric only.');
   }
-  return charset.toUpperCase();
+  return charset;
 }
 
 function valueOrDefault(value: string | undefined, fallback: string): string {

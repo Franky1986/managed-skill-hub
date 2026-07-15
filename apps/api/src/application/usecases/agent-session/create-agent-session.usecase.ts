@@ -13,6 +13,7 @@ export interface CreateAgentSessionRequest {
 }
 
 export interface CreateAgentSessionResult {
+  sessionId: string;
   code: string;
   areas: AgentSessionArea[];
   expiresAt: Date;
@@ -42,6 +43,7 @@ export class CreateAgentSessionUseCase {
     const now = new Date();
     const ttlMs = this.config.agentSessionTtlSeconds * 1000;
     const session: AgentSession = {
+      id: crypto.randomUUID(),
       code,
       areas,
       createdAt: now,
@@ -53,7 +55,7 @@ export class CreateAgentSessionUseCase {
       userAgent: request.userAgent,
     };
     await this.repository.create(session);
-    return { code, areas, expiresAt: session.expiresAt };
+    return { sessionId: session.id, code, areas, expiresAt: session.expiresAt };
   }
 
   private enabledAreas(): AgentSessionArea[] {

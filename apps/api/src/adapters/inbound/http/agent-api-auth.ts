@@ -26,7 +26,15 @@ interface AreaConfig {
   actor: string;
 }
 
+interface SessionFailureBucket {
+  windowStart: number;
+  failures: number;
+}
+
 export class AgentApiAuth {
+  private readonly sessionFailureBuckets = new Map<string, SessionFailureBucket>();
+  private lastSessionFailureCleanupAt = 0;
+
   constructor(
     private readonly config: AppConfig,
     private readonly tokenVerifier?: AccessTokenVerifierPort,
@@ -104,24 +112,35 @@ export class AgentApiAuth {
     if (this.config.agentSessionEnabled && this.validateSessionUseCase) {
       const sessionCode = readAgentSessionCode(request.headers.authorization);
       if (sessionCode) {
+        const attemptKey = request.ip ?? 'unknown';
+        if (this.isSessionAttemptBlocked(attemptKey)) {
+          request.log.warn({
+            event: 'agent_authentication',
+            outcome: 'failure',
+            area,
+            scheme: 'agent-session',
+            category: 'rate_limited',
+          }, 'Agent session authentication denied');
+          throw this.authRequired(area, 'bearer');
+        }
         const result = await this.validateSessionUseCase.execute({
           code: sessionCode,
           area,
           usedByIp: request.ip ?? null,
         });
-        if (result.valid && result.code) {
+        if (result.valid && result.sessionId) {
           request.log.info({
             event: 'agent_authentication',
             outcome: 'success',
             area,
             scheme: 'agent-session',
-            sessionCode: result.code,
+            sessionId: result.sessionId,
           }, 'Agent session authentication succeeded');
           return {
             area,
-            actor: `agent-session:${result.code}`,
+            actor: `agent-session:${result.sessionId}`,
             scheme: 'agent-session',
-            principal: agentSessionPrincipal(result.code, result.areas ?? [area]),
+            principal: agentSessionPrincipal(result.sessionId, result.areas ?? [area]),
           };
         }
         if (result.reason === 'area_not_allowed' && result.sessionAreas) {
@@ -137,6 +156,7 @@ export class AgentApiAuth {
             missingAreas: result.sessionAreas,
           });
         }
+        this.recordSessionFailure(attemptKey);
         request.log.warn({
           event: 'agent_authentication',
           outcome: 'failure',
@@ -197,6 +217,43 @@ export class AgentApiAuth {
       schemes.push(this.oidcScheme(oidcAreas, this.tokenVerifier?.metadata() ?? null));
     }
     return schemes;
+  }
+
+  private isSessionAttemptBlocked(key: string): boolean {
+    const now = Date.now();
+    const windowMs = this.config.agentSessionAuthRateLimitWindowMs ?? 60_000;
+    this.cleanupSessionFailureBuckets(now, windowMs);
+    const bucket = this.sessionFailureBuckets.get(key);
+    if (bucket) {
+      return bucket.failures >= (this.config.agentSessionAuthRateLimitMaxFailures ?? 30);
+    }
+    return this.sessionFailureBuckets.size >= (this.config.agentSessionAuthRateLimitMaxBuckets ?? 10_000);
+  }
+
+  private recordSessionFailure(key: string): void {
+    const now = Date.now();
+    const windowMs = this.config.agentSessionAuthRateLimitWindowMs ?? 60_000;
+    const current = this.sessionFailureBuckets.get(key);
+    if (!current && this.sessionFailureBuckets.size >= (this.config.agentSessionAuthRateLimitMaxBuckets ?? 10_000)) {
+      return;
+    }
+    const bucket = current && now - current.windowStart < windowMs
+      ? current
+      : { windowStart: now, failures: 0 };
+    bucket.failures += 1;
+    this.sessionFailureBuckets.set(key, bucket);
+  }
+
+  private cleanupSessionFailureBuckets(now: number, windowMs: number): void {
+    if (now - this.lastSessionFailureCleanupAt < windowMs) {
+      return;
+    }
+    for (const [key, bucket] of this.sessionFailureBuckets) {
+      if (now - bucket.windowStart >= windowMs) {
+        this.sessionFailureBuckets.delete(key);
+      }
+    }
+    this.lastSessionFailureCleanupAt = now;
   }
 
   private anyBearerAuthEnabled(): boolean {

@@ -2,10 +2,10 @@
 
 ## Deployment Hardening
 
-- [ ] Deploy the CBT archive with loopback-only binding and
+- [ ] Deploy the staging archive with loopback-only binding and
       `FRONTEND_START_MODE=preview`; verify the production frontend, API, and
       nginx entry point end to end.
-- [ ] Commit the JSZip dependency fix and deploy with Node.js 22 LTS on the CBT
+- [ ] Commit the JSZip dependency fix and deploy with Node.js 22 LTS on the staging
       server to remove the current engine warning.
 
 ## EPIC-012 Agent Session Delegation
@@ -16,6 +16,8 @@
       session covers and how to create a session for the missing area.
 - [x] Hardened `POST /agent-sessions` with per-area bearer-token validation via
       `X-Agent-*-Token` headers.
+- [x] Removed session credentials from logs, attribution, audit fields, and
+      revocation URLs by introducing a separate migrated session ID.
 - [x] Controller test suite green with in-memory repository.
 - [x] React pages built:
       - `/frontend/agent-auth` (public token inputs for non-admins; admin view
@@ -45,6 +47,25 @@
       - [x] Block auto-publish when the proposal targets an existing `skillId` (new version path).
       - [x] Update agent-facing wording to distinguish proposal vs skill lifecycle states.
 
+### Session ID Deployment Retest
+
+- [ ] Start once against a copy of an existing SQLite catalog and, when MySQL is
+      used, a copy of the existing MySQL catalog; verify every legacy agent
+      session receives one stable unique `session_id` and remains readable.
+- [ ] Create a read-only session and a proposal session through the admin flow;
+      verify each code still authenticates only its granted areas before and
+      after an API restart.
+- [ ] List and revoke both sessions through the admin UI; verify the request URL
+      contains only `sessionId`, the revoked code fails closed, and another
+      active session remains usable.
+- [ ] Inspect API, reverse-proxy, proposal, and audit records after create, use,
+      area denial, and revoke; verify no raw session code or authorization
+      header is present and the non-secret session ID is used for attribution.
+- [ ] Exercise the invalid-code limit through the real reverse proxy; verify the
+      trusted client IP is used, valid sessions do not consume the failure
+      budget, repeated invalid codes fail closed, and access recovers after the
+      configured window.
+
 ## Production Readiness Verification
 
 ### Minimum Public Release Path (non-Authentik)
@@ -68,7 +89,7 @@ For the default release profile, complete:
       custom adapter, including provider failure/unavailable handling.
 - [ ] Run the publication-policy matrix (`disabled`, `warn`, `required`) and the
       admin override path.
-- [ ] Verify static bearer production fail-fast rejects short/default/example secrets.
+- [x] Verify static bearer production fail-fast rejects short/default/example secrets.
 - [ ] Verify backup/restore for SQLite + filesystem content storage.
 - [ ] Confirm reverse-proxy request/body limits and CORS origins in the target
       deployment.

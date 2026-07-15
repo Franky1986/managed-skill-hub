@@ -156,7 +156,8 @@ Administrators can list and revoke sessions:
 - `GET /admin/agent-sessions` lists active and recently expired/revoked sessions
   with creation time, enabled areas, expiry, last-used time, and a revocation
   flag. It intentionally does not expose raw token values or user identities.
-- `DELETE /admin/agent-sessions/:code` immediately revokes the session.
+- `DELETE /admin/agent-sessions/:sessionId` immediately revokes the session
+  without placing the credential in access-log URLs.
 - Revoked and expired sessions are retained for a bounded period (default 7
   days) to support audit queries, then removed by a periodic cleanup task or
   projection maintenance.
@@ -171,7 +172,8 @@ Proposed table (SQLite/MySQL compatible):
 
 ```sql
 CREATE TABLE agent_sessions (
-  code VARCHAR(16) PRIMARY KEY,
+  session_id VARCHAR(36) NOT NULL UNIQUE,
+  code VARCHAR(32) PRIMARY KEY,
   areas TEXT NOT NULL,              -- JSON array, e.g. ["public-read","proposal"]
   created_at DATETIME NOT NULL,
   expires_at DATETIME NOT NULL,
@@ -183,9 +185,10 @@ CREATE TABLE agent_sessions (
 );
 ```
 
-The code is the only public identifier. It is generated from a 32-character
-alphabet with 8 characters, giving ~48 bits of entropy. This is sufficient for
-short-lived, rate-limited, human-in-the-loop codes.
+The code is the authentication credential. A separate random session ID is used
+for logs, actor/principal attribution, audit records, and administrative
+revocation. The default 32-character alphabet with 8 characters provides 40
+bits of entropy; production startup rejects configurations below that floor.
 
 ## API Extensions
 
@@ -201,7 +204,7 @@ short-lived, rate-limited, human-in-the-loop codes.
 | Method | Path | Admin Role | Description |
 |---|---|---|---|
 | `GET` | `/admin/agent-sessions` | `admin` | List sessions with sanitized metadata. |
-| `DELETE` | `/admin/agent-sessions/:code` | `admin` | Revoke a session immediately. |
+| `DELETE` | `/admin/agent-sessions/:sessionId` | `admin` | Revoke a session immediately without placing its code in the URL. |
 
 ## UI Extensions
 
@@ -225,9 +228,8 @@ A new admin page linked from the existing admin dashboard that:
 
 ## Security Considerations
 
-- Bearer tokens are never displayed by the registry UI. The human enters them
-  from an out-of-band channel, and the page only reports which areas validated
-  successfully.
+- Bearer tokens are accepted only through dedicated inputs or the admin-only
+  auth-config view and are never included in public metadata or logs.
 - Agent session codes are short-lived, area-scoped, and single-purpose. They
   are not passwords and must not be reused for other services.
 - Brute force is mitigated by the code space, short lifetime, and existing
@@ -235,11 +237,10 @@ A new admin page linked from the existing admin dashboard that:
   data shows it is needed.
 - Session lookup follows the configured catalog provider. In mixed-provider
   setups, sessions are available wherever the catalog projection is active.
-- Session creation is logged with `event: agent_session_created`, including
-  areas and expiry but never the bearer token values. Tokens are transmitted in
-  dedicated request headers and compared in constant time. Usage is logged with
-  `event: agent_session_used`. Revocation is logged with
-  `event: agent_session_revoked`.
+- Session creation, usage, and revocation events use the non-secret session ID.
+  They never contain bearer values, session codes, or authorization headers.
+  Area bearer tokens are transmitted in dedicated request headers and compared
+  in constant time.
 - Revoked or expired sessions fail closed.
 
 ## Dependency Order

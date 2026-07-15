@@ -2607,7 +2607,7 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
-  /admin/agent-sessions/{code}:
+  /admin/agent-sessions/{sessionId}:
     delete:
       operationId: revokeAgentSession
       tags:
@@ -2615,11 +2615,11 @@ paths:
       - Admin
       summary: Revoke an agent session
       description: Admin-only. Immediately revokes the agent session identified by
-        its code.
+        its non-secret internal ID so the credential does not appear in access logs.
       security:
       - adminSession: []
       parameters:
-      - name: code
+      - name: sessionId
         in: path
         required: true
         schema:
@@ -5050,6 +5050,7 @@ components:
     AgentSession:
       type: object
       required:
+      - id
       - code
       - areas
       - createdAt
@@ -5060,6 +5061,9 @@ components:
       - lastUsedIp
       - userAgent
       properties:
+        id:
+          type: string
+          format: uuid
         code:
           type: string
         areas:

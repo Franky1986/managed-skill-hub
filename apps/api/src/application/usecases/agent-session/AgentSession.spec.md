@@ -29,9 +29,11 @@ listing, and revocation.
   originating IP against the repository.
 - Generate a code from the configured charset and length using a cryptographic
   random source.
+- Generate a separate random UUID for non-secret logging, attribution, and
+  administration.
 - Compute a fixed expiry as `now + AGENT_SESSION_TTL_SECONDS`.
 - Persist the session through `AgentSessionRepositoryPort.create`.
-- Return the code, granted areas, and expiry.
+- Return the session ID, code, granted areas, and expiry.
 
 ### ValidateAgentSessionUseCase
 
@@ -39,8 +41,8 @@ listing, and revocation.
 - Fail closed if the session is missing, revoked, expired, or does not cover the
   requested area.
 - Update `lastUsedAt` and `lastUsedIp` on every successful validation.
-- Return the validated code and its granted areas so callers can build the auth
-  context.
+- Return the validated non-secret session ID and granted areas so callers can
+  build the auth context without propagating the credential.
 
 ### ListAgentSessionsUseCase
 
@@ -49,15 +51,15 @@ listing, and revocation.
 
 ### RevokeAgentSessionUseCase
 
-- Call `repository.revoke(code, now)`.
+- Call `repository.revoke(sessionId, now)`.
 - Return whether the revocation changed an active session.
 
 ## Inputs / Outputs
 
 - `CreateAgentSessionRequest`: `{ areas, createdByIp, userAgent }`
-- `CreateAgentSessionResult`: `{ code, areas, expiresAt }`
+- `CreateAgentSessionResult`: `{ sessionId, code, areas, expiresAt }`
 - `ValidateAgentSessionRequest`: `{ code, area, usedByIp }`
-- `ValidateAgentSessionResult`: `{ valid, code?, areas? }`
+- `ValidateAgentSessionResult`: `{ valid, sessionId?, areas? }`
 - `ListAgentSessionsRequest`: `{ includeExpired?, includeRevoked?, limit?, offset? }`
 
 ## Dependencies
@@ -79,5 +81,7 @@ listing, and revocation.
 
 - A session never grants more areas than were requested and validated by the
   controller.
+- Session IDs and codes are independently generated; the ID is safe for
+  operational attribution and the code remains an authentication credential.
 - Code generation uses the full configured charset uniformly.
 - Expiry is computed once at creation time and never extended by validation.

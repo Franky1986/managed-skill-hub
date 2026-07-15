@@ -507,6 +507,9 @@ describe('security config', () => {
     expect(config.adminCsrfOriginCheck).toBe(true);
     expect(config.apiTrustedProxies).toEqual([]);
     expect(config.proposalRateLimitMaxBuckets).toBe(10_000);
+    expect(config.agentSessionAuthRateLimitWindowMs).toBe(60_000);
+    expect(config.agentSessionAuthRateLimitMaxFailures).toBe(30);
+    expect(config.agentSessionAuthRateLimitMaxBuckets).toBe(10_000);
   });
 
   it('loads trusted proxy and bounded proposal rate-limit settings', () => {
@@ -519,6 +522,23 @@ describe('security config', () => {
 
     expect(config.apiTrustedProxies).toEqual(['127.0.0.1', '::1', '10.0.0.0/8']);
     expect(config.proposalRateLimitMaxBuckets).toBe(2500);
+  });
+
+  it('loads and bounds agent-session authentication failure limits', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('AGENT_SESSION_AUTH_RATE_LIMIT_WINDOW_MS', '30000');
+    vi.stubEnv('AGENT_SESSION_AUTH_RATE_LIMIT_MAX_FAILURES', '12');
+    vi.stubEnv('AGENT_SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS', '2500');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+
+    const config = loadConfig();
+
+    expect(config.agentSessionAuthRateLimitWindowMs).toBe(30_000);
+    expect(config.agentSessionAuthRateLimitMaxFailures).toBe(12);
+    expect(config.agentSessionAuthRateLimitMaxBuckets).toBe(2500);
+
+    vi.stubEnv('AGENT_SESSION_AUTH_RATE_LIMIT_MAX_FAILURES', '0');
+    expect(() => loadConfig()).toThrow(/AGENT_SESSION_AUTH_RATE_LIMIT_MAX_FAILURES/);
   });
 
   it('rejects default admin security settings in production', () => {
@@ -634,7 +654,12 @@ describe('security config', () => {
     vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
 
     expect(() => loadConfig()).toThrow(/32 random bytes/);
+    vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'replace-with-example-static-bearer-token-value');
+    expect(() => loadConfig()).toThrow(/example value/);
     vi.stubEnv('PROPOSAL_BEARER_TOKEN', 'J6f8mB3wQ2rN9xK4pT7vC5sL1hD0zA8u');
+    vi.stubEnv('AGENT_SESSION_CODE_LENGTH', '4');
+    expect(() => loadConfig()).toThrow(/40 bits of entropy/);
+    vi.stubEnv('AGENT_SESSION_CODE_LENGTH', '8');
     vi.stubEnv('OIDC_CLOCK_TOLERANCE_SECONDS', '301');
     expect(() => loadConfig()).toThrow(/OIDC_CLOCK_TOLERANCE_SECONDS/);
     vi.stubEnv('OIDC_CLOCK_TOLERANCE_SECONDS', '30');

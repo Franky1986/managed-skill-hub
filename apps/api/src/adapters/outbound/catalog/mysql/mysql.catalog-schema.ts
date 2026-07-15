@@ -172,7 +172,8 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
     ) ENGINE = InnoDB;
 
     CREATE TABLE IF NOT EXISTS agent_sessions (
-      code VARCHAR(16) PRIMARY KEY,
+      session_id CHAR(36) NOT NULL,
+      code VARCHAR(32) PRIMARY KEY,
       areas JSON NOT NULL,
       created_at DATETIME(3) NOT NULL,
       expires_at DATETIME(3) NOT NULL,
@@ -181,6 +182,7 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
       created_by_ip VARCHAR(64) NULL,
       last_used_ip VARCHAR(64) NULL,
       user_agent TEXT NULL,
+      UNIQUE KEY uq_agent_sessions_session_id (session_id),
       KEY idx_agent_sessions_expiry (expires_at, code),
       KEY idx_agent_sessions_revoked (revoked_at, code)
     ) ENGINE = InnoDB;
@@ -220,6 +222,15 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
   await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_principal_id', 'CHAR(36) NULL AFTER actor');
   await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_display_name', 'VARCHAR(512) NULL AFTER actor_principal_id');
   await ensureMysqlColumn(client, 'skill_catalog_audit_entries', 'actor_client_id', 'VARCHAR(512) NULL AFTER actor_display_name');
+  await ensureMysqlColumn(client, 'agent_sessions', 'session_id', 'CHAR(36) NULL AFTER code');
+  await client.execute(`
+    UPDATE agent_sessions
+    SET session_id = UUID()
+    WHERE session_id IS NULL OR session_id = ''
+  `);
+  await ensureMysqlStringColumn(client, 'agent_sessions', 'session_id', 36, 'CHAR(36) NOT NULL');
+  await ensureMysqlStringColumn(client, 'agent_sessions', 'code', 32, 'VARCHAR(32) NOT NULL');
+  await ensureMysqlIndex(client, 'agent_sessions', 'uq_agent_sessions_session_id', 'session_id', true);
   await ensureMysqlColumn(client, 'agent_sessions', 'revoked_at', 'DATETIME(3) NULL AFTER expires_at');
   await ensureMysqlColumn(client, 'agent_sessions', 'last_used_at', 'DATETIME(3) NULL AFTER revoked_at');
   await ensureMysqlColumn(client, 'agent_sessions', 'created_by_ip', 'VARCHAR(64) NULL AFTER last_used_at');
@@ -240,5 +251,48 @@ async function ensureMysqlColumn(
   `, [table, column]);
   if (Number(rows[0]?.count ?? 0) === 0) {
     await client.execute(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+  }
+}
+
+async function ensureMysqlIndex(
+  client: MysqlClient,
+  table: string,
+  index: string,
+  column: string,
+  unique = false
+): Promise<void> {
+  const rows = await client.query<{ count: number | string }>(`
+    SELECT COUNT(*) AS count
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+  `, [table, index]);
+  if (Number(rows[0]?.count ?? 0) === 0) {
+    await client.execute(
+      `CREATE ${unique ? 'UNIQUE ' : ''}INDEX \`${index}\` ON \`${table}\` (\`${column}\`)`
+    );
+  }
+}
+
+async function ensureMysqlStringColumn(
+  client: MysqlClient,
+  table: string,
+  column: string,
+  minimumLength: number,
+  definition: string
+): Promise<void> {
+  const rows = await client.query<{
+    characterMaximumLength: number | string | null;
+    isNullable: 'YES' | 'NO';
+  }>(`
+    SELECT character_maximum_length AS characterMaximumLength, is_nullable AS isNullable
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+  `, [table, column]);
+  const current = rows[0];
+  if (
+    current
+    && (Number(current.characterMaximumLength ?? 0) < minimumLength || current.isNullable !== 'NO')
+  ) {
+    await client.execute(`ALTER TABLE \`${table}\` MODIFY COLUMN \`${column}\` ${definition}`);
   }
 }

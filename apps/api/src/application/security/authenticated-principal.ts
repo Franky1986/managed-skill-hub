@@ -45,14 +45,14 @@ export function staticBearerPrincipal(actor: string): AuthenticatedPrincipal {
   };
 }
 
-export function agentSessionPrincipal(code: string, _areas: string[]): AuthenticatedPrincipal {
+export function agentSessionPrincipal(sessionId: string, _areas: string[]): AuthenticatedPrincipal {
   return {
-    principalId: `agent-session:${code}`,
+    principalId: sessionId,
     kind: 'service',
     externalSubject: null,
     issuer: null,
     clientId: null,
-    displayName: `Agent session ${code}`,
+    displayName: 'Agent session',
     email: null,
     groups: [],
     roles: [],

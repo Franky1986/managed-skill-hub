@@ -11,7 +11,7 @@ export interface ValidateAgentSessionRequest {
 
 export interface ValidateAgentSessionResult {
   valid: boolean;
-  code?: string;
+  sessionId?: string;
   areas?: AgentSessionArea[];
   reason?: 'not_found' | 'revoked' | 'expired' | 'area_not_allowed';
   sessionAreas?: AgentSessionArea[];
@@ -35,6 +35,6 @@ export class ValidateAgentSessionUseCase {
       return { valid: false, reason: 'area_not_allowed', sessionAreas: session.areas };
     }
     await this.repository.updateLastUsed(request.code, new Date(), request.usedByIp);
-    return { valid: true, code: session.code, areas: session.areas };
+    return { valid: true, sessionId: session.id, areas: session.areas };
   }
 }

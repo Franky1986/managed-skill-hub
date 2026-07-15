@@ -91,9 +91,16 @@ When `AGENT_SESSION_ENABLED=true` and at least one agent-facing area uses
 - Validates the code through `ValidateAgentSessionUseCase` for the requested
   area only.
 - Creates a `session`-scheme principal for the request context when validation
-  succeeds.
+  succeeds. Principal and actor attribution use the session's random internal
+  ID, never the presented session code.
+- Successful session-authentication logs contain the internal session ID and
+  never contain the session code or authorization header.
 - Falls back to the standard `401` response when no valid bearer or session is
   present.
+- Tracks invalid session-code attempts in bounded per-IP windows. Once the
+  configured failure limit or bucket capacity is reached, further lookups fail
+  closed until the window expires; successful validation does not consume the
+  failure budget.
 
 ### Session Creation Validation
 

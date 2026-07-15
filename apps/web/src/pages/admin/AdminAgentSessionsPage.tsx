@@ -24,14 +24,14 @@ export function AdminAgentSessionsPage() {
 
     useBackgroundPolling(refreshSessions, true);
 
-    async function revoke(code: string) {
-        setRevoking((prev) => new Set(prev).add(code));
+    async function revoke(sessionId: string) {
+        setRevoking((prev) => new Set(prev).add(sessionId));
         setMessage(null);
         try {
-            await agentSessionsApi.revokeSession(code);
+            await agentSessionsApi.revokeSession(sessionId);
             setSessions((prev) =>
                 prev.map((s) =>
-                    s.code === code ? { ...s, revokedAt: new Date().toISOString() } : s
+                    s.id === sessionId ? { ...s, revokedAt: new Date().toISOString() } : s
                 )
             );
         } catch (err) {
@@ -39,7 +39,7 @@ export function AdminAgentSessionsPage() {
         } finally {
             setRevoking((prev) => {
                 const next = new Set(prev);
-                next.delete(code);
+                next.delete(sessionId);
                 return next;
             });
         }
@@ -73,7 +73,7 @@ export function AdminAgentSessionsPage() {
                         const isActive = !isRevoked && !isExpired;
                         return (
                             <li
-                                key={session.code}
+                                key={session.id}
                                 className={`rounded border p-3 ${
                                     isActive ? 'bg-white' : 'bg-slate-50 opacity-75'
                                 }`}
@@ -118,11 +118,11 @@ export function AdminAgentSessionsPage() {
                                     {isActive && (
                                         <button
                                             type="button"
-                                            disabled={revoking.has(session.code)}
-                                            onClick={() => void revoke(session.code)}
+                                            disabled={revoking.has(session.id)}
+                                            onClick={() => void revoke(session.id)}
                                             className="rounded border border-rose-300 bg-white px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                                         >
-                                            {revoking.has(session.code)
+                                            {revoking.has(session.id)
                                                 ? t('common.loading')
                                                 : t('adminAgentSessions.revoke')}
                                         </button>

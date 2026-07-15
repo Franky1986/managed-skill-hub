@@ -16,6 +16,7 @@ export interface AgentSessionCreateResponse {
 }
 
 export interface AgentSession {
+    id: string;
     code: string;
     areas: AgentSessionArea[];
     createdAt: string;
@@ -78,8 +79,8 @@ export const agentSessionsApi = {
     listSessions: (signal?: AbortSignal) =>
         apiClient.get<AgentSessionListResponse>('/admin/agent-sessions', { signal }),
 
-    revokeSession: (code: string) =>
-        apiClient.delete(`/admin/agent-sessions/${encodeURIComponent(code)}`),
+    revokeSession: (sessionId: string) =>
+        apiClient.delete(`/admin/agent-sessions/${encodeURIComponent(sessionId)}`),
 
     getAdminAgentAuthConfig: () =>
         apiClient.get<AdminAgentAuthConfigResponse>('/admin/agent-auth-config'),

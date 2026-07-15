@@ -34,6 +34,9 @@ function buildConfig(overrides: Record<string, unknown> = {}) {
     agentSessionCodeLength: 8,
     agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
     agentSessionMaxActive: null,
+    agentSessionAuthRateLimitWindowMs: 60_000,
+    agentSessionAuthRateLimitMaxFailures: 30,
+    agentSessionAuthRateLimitMaxBuckets: 10_000,
     publicReadAuthMode: 'bearer' as const,
     publicReadBearerToken: 'read-secret',
     publicReadBearerActor: 'agent-read-token',
@@ -84,8 +87,8 @@ class InMemoryAgentSessionRepository implements AgentSessionRepositoryPort {
     return result.slice(offset, offset + limit);
   }
 
-  async revoke(code: string, revokedAt: Date): Promise<boolean> {
-    const session = this.sessions.find((s) => s.code === code);
+  async revoke(sessionId: string, revokedAt: Date): Promise<boolean> {
+    const session = this.sessions.find((s) => s.id === sessionId);
     if (!session || session.revokedAt !== null) {
       return false;
     }
@@ -130,6 +133,9 @@ describe('AgentSessionController', () => {
       agentSessionRepository: repo,
     } as import('../../../infrastructure/container').Container;
     registerAgentSessionRoutes(app, container, agentAuth, adminAuth);
+    app.get('/session-context', { preHandler: agentAuth.guard('proposal') }, async (request) => (
+      (request as typeof request & { agentAuth: unknown }).agentAuth
+    ));
     return app;
   }
 
@@ -218,7 +224,7 @@ describe('AgentSessionController', () => {
     expect(response.statusCode).toBe(422);
   });
 
-  it('uses a created session to authenticate a proposal request', async () => {
+  it('uses a non-secret session ID for authenticated actor and principal attribution', async () => {
     const app = await buildApp(buildConfig());
     const createResponse = await app.inject({
       method: 'POST',
@@ -230,10 +236,45 @@ describe('AgentSessionController', () => {
 
     const validate = await app.inject({
       method: 'GET',
-      url: '/admin/agent-sessions',
+      url: '/session-context',
       headers: { authorization: `AgentSession ${code}` },
     });
-    expect(validate.statusCode).toBe(401);
+    expect(validate.statusCode).toBe(200);
+    const context = JSON.parse(validate.payload);
+    expect(context.actor).toMatch(/^agent-session:[0-9a-f-]{36}$/);
+    expect(context.actor).not.toContain(code);
+    expect(context.principal).toMatchObject({
+      principalId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      displayName: 'Agent session',
+    });
+    expect(context.principal.principalId).not.toContain(code);
+  });
+
+  it('fails closed after repeated invalid agent-session codes from one origin', async () => {
+    const app = await buildApp(buildConfig({ agentSessionAuthRateLimitMaxFailures: 2 }));
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/agent-sessions',
+      headers: { 'x-agent-proposal-token': 'proposal-secret' },
+      payload: { areas: ['proposal'] },
+    });
+    const { code } = JSON.parse(createResponse.payload);
+
+    for (const invalidCode of ['INVALID1', 'INVALID2']) {
+      const invalid = await app.inject({
+        method: 'GET',
+        url: '/session-context',
+        headers: { authorization: `AgentSession ${invalidCode}` },
+      });
+      expect(invalid.statusCode).toBe(401);
+    }
+
+    const blocked = await app.inject({
+      method: 'GET',
+      url: '/session-context',
+      headers: { authorization: `AgentSession ${code}` },
+    });
+    expect(blocked.statusCode).toBe(401);
   });
 
   it('allows admin to list and revoke sessions', async () => {
@@ -265,10 +306,11 @@ describe('AgentSessionController', () => {
     const listPayload = JSON.parse(list.payload);
     expect(listPayload.sessions).toHaveLength(1);
     expect(listPayload.sessions[0].code).toBe(code);
+    expect(listPayload.sessions[0].id).toMatch(/^[0-9a-f-]{36}$/);
 
     const revoke = await app.inject({
       method: 'DELETE',
-      url: `/admin/agent-sessions/${code}`,
+      url: `/admin/agent-sessions/${listPayload.sessions[0].id}`,
       headers: { cookie: cookieHeader },
     });
     expect(revoke.statusCode).toBe(204);

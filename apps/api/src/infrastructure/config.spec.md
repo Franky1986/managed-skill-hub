@@ -31,6 +31,7 @@ Central API server configuration, especially:
   and UI paths, protocol timeouts, token/group limits, cache lifetimes, and the
   strict-JWT-profile versus authenticated-introspection validation mode.
 - Parse bounded simple-admin login rate-limit settings.
+- Parse bounded agent-session authentication failure-rate-limit settings.
 
 ## Non-Scope
 
@@ -86,6 +87,10 @@ Central API server configuration, especially:
   require local credentials or `JWT_SECRET`.
 - Production static bearer mode requires at least 32 UTF-8 bytes and rejects
   known example/default values.
+- Production agent-session delegation requires at least 40 bits of configured
+  code entropy.
+- Agent-session authentication failure limiting has finite windows, failure
+  counts, and bucket cardinality.
 - Production confidential OIDC admin and introspection secrets require at least
   32 UTF-8 bytes and reject known example/default values.
 - Session TTL, OIDC clock tolerance, transaction/JWKS lifetimes, HTTP timeout,

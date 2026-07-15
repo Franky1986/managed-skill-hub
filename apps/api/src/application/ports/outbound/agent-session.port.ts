@@ -1,6 +1,7 @@
 export type AgentSessionArea = 'discovery' | 'public-read' | 'proposal';
 
 export interface AgentSession {
+  id: string;
   code: string;
   areas: AgentSessionArea[];
   createdAt: Date;
@@ -24,6 +25,6 @@ export interface AgentSessionRepositoryPort {
   findByCode(code: string): Promise<AgentSession | null>;
   updateLastUsed(code: string, lastUsedAt: Date, lastUsedIp: string | null): Promise<void>;
   list(options?: { includeExpired?: boolean; includeRevoked?: boolean; limit?: number; offset?: number }): Promise<AgentSession[]>;
-  revoke(code: string, revokedAt: Date): Promise<boolean>;
+  revoke(sessionId: string, revokedAt: Date): Promise<boolean>;
   countActiveByIp(ip: string): Promise<number>;
 }

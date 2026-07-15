@@ -7,12 +7,24 @@
 - Added coverage for relative and absolute API bases; the web suite now passes
   38 tests.
 
+# 2026-07-15: Redact delegated session credentials from operational identity
+
+- Added a random internal session ID with backward-compatible SQLite and MySQL
+  backfills for existing delegated sessions.
+- Removed session codes from structured logs, actor/principal attribution,
+  audit identity, and revocation URLs; admin revocation now uses the session ID.
+- Added production fail-fast for agent-session configurations below 40 bits of
+  code entropy plus explicit weak/example bearer coverage.
+- Added bounded per-IP invalid session-code attempt limiting before further
+  credential lookups.
+- Replaced internal staging-environment terminology in public progress docs.
+
 # 2026-07-15: Use the built frontend bundle for deployment startup
 
 - Added configurable `FRONTEND_START_MODE` support to `restart-server.sh`.
 - Local development keeps the default Vite `dev` server; production deployment
   profiles can use `preview` to serve the already-built frontend bundle.
-- Enabled `FRONTEND_START_MODE=preview` in the ignored CBT deployment profile to
+- Enabled `FRONTEND_START_MODE=preview` in the ignored staging deployment profile to
   avoid running React's production mode through the Vite development server.
 - Updated environment, testing, deployment, and progress documentation.
 
@@ -307,8 +319,8 @@ avoid sandbox background-process termination.
   - Added use cases: create, validate, list, revoke.
   - Extended `AgentApiAuth` to accept `Authorization: AgentSession <code>`
     as a fallback after bearer validation, with cross-area isolation.
-  - Added `POST /agent-sessions`, `GET /admin/agent-sessions`, and
-    `DELETE /admin/agent-sessions/:code` to `AgentSessionController`.
+  - Added `POST /agent-sessions`, `GET /admin/agent-sessions`, and the
+    session-ID-based admin revocation route to `AgentSessionController`.
   - Secured `POST /agent-sessions` so it requires a valid bearer token for each
     requested area via dedicated `X-Agent-*-Token` headers.
 - Frontend changes:

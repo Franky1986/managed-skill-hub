@@ -20,7 +20,7 @@ can reproduce the production build without relying on a hoisted local module.
 The restart helper supports `FRONTEND_START_MODE=preview` for deployments: after
 `npm run build:prod`, the frontend serves the built `apps/web/dist` bundle via
 Vite preview instead of running the development server with `NODE_ENV=production`.
-The CBT private profile uses this mode while local development retains the
+The ignored staging profile uses this mode while local development retains the
 default `dev` mode.
 
 Frontend file-download and export URL builders preserve the configured API
@@ -94,6 +94,11 @@ EPIC-012 is implemented:
 - Session lifecycle (create, validate, list, revoke) is stored in the configured
   catalog database and can be inspected/revoked by admins at
   `/frontend/admin/agent-sessions`.
+- Each session has a separate random internal ID. Logs, principal/actor
+  attribution, audit records, and revocation URLs use that ID rather than the
+  authentication code; production also enforces a 40-bit code-entropy floor.
+- Invalid session-code attempts are bounded per client IP in finite in-memory
+  windows before further credential lookups fail closed.
 - When an admin opens `/frontend/agent-auth`, the page loads
   `/admin/agent-auth-config` and displays the configured bearer token values
   for copy/paste sharing, then creates sessions by area selection without
