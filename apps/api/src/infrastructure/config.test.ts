@@ -665,9 +665,13 @@ describe('AUTO_PUBLISH_SIMILARITY_THRESHOLD default', () => {
   beforeEach(() => {
     originalThreshold = process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD;
     delete process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD;
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     if (originalThreshold === undefined) {
       delete process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD;
     } else {

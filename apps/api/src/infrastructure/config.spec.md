@@ -17,6 +17,8 @@ Central API server configuration, especially:
 - Validate that the directory can be written.
 - Parse `CATALOG_PROVIDER`, `SEARCH_PROVIDER`, and `JUDGER_PROVIDER`.
 - Parse `AUTO_APPROVE_WITHOUT_JUDGER` and include it in app config.
+- Parse `AUTO_PUBLISH_SIMILARITY_THRESHOLD` as a bounded number from `0` to `1`
+  with a default of `0.5`.
 - Parse and expose provider-neutral judger selection, built-in Vercel AI SDK
   settings, and MySQL settings.
 - Leave custom adapter-specific environment parsing to the adapter module.
@@ -103,6 +105,7 @@ Central API server configuration, especially:
 - Startup checks whether `DATA_DIR` is writable.
 - Production startup fails for open proposal APIs unless explicitly allowed.
 - Proposal API rate-limit settings default to a finite window and request cap.
+- Auto-publish similarity defaults to `0.5` when no environment override is set.
 - Trusted proxy handling defaults off and accepts explicit IP/CIDR entries from
   `API_TRUSTED_PROXIES`.
 - Proposal API rate limiting has a finite in-memory identity-bucket cap.

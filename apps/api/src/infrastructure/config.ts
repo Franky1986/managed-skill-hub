@@ -279,7 +279,7 @@ export function loadConfig(): AppConfig {
     ),
     autoPublishSimilarityThreshold: parseBoundedNumber(
       process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD,
-      0.7,
+      0.5,
       'AUTO_PUBLISH_SIMILARITY_THRESHOLD',
       0,
       1,

@@ -6,6 +6,9 @@
 - Hardened the public-release hygiene check against tracked internal adapter
   paths and added an optional ignored denylist for confidential identifiers in
   the current tree and reachable Git history.
+- Restored the documented `0.5` auto-publish similarity default and removed the
+  config-test dependency on a developer `.env` by explicitly selecting the
+  `noop` judger, so clean clones and public CI exercise deterministic settings.
 - Fixed filesystem audit reads for cross-linked proposal/skill entries so a
   converted proposal's public status retains its `convertedSkillId`.
 - Added adapter regression coverage and acceptance-spec guidance for entries
