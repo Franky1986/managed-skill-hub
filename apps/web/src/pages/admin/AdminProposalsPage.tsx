@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { adminApi } from '../../api/admin';
+import { adminApi, type ProposalNotice } from '../../api/admin';
 import { ProposalSummary } from '../../api/proposals';
 import { JudgementBadgeRow } from '../../components/JudgementPanel';
 import { useLanguage } from '../../i18n';
@@ -12,6 +12,7 @@ export function AdminProposalsPage() {
     const { t, language } = useLanguage();
     const [proposals, setProposals] = useState<ProposalSummary[]>([]);
     const [filter, setFilter] = useState<'open' | 'in_upload' | 'rejected' | 'converted' | 'all'>('open');
+    const [notice, setNotice] = useState<ProposalNotice | null>(null);
 
     const refreshProposals = useCallback(async (signal: AbortSignal) => {
         const status = statusForProposalFilter(filter);
@@ -23,6 +24,16 @@ export function AdminProposalsPage() {
         }
     }, [filter]);
     useBackgroundPolling(refreshProposals);
+
+    const refreshProposalNotice = useCallback(async (signal: AbortSignal) => {
+        try {
+            const response = await adminApi.proposalNotice(signal);
+            setNotice(response.data);
+        } catch {
+            // Keep the last successful count visible during transient background failures.
+        }
+    }, []);
+    useBackgroundPolling(refreshProposalNotice);
 
     return (
         <div className="space-y-4">
@@ -40,7 +51,7 @@ export function AdminProposalsPage() {
                                     : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
                             }`}
                         >
-                            {t(`adminProposals.filter.${item}`)}
+                            {t(`adminProposals.filter.${item}`)}{renderFilterCount(item, notice)}
                         </button>
                     ))}
                 </div>
@@ -139,4 +150,34 @@ export function proposalDisplayStatus(proposal: Pick<ProposalSummary, 'status' |
         return t('judgement.notJudged');
     }
     return proposal.status;
+}
+
+
+export function renderFilterCount(
+    filter: 'open' | 'in_upload' | 'rejected' | 'converted' | 'all',
+    notice: Pick<ProposalNotice, 'counts'> | null
+): string {
+    if (!notice) {
+        return '';
+    }
+    const counts = notice.counts;
+    switch (filter) {
+        case 'open': {
+            const submitted = counts.submitted ?? 0;
+            const judged = counts.judged ?? 0;
+            if (submitted === 0 && judged === 0) {
+                return '';
+            }
+            if (submitted === 0 || judged === 0) {
+                return ` (${submitted + judged})`;
+            }
+            return ` (${submitted}/${judged})`;
+        }
+        case 'in_upload':
+            return counts.in_upload > 0 ? ` (${counts.in_upload})` : '';
+        case 'converted':
+            return counts.converted > 0 ? ` (${counts.converted})` : '';
+        default:
+            return '';
+    }
 }

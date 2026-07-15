@@ -68,10 +68,13 @@ state, immutable published versions, and machine-readable contracts.
 
 ## Status
 
-The greenfield MVP and EPIC-002 agent workbench hardening are implemented. The
-next product direction is tracked in
-[`EPIC-003`](./docs/roadmap/EPIC-003-english-first-localization-and-agent-contracts.md):
-English-first documentation and agent-facing contracts with a bilingual web UI.
+The repository is an alpha release candidate for the documented default
+single-host profile. Core registry, proposal, review, agent-auth, duplicate,
+backup/restore, and deterministic validation paths are implemented. Public
+release requires a green `./scripts/check.sh`, production build, dependency
+audit, and the environment-specific deployment checks listed in
+[`NEXT_STEPS`](./docs/progress/NEXT_STEPS.md). Authentik/OIDC remains an optional
+preview until its real-tenant acceptance gate is recorded.
 
 ## Important Documents
 
@@ -219,7 +222,7 @@ scripts/      build, deploy, backup, and test scripts
 
 ## MVP Boundaries
 
-- No production deployment is included.
+- Production deployment is manual; no hosted service or automated rollout is included.
 - Authentik production activation remains deployment-specific and requires the
   real staging gate; normal CI uses a deterministic local OIDC/JWKS provider.
 - No hosted third-party judger service is included; deployers configure the

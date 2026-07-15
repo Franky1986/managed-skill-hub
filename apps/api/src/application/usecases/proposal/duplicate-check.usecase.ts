@@ -1,7 +1,11 @@
 import { createHash } from 'crypto';
-import { DuplicateCheckInputDto, DuplicateCheckMatchDto, DuplicateCheckResultDto } from '../../dtos/proposal.dto';
-import { SkillCatalogPort, CatalogProposalRecord, CatalogSkillVersionRecord } from '../../ports/outbound/skill-catalog.port';
+import { Proposal } from '../../../domain/proposal/Proposal';
 import { SkillId } from '../../../domain/skill/SkillId';
+import { DuplicateCheckInputDto, DuplicateCheckMatchDto, DuplicateCheckResultDto } from '../../dtos/proposal.dto';
+import { FileScannerPort } from '../../ports/outbound/file-scanner.port';
+import { SkillFileStoragePort } from '../../ports/outbound/file-storage.port';
+import { SemanticDuplicateInput, SkillJudgerPort } from '../../ports/outbound/judger.port';
+import { CatalogProposalRecord, CatalogSkillVersionRecord, SkillCatalogPort } from '../../ports/outbound/skill-catalog.port';
 
 interface NormalizedInput {
   skillId: string | null;
@@ -14,45 +18,223 @@ interface NormalizedInput {
   fileFingerprints: Array<{ path: string; sha256: string | null }>;
 }
 
+interface ContentRef {
+  text: string;
+  path: string;
+}
+
+export interface ProposalDuplicateAssessment {
+  result: DuplicateCheckResultDto;
+  semanticCheck: {
+    status: 'not_required' | 'completed' | 'unavailable';
+    reason: string | null;
+  };
+}
+
 export class ProposalDuplicateCheckUseCase {
-  constructor(private readonly catalog: SkillCatalogPort) {}
+  constructor(
+    private readonly catalog: SkillCatalogPort,
+    private readonly storage?: SkillFileStoragePort,
+    private readonly scanner?: FileScannerPort,
+    private readonly judger?: SkillJudgerPort,
+  ) {}
 
   async execute(input: DuplicateCheckInputDto): Promise<DuplicateCheckResultDto> {
-    const normalized = this.normalize(input);
-    const submittedContentDigest = this.computeContentDigest(normalized);
+    return this.evaluate(this.normalize(input), null);
+  }
 
+  async executeForProposal(proposal: Proposal): Promise<ProposalDuplicateAssessment> {
+    const normalized = this.normalize({
+      skillId: proposal.skillId ?? undefined,
+      title: proposal.title,
+      description: proposal.description,
+      category: proposal.category,
+      tags: proposal.tags,
+      capabilities: proposal.capabilities,
+      entrypoint: proposal.entrypoint ?? undefined,
+      files: proposal.files.map((file) => ({ path: file.path, sha256: file.sha256 })),
+    });
+    const result = await this.evaluate(normalized, proposal.id);
+
+    if (
+      result.exactDuplicateProposalId
+      || result.exactDuplicateSkillId
+      || result.skillIdCollision.exists
+    ) {
+      return { result, semanticCheck: { status: 'not_required', reason: null } };
+    }
+
+    const candidates = result.similarMatches
+      .filter((match) => match.kind === 'skill' && match.similarityScore >= 0.4)
+      .slice(0, 3);
+    if (candidates.length === 0) {
+      return { result, semanticCheck: { status: 'not_required', reason: null } };
+    }
+    if (!this.storage || !this.scanner || !this.judger?.assessDuplicateSimilarity) {
+      return {
+        result,
+        semanticCheck: {
+          status: 'unavailable',
+          reason: 'Semantic duplicate comparison is required for a strong metadata candidate but no capable judger is configured.',
+        },
+      };
+    }
+
+    const submittedContent = await this.readProposalEntrypoint(proposal);
+    if (!submittedContent) {
+      return {
+        result,
+        semanticCheck: {
+          status: 'unavailable',
+          reason: 'Semantic duplicate comparison could not read the submitted proposal entrypoint.',
+        },
+      };
+    }
+
+    try {
+      const semanticMatches = await Promise.all(
+        candidates.map(async (match) => {
+          const candidateContent = await this.readPublishedSkillEntrypoint(match);
+          if (!candidateContent) {
+            throw new Error('Published candidate entrypoint is unavailable.');
+          }
+          const semantic = await this.judger!.assessDuplicateSimilarity!(
+            this.buildSemanticInput(normalized, submittedContent, match, candidateContent)
+          );
+          return {
+            id: match.id,
+            score: roundScore(semantic.similarityScore),
+            reason: semantic.reason,
+            comparedFilePath: candidateContent.path,
+            model: semantic.model,
+          };
+        })
+      );
+
+      const enrichedMatches = result.similarMatches.map((match) => {
+        const semantic = semanticMatches.find((candidate) => candidate.id === match.id);
+        if (!semantic) {
+          return match;
+        }
+        return {
+          ...match,
+          similarityScore: roundScore(Math.max(match.similarityScore, semantic.score)),
+          semanticSimilarity: {
+            score: semantic.score,
+            reason: semantic.reason,
+            comparedFilePath: semantic.comparedFilePath,
+            model: semantic.model,
+          },
+        };
+      });
+      enrichedMatches.sort((a, b) => b.similarityScore - a.similarityScore);
+
+      return {
+        result: { ...result, similarMatches: enrichedMatches },
+        semanticCheck: { status: 'completed', reason: null },
+      };
+    } catch {
+      return {
+        result,
+        semanticCheck: {
+          status: 'unavailable',
+          reason: 'Semantic duplicate comparison failed for at least one strong published-skill candidate.',
+        },
+      };
+    }
+  }
+
+  private async evaluate(normalized: NormalizedInput, excludeProposalId: string | null): Promise<DuplicateCheckResultDto> {
+    const submittedContentDigest = this.computeContentDigest(normalized);
     const exactDuplicateProposal = submittedContentDigest
-      ? await this.catalog.findProposalByContentDigest(submittedContentDigest)
+      ? await this.catalog.findProposalByContentDigest(submittedContentDigest, excludeProposalId ?? undefined)
       : null;
     const exactDuplicateSkill = submittedContentDigest
       ? await this.catalog.findPublishedSkillByContentDigest(submittedContentDigest)
       : null;
-
     const skillIdCollision = await this.checkSkillIdCollision(normalized.skillId);
 
     const similarMatches: DuplicateCheckMatchDto[] = [];
     if (!exactDuplicateProposal && !exactDuplicateSkill) {
-      const candidateProposals = await this.loadCandidateProposals(normalized.skillId);
-      const candidateSkills = await this.loadCandidateSkills(normalized.skillId);
-      const scoredProposals = candidateProposals.map((proposal) => this.scoreMatch(normalized, proposal, 'proposal'));
-      const scoredSkills = candidateSkills.map((skill) => this.scoreMatch(normalized, skill, 'skill'));
-      similarMatches.push(...scoredProposals, ...scoredSkills);
+      const [candidateProposals, candidateSkills] = await Promise.all([
+        this.loadCandidateProposals(excludeProposalId),
+        this.loadCandidateSkills(normalized.skillId),
+      ]);
+      similarMatches.push(
+        ...candidateProposals.map((proposal) => this.scoreMatch(normalized, proposal, 'proposal')),
+        ...candidateSkills.map((skill) => this.scoreMatch(normalized, skill, 'skill')),
+      );
       similarMatches.sort((a, b) => b.similarityScore - a.similarityScore);
     }
 
-    const topMatches = similarMatches.slice(0, 5).filter((match) => match.similarityScore >= 0.25);
     const resolutionOptions = await this.buildResolutionOptions(normalized, skillIdCollision, exactDuplicateSkill);
-
     return {
       submittedContentDigest,
       exactDuplicateProposalId: exactDuplicateProposal?.id ?? null,
       exactDuplicateSkillId: exactDuplicateSkill?.skillId ?? null,
-      similarMatches: topMatches,
+      similarMatches: similarMatches.slice(0, 5).filter((match) => match.similarityScore >= 0.25),
       skillIdCollision,
       resolutionOptions,
       note:
-        'This is a pre-submission hint. Duplicate checks are informational only; submission is not blocked. A final content check happens after files are attached via the proposal status endpoint. Ask the user which resolution option to use before submitting.',
+        'This pre-submission hint uses metadata and file fingerprints only. It never reads stored proposal content. Submission is not blocked; ask the user which resolution option to use before submitting. Finalized proposals may receive an internal semantic comparison against published skills during auto-publish evaluation.',
     };
+  }
+
+  private buildSemanticInput(
+    input: NormalizedInput,
+    submittedContent: ContentRef,
+    match: DuplicateCheckMatchDto,
+    candidateContent: ContentRef
+  ): SemanticDuplicateInput {
+    const tagDiff = match.differences.tags;
+    const capabilityDiff = match.differences.capabilities;
+    return {
+      submittedTitle: input.title,
+      submittedDescription: input.description,
+      submittedCategory: input.category,
+      submittedTags: input.tags,
+      submittedCapabilities: input.capabilities,
+      submittedContent: submittedContent.text,
+      candidateTitle: match.title,
+      candidateDescription: match.description,
+      candidateCategory: match.category,
+      candidateTags: [...(tagDiff?.shared ?? []), ...(tagDiff?.onlyInExisting ?? [])],
+      candidateCapabilities: [
+        ...(capabilityDiff?.shared ?? []),
+        ...(capabilityDiff?.onlyInExisting ?? []),
+      ],
+      candidateContent: candidateContent.text,
+    };
+  }
+
+  private async readProposalEntrypoint(proposal: Proposal): Promise<ContentRef | null> {
+    if (!this.storage || !this.scanner) {
+      return null;
+    }
+    const filePath = proposal.entrypoint ?? 'SKILL.md';
+    const stored = await this.storage.readProposalFile(proposal.id, filePath);
+    return stored ? this.extractText(stored.content, stored.mimeType, filePath) : null;
+  }
+
+  private async readPublishedSkillEntrypoint(match: DuplicateCheckMatchDto): Promise<ContentRef | null> {
+    if (!this.storage || !this.scanner || !match.skillId || !match.version) {
+      return null;
+    }
+    const filePath = match.entrypoint ?? 'SKILL.md';
+    const stored = await this.storage.readSkillFile(match.skillId, match.version, filePath);
+    return stored ? this.extractText(stored.content, stored.mimeType, filePath) : null;
+  }
+
+  private async extractText(content: Buffer, mimeType: string, filePath: string): Promise<ContentRef | null> {
+    if (!this.scanner) {
+      return null;
+    }
+    try {
+      const scanned = await this.scanner.scan(content, mimeType, filePath);
+      return scanned.text.trim().length > 0 ? { text: scanned.text, path: filePath } : null;
+    } catch {
+      return null;
+    }
   }
 
   private async buildResolutionOptions(
@@ -66,9 +248,9 @@ export class ProposalDuplicateCheckUseCase {
       options.push({
         strategy: 'create_new_version',
         label: 'Create a new draft version of the existing skill',
-        description: `Keep skillId '${skillIdCollision.existingSkillId}'. When an admin converts the proposal, it will be appended as a new draft version of the existing skill.`,
+        description: `Keep skillId '${skillIdCollision.existingSkillId}'. This is the recommended option when the new package is intended as a revision of the existing skill. Auto-publish is not possible here; an admin must later convert the proposal into a new draft version of '${skillIdCollision.existingSkillId}' and then approve and publish it.`,
         suggestedSkillId: skillIdCollision.existingSkillId,
-        requiresAdminAction: false,
+        requiresAdminAction: true,
       });
       options.push({
         strategy: 'request_admin_update',
@@ -96,7 +278,6 @@ export class ProposalDuplicateCheckUseCase {
       : exactDuplicateSkill
         ? 'Create a new skill under a different id (current content already exists as a published skill)'
         : 'Create a new skill';
-
     options.push({
       strategy: 'create_new_skill',
       label: createNewLabel,
@@ -104,7 +285,6 @@ export class ProposalDuplicateCheckUseCase {
       suggestedSkillId: suggestedId,
       requiresAdminAction: false,
     });
-
     return options;
   }
 
@@ -114,10 +294,8 @@ export class ProposalDuplicateCheckUseCase {
     } catch {
       return true;
     }
-    const existing = await this.catalog.getLatestVersion(skillId);
-    return existing !== null;
+    return (await this.catalog.getLatestVersion(skillId)) !== null;
   }
-
 
   private normalize(input: DuplicateCheckInputDto): NormalizedInput {
     return {
@@ -126,7 +304,7 @@ export class ProposalDuplicateCheckUseCase {
       description: input.description.trim(),
       category: input.category.trim().toLowerCase(),
       tags: (input.tags ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean),
-      capabilities: (input.capabilities ?? []).map((c) => c.trim().toLowerCase()).filter(Boolean),
+      capabilities: (input.capabilities ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean),
       entrypoint: input.entrypoint?.trim() ?? null,
       fileFingerprints: (input.files ?? []).map((file) => ({
         path: file.path.trim(),
@@ -154,8 +332,7 @@ export class ProposalDuplicateCheckUseCase {
     hash.update('|');
     hash.update(input.entrypoint ?? '');
     hash.update('|');
-    const parts = input.fileFingerprints.map((file) => `${file.path}:${file.sha256 ?? ''}`).sort();
-    hash.update(parts.join(','));
+    hash.update(input.fileFingerprints.map((file) => `${file.path}:${file.sha256 ?? ''}`).sort().join(','));
     return hash.digest('hex');
   }
 
@@ -169,21 +346,18 @@ export class ProposalDuplicateCheckUseCase {
       return { exists: false, existingSkillId: null, note: `Provided skillId '${skillId}' is invalid.` };
     }
     const existing = await this.catalog.getLatestVersion(skillId);
-    if (existing) {
-      return {
-        exists: true,
-        existingSkillId: skillId,
-        note: `A skill with id '${skillId}' already exists. Converting this proposal would create a new draft version of that skill.`,
-      };
-    }
-    return { exists: false, existingSkillId: null, note: `Skill id '${skillId}' is available.` };
+    return existing
+      ? {
+          exists: true,
+          existingSkillId: skillId,
+          note: `A skill with id '${skillId}' already exists. Converting this proposal would create a new draft version of that skill.`,
+        }
+      : { exists: false, existingSkillId: null, note: `Skill id '${skillId}' is available.` };
   }
 
-  private async loadCandidateProposals(excludeSkillId: string | null): Promise<CatalogProposalRecord[]> {
-    const result = await this.catalog.listProposals({ limit: 200 });
-    return result.items.filter(
-      (proposal) => !excludeSkillId || proposal.skillId !== excludeSkillId
-    );
+  private async loadCandidateProposals(excludeProposalId: string | null): Promise<CatalogProposalRecord[]> {
+    const result = await this.catalog.listProposals({ status: 'open', limit: 200 });
+    return result.items.filter((proposal) => proposal.id !== excludeProposalId);
   }
 
   private async loadCandidateSkills(excludeSkillId: string | null): Promise<CatalogSkillVersionRecord[]> {
@@ -198,22 +372,23 @@ export class ProposalDuplicateCheckUseCase {
   ): DuplicateCheckMatchDto {
     const isSkill = kind === 'skill';
     const candidateTags = isSkill ? (candidate as CatalogSkillVersionRecord).tags : (candidate as CatalogProposalRecord).tags;
-    const candidateCapabilities = isSkill ? (candidate as CatalogSkillVersionRecord).capabilities : (candidate as CatalogProposalRecord).capabilities;
-    const candidateEntrypoint = isSkill ? (candidate as CatalogSkillVersionRecord).entrypoint : (candidate as CatalogProposalRecord).entrypoint ?? null;
-
+    const candidateCapabilities = isSkill
+      ? (candidate as CatalogSkillVersionRecord).capabilities
+      : (candidate as CatalogProposalRecord).capabilities;
+    const candidateEntrypoint = isSkill
+      ? (candidate as CatalogSkillVersionRecord).entrypoint
+      : (candidate as CatalogProposalRecord).entrypoint ?? null;
     const titleScore = jaccardSimilarity(tokenize(input.title), tokenize(candidate.title));
     const descriptionScore = jaccardSimilarity(tokenize(input.description), tokenize(candidate.description));
     const tagScore = jaccardSimilarity(new Set(input.tags), new Set(candidateTags));
     const capabilityScore = jaccardSimilarity(new Set(input.capabilities), new Set(candidateCapabilities));
     const categoryScore = input.category === candidate.category ? 1 : 0;
-
     const weightedScore =
-      titleScore * 0.25 +
-      descriptionScore * 0.35 +
-      tagScore * 0.15 +
-      capabilityScore * 0.15 +
-      categoryScore * 0.1;
-
+      titleScore * 0.25
+      + descriptionScore * 0.35
+      + tagScore * 0.15
+      + capabilityScore * 0.15
+      + categoryScore * 0.1;
     const matchedOn: string[] = [];
     if (titleScore > 0.3) matchedOn.push('title');
     if (descriptionScore > 0.3) matchedOn.push('description');
@@ -221,16 +396,14 @@ export class ProposalDuplicateCheckUseCase {
     if (capabilityScore > 0.3) matchedOn.push('capabilities');
     if (categoryScore === 1) matchedOn.push('category');
 
-    const candidateId = isSkill ? (candidate as CatalogSkillVersionRecord).skillId : (candidate as CatalogProposalRecord).id;
-    const candidateSkillId = isSkill ? (candidate as CatalogSkillVersionRecord).skillId : (candidate as CatalogProposalRecord).skillId;
-
     const base: DuplicateCheckMatchDto = {
       kind,
-      id: candidateId,
-      skillId: candidateSkillId,
+      id: isSkill ? (candidate as CatalogSkillVersionRecord).skillId : (candidate as CatalogProposalRecord).id,
+      skillId: isSkill ? (candidate as CatalogSkillVersionRecord).skillId : (candidate as CatalogProposalRecord).skillId,
       title: candidate.title,
       description: truncate(candidate.description, 240),
       category: candidate.category,
+      entrypoint: candidateEntrypoint,
       similarityScore: roundScore(weightedScore),
       matchedOn,
       differences: {
@@ -246,21 +419,18 @@ export class ProposalDuplicateCheckUseCase {
             : undefined,
       },
     };
-
     if (isSkill) {
       base.version = (candidate as CatalogSkillVersionRecord).version;
       base.status = (candidate as CatalogSkillVersionRecord).status;
     } else {
       base.status = (candidate as CatalogProposalRecord).status;
     }
-
     return base;
   }
 }
 
 function tokenize(text: string): Set<string> {
-  const words = text.toLowerCase().match(/[\p{L}0-9]+/gu) ?? [];
-  return new Set(words);
+  return new Set(text.toLowerCase().match(/[\p{L}0-9]+/gu) ?? []);
 }
 
 function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
@@ -270,10 +440,7 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
   return union.size === 0 ? 0 : intersection.size / union.size;
 }
 
-function diffSets(
-  submitted: string[],
-  existing: string[]
-): { shared: string[]; onlyInSubmitted: string[]; onlyInExisting: string[] } {
+function diffSets(submitted: string[], existing: string[]) {
   const a = new Set(submitted);
   const b = new Set(existing);
   return {
@@ -284,8 +451,7 @@ function diffSets(
 }
 
 function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 1) + '…';
+  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
 }
 
 function roundScore(score: number): number {

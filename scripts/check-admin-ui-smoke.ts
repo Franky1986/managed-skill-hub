@@ -107,7 +107,8 @@ async function main(): Promise<void> {
         'const shouldPollProposalNotice = !isLoading && isAuthenticated && canReview',
       ], 'reviewer navigation and admin notice boundary'),
       ...includesAll(adminApi, [
-        "apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice', { signal })",
+        'export interface ProposalNotice',
+        "apiClient.get<ProposalNotice>('/admin/proposals/notice', { signal })",
       ], 'admin proposal notice API'),
       ...includesAll(adminDashboard, ['const canViewOperations =', '{canViewOperations && <section'], 'admin operations visibility'),
       ...includesAll(adminSkillPage, [
@@ -122,12 +123,12 @@ async function main(): Promise<void> {
   });
 
   results.push({
-    id: 'config-aware-agent-setup-guidance',
+    id: 'config-aware-agent-auth-guidance',
     passed: true,
     evidence: [
-      ...includesAll(howTo, ['guide.apiNotes?.credentialSetupScriptUrl &&', 'href={guide.apiNotes.credentialSetupScriptUrl}', 'download', 'guide.apiNotes?.authSetupFlow', "t('howTo.auth.tokenChat')", "t('howTo.auth.never')"], 'how-to-propose setup guidance'),
-      ...includesAll(apiClient, ['credentialSetupScriptUrl', 'auth area:', 'setup:'], 'api client auth error setup guidance'),
-      ...includesAll(messages, ["'howTo.auth.downloadSetup'", "'howTo.auth.never'"], 'setup i18n copy'),
+      ...includesAll(howTo, ['guide.apiNotes?.authSetupFlow', "t('howTo.auth.tokenChat')", "t('howTo.auth.never')"], 'how-to-propose auth guidance'),
+      ...includesAll(apiClient, ['auth area:', 'recommendation'], 'api client auth error guidance'),
+      ...includesAll(messages, ["'howTo.auth.never'"], 'auth i18n copy'),
     ],
   });
 
@@ -163,7 +164,7 @@ async function main(): Promise<void> {
         'controller?.abort()',
       ], 'background polling lifecycle'),
       ...includesAll(layout, ['useBackgroundPolling(refreshProposalNotice, shouldPollProposalNotice)'], 'proposal notice polling'),
-      ...includesAll(adminProposals, ['useBackgroundPolling(refreshProposals)'], 'admin proposal list polling'),
+      ...includesAll(adminProposals, ['useBackgroundPolling(refreshProposals)', 'useBackgroundPolling(refreshProposalNotice)'], 'admin proposal list and count polling'),
       ...includesAll(proposalDetail, ['useBackgroundPolling(refreshProposal, Boolean(id))'], 'admin proposal detail polling'),
       ...includesAll(proposalStatus, ['useBackgroundPolling(refreshStatus, Boolean(id))'], 'public proposal status polling'),
     ],

@@ -26,6 +26,11 @@ entries.
 - Respect `AUTO_PUBLISH_ON_GREEN`.
 - Block incomplete uploads.
 - Block duplicate-content proposals/skills.
+- Run exactly one internal duplicate assessment after judgement gates are green.
+- Block exact duplicates and skill-ID collisions, and require manual review when
+  similarity reaches the configured threshold.
+- Fail closed with `manual_review_required` when semantic duplicate enrichment
+  was required but unavailable.
 - Block proposals that already saw manual admin intervention.
 - Require a fully green proposal-level judgement and fully green latest
   judgements for every judgable proposal file.
@@ -47,6 +52,7 @@ entries.
 - Non-green or missing judgements return `blockedReason = non_green_judgement`.
 - Successful automation creates a published skill version and records a
   dedicated auto-publish audit entry.
+- Duplicate assessment is invoked at most once per auto-publish evaluation.
 
 ## Tests / Checks
 

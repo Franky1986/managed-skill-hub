@@ -6,13 +6,14 @@
 
 ## Scope
 
-The script checks public discovery, public read, proposal, and credential setup routes. It verifies:
+The script checks public discovery, public read, proposal, and agent-session routes. It verifies:
 
 - Expected paths and operation IDs exist.
 - Runtime-protected discovery, public-read, and proposal routes document `401`.
 - Agent-critical routes document usable success responses.
-- The no-secret credential setup script remains publicly downloadable.
-- `UnauthorizedError` exposes machine-readable auth details used by agents.
+- The agent-session creation route has a usable structured success response and
+  the retired credential setup route is absent.
+- `UnauthorizedError` exposes machine-readable auth and agent-session details.
 
 ## Outputs
 

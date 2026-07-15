@@ -2,7 +2,7 @@
 
 ## Current Date
 
-2026-07-14
+2026-07-15
 
 ## Project State
 
@@ -97,6 +97,67 @@ Proposal and file judgements complete automatically; a fully green proposal
 with `AUTO_PUBLISH_ON_GREEN=true` is converted, submitted for review, approved,
 and published without manual admin intervention. The published skill is
 immediately discoverable and downloadable with an `AgentSession` code.
+
+## Semantic Duplicate Gate for Auto-Publish
+
+Auto-publish now uses a combined heuristic + LLM duplicate check before
+creating a public skill:
+
+- `AUTO_PUBLISH_SIMILARITY_THRESHOLD` defaults to `0.5` and is configurable via
+  `.env`/`.env.example`.
+- The duplicate check first scores candidates with metadata heuristics
+  (title, description, tags, capabilities, category, entrypoint).
+- The internal finalized-proposal path may compare the proposal entrypoint
+  (typically `SKILL.md`) against at most three published-skill entrypoints when
+  the configured judger supports `assessDuplicateSimilarity`. Unpublished
+  candidate proposal content is never sent to the judger.
+- The final similarity score is the higher of the heuristic score and the LLM
+  score. If the best match reaches the threshold, auto-publish is blocked with
+  `manual_review_required` and a reason that names the candidate and the score.
+- Auto-publish is also blocked when the proposal explicitly targets an existing
+  `skillId`. That path is reserved for human reviewers because it creates a new
+  draft version of an existing skill rather than a brand-new public skill.
+- The public `POST /proposals/check-duplicate` is strictly metadata/fingerprint
+  based. It accepts no proposal ID, reads no stored files, and never invokes the
+  semantic judger. The internal auto-publish gate uses one bounded assessment and
+  fails closed to manual review when required semantic enrichment is unavailable.
+- The agent-facing `/howToPropose` and public proposal status messages now
+  clearly distinguish proposal lifecycle states (`in_upload`, `submitted`,
+  `judged`, `converted`, `rejected`) from skill lifecycle states (`draft`,
+  `in_review`, `approved`, `published`). Auto-publish success means the skill
+  version is published; otherwise the proposal becomes a judged/converted draft
+  awaiting a human admin decision.
+
+## Admin Proposal Navigation
+
+The admin proposal badge in the app shell now shows a compact status breakdown:
+`Proposals (open/in_upload/converted)`. The numbers correspond to open
+(submitted + judged), in-upload, and converted proposals. Hovering the badge
+shows the per-status breakdown. `GET /admin/proposals/notice` returns the
+individual counts for `in_upload`, `submitted`, `judged`, and `converted`
+alongside the existing `totalPending` value.
+
+## Public Release Stance
+
+The repository targets a **minimum public release** using simple admin
+authentication and static bearer agent authentication. OIDC and Authentik are
+implemented and available, but are treated as **experimental / preview**
+for the first public release. They can be enabled by operators who accept the
+additional acceptance work, but they are not release blockers for the default
+deployment profile.
+
+Default release profile:
+- `ADMIN_AUTH_MODE=simple`
+- `PUBLIC_READ_AUTH_MODE=bearer` (or `none` for fully open catalogs)
+- `PROPOSAL_AUTH_MODE=bearer` (or `none` for trusted internal networks)
+- `DISCOVERY_AUTH_MODE=none`
+- Agent-session delegation enabled for bearer-protected areas
+- SQLite catalog/search with filesystem content storage
+- Vercel AI SDK or noop judger
+
+Authentik/OIDC remains documented and code-complete, but acceptance of real
+tenant flows, key rotation, logout, and role boundaries is tracked as follow-up
+work rather than a release gate.
 
 ## EPIC-011 Authentik OIDC And Delegated Agent Authentication
 
@@ -367,15 +428,24 @@ EPIC-005 is implemented:
 
 Recently verified:
 
-- `./scripts/check.sh` with 84 co-located specs, 404 API tests in 61 files, 31
-  web tests, and all deterministic proof scripts after the judgement-state and
-  publication-gate changes.
-- `npm run build:prod` after the judgement-state and publication-gate changes;
-  only the known non-blocking Vite chunk-size warning remains.
-- `npm audit --audit-level=moderate` -> zero vulnerabilities.
-- `npm run build:prod` across API, web, OpenAPI, and shared workspaces.
-- `npm audit --audit-level=moderate --package-lock-only` -> zero
-  vulnerabilities.
+- Semantic duplicate gate hardening: public preflight cannot select stored
+  proposals; internal finalized-proposal assessment excludes itself, compares
+  content only with published skills, invokes at most three candidates in one
+  bounded pass, and fails closed to manual review when semantic enrichment is
+  unavailable.
+- Duplicate UX hardening: `/api/howToPropose` and the duplicate confirmation
+  rule now tell agents to prefer `create_new_version` when the target `skillId`
+  already exists, and to explain that auto-publish is not possible. The admin
+  proposal badge and filter buttons show the open/in_upload/converted and
+  submitted/judged breakdowns.
+
+- `./scripts/check.sh` with 94 co-located specs, 441 API tests in 63 files, 36
+  web tests, and all deterministic proof scripts.
+- `npm run build:prod` across API, web, OpenAPI, and shared workspaces; only the
+  known non-blocking Vite chunk-size warning remains.
+- `npm audit --audit-level=moderate --package-lock-only` -> zero vulnerabilities.
+- Public release hygiene -> 25 checks passed, including exact README casing,
+  tracked deployment packaging, secret/history scans, and repository metadata.
 - `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` -> baseline,
   backup/restore, MySQL stack, provider matrix, provider cutover, and database
   content-storage matrix all pass.

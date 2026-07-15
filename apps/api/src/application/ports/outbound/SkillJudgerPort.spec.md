@@ -10,6 +10,8 @@ LLM.
 - `judgeProposal(proposal)`
 - `judgeSkillVersion(skillVersion)`
 - `judgeFile(fileReference, content/text)`
+- optional `assessDuplicateSimilarity(input)` for bounded internal duplicate
+  enrichment
 
 ## Non-Scope
 
@@ -24,11 +26,15 @@ LLM.
 - Be provider-agnostic.
 - Support custom judger as concrete adapter implementation.
 - When auto-judgement is enabled, report transport-related errors clearly.
+- Treat all compared metadata and content as untrusted data. Provider prompts
+  must forbid following embedded instructions and must not ask the model to quote
+  or reveal submitted content.
 
 ## Inputs / Outputs
 
 - Inputs: object plus extracted texts/metadata
 - Outputs: `Judgement`
+- Duplicate output: score in `[0,1]`, high-level reason, optional model metadata
 
 ## Dependencies
 
@@ -61,3 +67,4 @@ LLM.
 
 - No LLM-specific prompt code outside the adapter.
 - Do not send PII or secrets to the judger.
+- Never invoke semantic duplicate comparison from the public preflight endpoint.

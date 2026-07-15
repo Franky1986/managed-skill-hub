@@ -151,9 +151,9 @@ export interface DuplicateCheckInputDto {
   title: string;
   description: string;
   category: string;
+  entrypoint?: string | null;
   tags?: string[];
   capabilities?: string[];
-  entrypoint?: string;
   files?: Array<{ path: string; sha256?: string | null }>;
 }
 
@@ -164,6 +164,7 @@ export interface DuplicateCheckMatchDto {
   title: string;
   description: string;
   category: string;
+  entrypoint?: string | null;
   version?: string;
   status?: string;
   similarityScore: number;
@@ -174,6 +175,12 @@ export interface DuplicateCheckMatchDto {
     tags?: { shared: string[]; onlyInSubmitted: string[]; onlyInExisting: string[] };
     capabilities?: { shared: string[]; onlyInSubmitted: string[]; onlyInExisting: string[] };
     entrypoint?: string;
+  };
+  semanticSimilarity?: {
+    score: number;
+    reason: string;
+    comparedFilePath: string;
+    model: string | null;
   };
 }
 

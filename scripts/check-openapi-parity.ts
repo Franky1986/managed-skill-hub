@@ -19,7 +19,7 @@ const expectations: RouteExpectation[] = [
   { path: '/discover', method: 'get', operationId: 'discover', auth: 'discovery', requireUsableSuccess: true },
   { path: '/howToPropose', method: 'get', operationId: 'getHowToPropose', auth: 'discovery', requireUsableSuccess: true },
   { path: '/openapi.yaml', method: 'get', operationId: 'getOpenApiYaml', auth: 'discovery' },
-  { path: '/agent-credentials/setup.sh', method: 'get', operationId: 'getAgentCredentialSetupScript', auth: 'none', requireUsableSuccess: true },
+  { path: '/agent-sessions', method: 'post', operationId: 'createAgentSession', auth: 'none', requireUsableSuccess: true },
   { path: '/skills/suggest-name', method: 'get', operationId: 'suggestSkillName', auth: 'public-read', requireUsableSuccess: true },
   { path: '/skills', method: 'get', operationId: 'listSkills', auth: 'public-read', requireUsableSuccess: true },
   { path: '/skills/search', method: 'get', operationId: 'searchSkills', auth: 'public-read', requireUsableSuccess: true },
@@ -98,15 +98,14 @@ async function main(): Promise<void> {
     results.push({ ...expected, passed: true });
   }
 
-  const setupOperation = paths['/agent-credentials/setup.sh']?.get;
-  assert(setupOperation && !setupOperation.responses?.['401'], '/agent-credentials/setup.sh must remain no-secret and public-downloadable');
+  assert(!paths['/agent-credentials/setup.sh'], 'legacy credential setup route must not be documented');
 
   const unauthorized = doc.components?.responses?.UnauthorizedError;
   assert(unauthorized, 'components.responses.UnauthorizedError missing');
   const errorResponse = doc.components?.schemas?.ErrorResponse;
   assert(errorResponse, 'components.schemas.ErrorResponse missing');
   const errorResponseJson = JSON.stringify(errorResponse);
-  for (const token of ['authRequired', 'authArea', 'authScheme', 'discoverUrl', 'credentialSetupScriptUrl']) {
+  for (const token of ['authRequired', 'authArea', 'authScheme', 'discoverUrl', 'agentSessionUrl', 'sessionAreas']) {
     assert(errorResponseJson.includes(token), 'ErrorResponse missing auth details.' + token);
   }
 

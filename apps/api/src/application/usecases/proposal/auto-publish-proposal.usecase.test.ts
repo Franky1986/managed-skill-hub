@@ -434,7 +434,9 @@ describe('AutoPublishProposalUseCase', () => {
 
     const convertProposal = vi.fn();
     const duplicateCheck = {
-      execute: vi.fn(async () => ({
+      executeForProposal: vi.fn(async () => ({
+        semanticCheck: { status: 'completed', reason: null },
+        result: {
         submittedContentDigest: null,
         exactDuplicateProposalId: null,
         exactDuplicateSkillId: null,
@@ -455,6 +457,7 @@ describe('AutoPublishProposalUseCase', () => {
         skillIdCollision: { exists: false, existingSkillId: null, note: '' },
         resolutionOptions: [],
         note: '',
+        },
       })),
     };
 
@@ -543,7 +546,9 @@ describe('AutoPublishProposalUseCase', () => {
       getAllVersions: () => [{ version: '1.0.0' }],
     }));
     const duplicateCheck = {
-      execute: vi.fn(async () => ({
+      executeForProposal: vi.fn(async () => ({
+        semanticCheck: { status: 'completed', reason: null },
+        result: {
         submittedContentDigest: null,
         exactDuplicateProposalId: null,
         exactDuplicateSkillId: null,
@@ -564,6 +569,7 @@ describe('AutoPublishProposalUseCase', () => {
         skillIdCollision: { exists: false, existingSkillId: null, note: '' },
         resolutionOptions: [],
         note: '',
+        },
       })),
     };
 
@@ -623,4 +629,217 @@ describe('AutoPublishProposalUseCase', () => {
     expect(result.publishedSkillId).toBe('unique-skill');
   });
 
+});
+
+describe('AutoPublishProposalUseCase semantic duplicate gate', () => {
+  it('blocks auto-publish when semantic duplicate similarity is at or above threshold', async () => {
+    const proposal = Proposal.create({
+      id: 'proposal-dup',
+      title: 'Web scraper',
+      description: 'Scrape web pages and extract structured data.',
+      category: 'tooling',
+      tags: ['agent', 'web'],
+      capabilities: ['read', 'scrape'],
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    })
+      .addFile(ProposalFile.create({
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 100,
+        sha256: 'abc',
+      }))
+      .finalizeUpload()
+      .addJudgement(greenJudgement('proposal', 'proposal-dup'))
+      .addJudgement(greenJudgement('file', 'proposal-dup:SKILL.md'));
+
+    const duplicateCheck = {
+      executeForProposal: vi.fn().mockResolvedValue({
+        semanticCheck: { status: 'completed', reason: null },
+        result: {
+        submittedContentDigest: null,
+        exactDuplicateProposalId: null,
+        exactDuplicateSkillId: null,
+        similarMatches: [{
+          kind: 'skill',
+          id: 'existing-web-scraper',
+          skillId: 'existing-web-scraper',
+          title: 'Existing web scraper',
+          description: 'Scrapes web pages.',
+          category: 'tooling',
+          similarityScore: 0.62,
+          matchedOn: ['description'],
+          differences: {},
+          semanticSimilarity: { score: 0.62, reason: 'Overlapping purpose', comparedFilePath: 'SKILL.md', model: 'test' },
+        }],
+        skillIdCollision: { exists: false, existingSkillId: null, note: '' },
+        resolutionOptions: [],
+        note: '',
+        },
+      }),
+    };
+
+    const append = vi.fn(async () => undefined);
+    const useCase = new AutoPublishProposalUseCase(
+      { findProposalById: vi.fn(async () => proposal) } as never,
+      { readProposalFile: vi.fn(async () => ({ mimeType: 'text/markdown', content: Buffer.from('# web scraper') })) } as never,
+      { append, findByProposalId: vi.fn(async () => []) } as never,
+      { scan: vi.fn(async () => ({ text: '# web scraper', metadata: {} })) } as never,
+      {
+        judge: vi.fn(),
+        classifyAutoPublishCategory: vi.fn(async () => ({ blocked: false, matchedCategory: null, reason: 'not excluded', model: 'test-model' })),
+      } as never,
+      { convertProposal: vi.fn() } as never,
+      { submitForReview: vi.fn(), approve: vi.fn(), publish: vi.fn() } as never,
+      { enabled: true, excludedCategories: [], autoApproveWithoutJudger: false, similarityThreshold: 0.5 },
+      {
+        getProposal: vi.fn(async () => null),
+        findProposalByContentDigest: vi.fn(async () => null),
+        findPublishedSkillByContentDigest: vi.fn(async () => null),
+      } as never,
+      duplicateCheck as never,
+    );
+
+    const result = await useCase.execute(proposal.id);
+
+    expect(result.eligible).toBe(false);
+    expect(result.blockedReason).toBe('manual_review_required');
+    expect(result.classifierReason).toContain('Duplicate similarity check blocked auto-publish');
+    expect(result.classifierReason).toContain('0.62');
+    expect(append).toHaveBeenCalled();
+    expect(duplicateCheck.executeForProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when semantic duplicate enrichment is unavailable', async () => {
+    const proposal = Proposal.create({
+      id: 'proposal-semantic-unavailable',
+      title: 'Web scraper',
+      description: 'Scrape web pages and extract structured data.',
+      category: 'tooling',
+      tags: ['agent', 'web'],
+      capabilities: ['read', 'scrape'],
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    })
+      .addFile(ProposalFile.create({
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 100,
+        sha256: 'abc',
+      }))
+      .finalizeUpload()
+      .addJudgement(greenJudgement('proposal', 'proposal-semantic-unavailable'))
+      .addJudgement(greenJudgement('file', 'proposal-semantic-unavailable:SKILL.md'));
+
+    const duplicateCheck = {
+      executeForProposal: vi.fn().mockResolvedValue({
+        semanticCheck: { status: 'unavailable', reason: 'Semantic duplicate enrichment is unavailable.' },
+        result: {
+          submittedContentDigest: null,
+          exactDuplicateProposalId: null,
+          exactDuplicateSkillId: null,
+          similarMatches: [],
+          skillIdCollision: { exists: false, existingSkillId: null, note: '' },
+          resolutionOptions: [],
+          note: '',
+        },
+      }),
+    };
+    const convertProposal = vi.fn();
+    const useCase = new AutoPublishProposalUseCase(
+      { findProposalById: vi.fn(async () => proposal) } as never,
+      { readProposalFile: vi.fn(async () => ({ mimeType: 'text/markdown', content: Buffer.from('# web scraper') })) } as never,
+      { append: vi.fn(async () => undefined), findByProposalId: vi.fn(async () => []) } as never,
+      { scan: vi.fn(async () => ({ text: '# web scraper', metadata: {} })) } as never,
+      {
+        judge: vi.fn(),
+        classifyAutoPublishCategory: vi.fn(async () => ({ blocked: false, matchedCategory: null, reason: 'not excluded', model: 'test-model' })),
+      } as never,
+      { convertProposal } as never,
+      { submitForReview: vi.fn(), approve: vi.fn(), publish: vi.fn() } as never,
+      { enabled: true, excludedCategories: [], autoApproveWithoutJudger: false, similarityThreshold: 0.5 },
+      {} as never,
+      duplicateCheck as never,
+    );
+
+    const result = await useCase.execute(proposal.id);
+
+    expect(result.eligible).toBe(false);
+    expect(result.blockedReason).toBe('manual_review_required');
+    expect(result.classifierReason).toContain('unavailable');
+    expect(convertProposal).not.toHaveBeenCalled();
+    expect(duplicateCheck.executeForProposal).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AutoPublishProposalUseCase skillId collision gate', () => {
+  it('blocks auto-publish when the proposal targets an existing skillId', async () => {
+    const proposal = Proposal.create({
+      id: 'proposal-collision',
+      skillId: 'existing-skill',
+      title: 'Existing skill update',
+      description: 'A meaningful new version of an existing skill.',
+      category: 'tooling',
+      tags: ['update'],
+      capabilities: ['read'],
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    })
+      .addFile(ProposalFile.create({
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 100,
+        sha256: 'abc',
+      }))
+      .finalizeUpload()
+      .addJudgement(greenJudgement('proposal', 'proposal-collision'))
+      .addJudgement(greenJudgement('file', 'proposal-collision:SKILL.md'));
+
+    const duplicateCheck = {
+      executeForProposal: vi.fn().mockResolvedValue({
+        semanticCheck: { status: 'not_required', reason: null },
+        result: {
+        submittedContentDigest: null,
+        exactDuplicateProposalId: null,
+        exactDuplicateSkillId: null,
+        similarMatches: [],
+        skillIdCollision: { exists: true, existingSkillId: 'existing-skill', note: '' },
+        resolutionOptions: [],
+        note: '',
+        },
+      }),
+    };
+
+    const append = vi.fn(async () => undefined);
+    const useCase = new AutoPublishProposalUseCase(
+      { findProposalById: vi.fn(async () => proposal) } as never,
+      { readProposalFile: vi.fn(async () => ({ mimeType: 'text/markdown', content: Buffer.from('# existing skill update') })) } as never,
+      { append, findByProposalId: vi.fn(async () => []) } as never,
+      { scan: vi.fn(async () => ({ text: '# existing skill update', metadata: {} })) } as never,
+      {
+        judge: vi.fn(),
+        classifyAutoPublishCategory: vi.fn(async () => ({ blocked: false, matchedCategory: null, reason: 'not excluded', model: 'test-model' })),
+      } as never,
+      { convertProposal: vi.fn() } as never,
+      { submitForReview: vi.fn(), approve: vi.fn(), publish: vi.fn() } as never,
+      { enabled: true, excludedCategories: [], autoApproveWithoutJudger: false, similarityThreshold: 0.5 },
+      {
+        getProposal: vi.fn(async () => null),
+        findProposalByContentDigest: vi.fn(async () => null),
+        findPublishedSkillByContentDigest: vi.fn(async () => null),
+      } as never,
+      duplicateCheck as never,
+    );
+
+    const result = await useCase.execute(proposal.id);
+
+    expect(result.eligible).toBe(false);
+    expect(result.blockedReason).toBe('manual_review_required');
+    expect(result.classifierReason).toContain('existing-skill');
+    expect(result.classifierReason).toContain('new draft version');
+    expect(append).toHaveBeenCalled();
+  });
 });

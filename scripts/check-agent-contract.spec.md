@@ -13,10 +13,9 @@ The script validates:
 - /discover exposes registry identity, proposal entrypoints, and published skill
   package download entrypoints.
 - /howToPropose includes current upload/finalization/package guidance.
-- Credential setup URLs and first-step instructions appear only when agent auth
-  is enabled.
-- The generated setup script contains no bearer-token secret values and renders
-  only fields required by the current runtime profile.
+- Agent-session discovery and first-step instructions appear only when bearer
+  agent auth is enabled.
+- The retired credential setup URL/route is absent.
 - Agent bootstrap documentation references discovery/proposal guidance and warns
   agents not to ask users to paste bearer tokens into chat.
 

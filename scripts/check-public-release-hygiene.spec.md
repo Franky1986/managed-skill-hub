@@ -18,7 +18,8 @@ The script checks:
 - Tracked-but-ignored files fail the release gate.
 - Private adapter, helper, deployment, environment, conversation-link, and
   transport markers are absent from every reachable Git commit.
-- Private environment examples and deploy preparation artifacts remain ignored.
+- Private environment examples and legacy private deploy-preparation artifacts
+  remain ignored; the public deployment archive script is tracked and required.
 
 ## Outputs
 

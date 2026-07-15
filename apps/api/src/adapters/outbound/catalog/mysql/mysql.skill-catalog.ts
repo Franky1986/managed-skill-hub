@@ -507,13 +507,13 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
     const rows = excludeId
       ? await this.query<CatalogProposalRow>(`
           ${buildProposalSelect()}
-          WHERE content_digest = ? AND id != ?
+          WHERE content_digest = ? AND id != ? AND status IN ('submitted', 'judged')
           ORDER BY created_at DESC
           LIMIT 1
         `, [contentDigest, excludeId])
       : await this.query<CatalogProposalRow>(`
           ${buildProposalSelect()}
-          WHERE content_digest = ?
+          WHERE content_digest = ? AND status IN ('submitted', 'judged')
           ORDER BY created_at DESC
           LIMIT 1
         `, [contentDigest]);
@@ -560,6 +560,24 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
       WHERE status IN (?, ?)
     `, [ProposalStatus.SUBMITTED, ProposalStatus.JUDGED]);
     return rows[0]?.count ?? 0;
+  }
+
+  async countProposalsByStatus(): Promise<Record<ProposalStatus, number>> {
+    const rows = await this.query<{ status: string; count: number }>(`
+      SELECT status, COUNT(*) AS count
+      FROM skill_catalog_proposals
+      GROUP BY status
+    `);
+    const result = {} as Record<ProposalStatus, number>;
+    for (const status of Object.values(ProposalStatus)) {
+      result[status] = 0;
+    }
+    for (const row of rows) {
+      if (row.status in result) {
+        result[row.status as ProposalStatus] = row.count;
+      }
+    }
+    return result;
   }
 
   async rebuild(skills: Skill[], options?: { clearProjections?: boolean }): Promise<void> {

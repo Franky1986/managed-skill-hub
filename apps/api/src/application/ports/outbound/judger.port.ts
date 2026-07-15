@@ -27,7 +27,29 @@ export interface AutoPublishCategoryCheckResult {
   model: string | null;
 }
 
+export interface SemanticDuplicateInput {
+  submittedTitle: string;
+  submittedDescription: string;
+  submittedCategory: string;
+  submittedTags: string[];
+  submittedCapabilities: string[];
+  submittedContent: string;
+  candidateTitle: string;
+  candidateDescription: string;
+  candidateCategory: string;
+  candidateTags: string[];
+  candidateCapabilities: string[];
+  candidateContent: string;
+}
+
+export interface SemanticDuplicateResult {
+  similarityScore: number;
+  reason: string;
+  model: string | null;
+}
+
 export interface SkillJudgerPort {
   judge(target: JudgementTarget): Promise<Judgement>;
   classifyAutoPublishCategory?(input: AutoPublishCategoryCheckInput): Promise<AutoPublishCategoryCheckResult>;
+  assessDuplicateSimilarity?(input: SemanticDuplicateInput): Promise<SemanticDuplicateResult>;
 }

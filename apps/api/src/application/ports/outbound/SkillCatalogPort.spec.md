@@ -57,6 +57,10 @@ and files.
 - Pending proposal counts include finalized review states such as `submitted`
   and `judged`, but exclude `in_upload` because that state is still controlled by
   the submitting agent/client.
+- Exact proposal-content lookup considers only finalized review states
+  (`submitted` and `judged`) and supports excluding the current proposal ID.
+- Proposal notices expose separate `in_upload`, `submitted`, `judged`, and
+  `converted` counts while `totalPending` remains submitted plus judged.
 
 ## Tests / Checks
 

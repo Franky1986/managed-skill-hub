@@ -26,7 +26,6 @@ interface CaseResult {
   proposalStatus: { withoutCredential: number; withCredential: number | null };
   advertisedSchemes: string[];
   howToFirstStep: string;
-  bearerSetup: { read: boolean; proposal: boolean };
   result: 'PASS';
 }
 
@@ -83,7 +82,11 @@ function container(testCase: MatrixCase): Container {
       listTags: async () => ['agent'],
     } as unknown as Container['skillQuery'],
     proposalRead: {
-      getNotice: async () => ({ hasNewProposals: false, totalPending: 0 }),
+      getNotice: async () => ({
+        hasNewProposals: false,
+        totalPending: 0,
+        counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 },
+      }),
     } as unknown as Container['proposalRead'],
   } as Container;
 }
@@ -233,7 +236,7 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
   assertEqual(discovery.readAuthRequired, testCase.read !== 'none', `${id} readAuthRequired`);
   assertEqual(discovery.proposalAuthRequired, testCase.proposal !== 'none', `${id} proposalAuthRequired`);
   assertEqual(discovery.discoveryAuthRequired, testCase.discovery !== 'none', `${id} discoveryAuthRequired`);
-  assertEqual(Boolean(discovery.credentialSetupScriptUrl), anyBearer, `${id} bearer setup URL`);
+  assertEqual(discovery.credentialSetupScriptUrl, undefined, `${id} legacy bearer setup URL`);
   const oidcScheme = discovery.authSchemes.find((scheme: { type: string }) => scheme.type === 'oauth2');
   assertEqual(Boolean(oidcScheme), anyOidc, `${id} OIDC scheme`);
   if (oidcScheme) {
@@ -247,7 +250,7 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
   const expectedFirstStep = anyOidc
     ? 'Authorize the agent through the human login link'
     : anyBearer
-      ? 'Handle registry authentication outside chat'
+      ? 'Delegate access through the agent-auth page'
       : 'Read this workflow first';
   assertEqual(howToPayload.requiredSteps[0].title, expectedFirstStep, `${id} how-to first step`);
   assertEqual(Boolean(howToPayload.apiNotes.authSetupFlow), anyAuth, `${id} auth setup guidance`);
@@ -260,6 +263,12 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
     (scheme: { type: string }) => scheme.type === 'agent-session'
   );
   assertEqual(hasAgentSessionScheme, anyBearer, `${id} agent-session scheme advertised`);
+  if (hasAgentSessionScheme) {
+    const sessionScheme = discovery.authSchemes.find(
+      (scheme: { type: string }) => scheme.type === 'agent-session'
+    );
+    assertEqual(sessionScheme.url, 'https://matrix.example.com/frontend/agent-auth', `${id} agent-session URL`);
+  }
 
   if (anyBearer) {
     const sessionCode = await createAgentSession(app, testCase);
@@ -277,12 +286,8 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
       assertEqual(cross.statusCode, 401, `${id} cross-area isolation read-only session on proposal`);
     }
   }
-  const setup = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
-  assertEqual(setup.statusCode, 200, `${id} setup script status`);
-  const setupRead = setup.payload.includes("MSH_REQUIRE_READ='true'");
-  const setupProposal = setup.payload.includes("MSH_REQUIRE_PROPOSAL='true'");
-  assertEqual(setupRead, testCase.read === 'bearer', `${id} setup read bearer`);
-  assertEqual(setupProposal, testCase.proposal === 'bearer', `${id} setup proposal bearer`);
+  const legacySetup = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
+  assertEqual(legacySetup.statusCode, 404, `${id} legacy setup route removed`);
 
   await app.close();
   return {
@@ -296,7 +301,6 @@ async function runCase(testCase: MatrixCase): Promise<CaseResult> {
     proposalStatus,
     advertisedSchemes: discovery.authSchemes.map((scheme: { id: string }) => scheme.id),
     howToFirstStep: expectedFirstStep,
-    bearerSetup: { read: setupRead, proposal: setupProposal },
     result: 'PASS',
   };
 }

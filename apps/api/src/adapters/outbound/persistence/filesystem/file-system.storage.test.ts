@@ -76,4 +76,14 @@ describe('FileSystemSkillStorage', () => {
     ).rejects.toBeInstanceOf(StorageError);
     await expect(storage.readProposalFile('proposal-a', '/absolute.txt')).rejects.toBeInstanceOf(StorageError);
   });
+
+  it('rejects storage identifiers that escape their entity directory', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-storage-'));
+    tempDirs.push(dataDir);
+    const storage = new FileSystemSkillStorage(dataDir);
+
+    await expect(storage.readProposalFile('../..', 'README.md')).rejects.toBeInstanceOf(StorageError);
+    await expect(storage.readSkillFile('../skill-a', '1.0.0', 'README.md')).rejects.toBeInstanceOf(StorageError);
+    await expect(storage.readSkillFile('skill-a', '../1.0.0', 'README.md')).rejects.toBeInstanceOf(StorageError);
+  });
 });

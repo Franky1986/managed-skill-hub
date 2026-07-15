@@ -37,6 +37,12 @@ function adminOnlyNextStepsFor(status: ProposalStatus): string[] {
 export interface ProposalNoticeDto {
   hasNewProposals: boolean;
   totalPending: number;
+  counts: {
+    in_upload: number;
+    submitted: number;
+    judged: number;
+    converted: number;
+  };
 }
 
 export class ProposalReadUseCase {
@@ -134,11 +140,19 @@ export class ProposalReadUseCase {
       autoPublishBlockedReason: autoPublishState.blockedReason,
       reviewNote: !uploadFinalized
         ? 'This proposal upload is still open. The submitter must finish attaching files and explicitly finalize the upload before review can continue.'
+        : proposal.status === ProposalStatus.CONVERTED
+        ? 'The proposal has been converted into a skill draft. It is not published yet; an admin must still submit it for review, approve it, and publish it before it appears in the public skill catalog. If auto-publish ran, the skill version is already published.'
+        : proposal.status === ProposalStatus.REJECTED
+        ? 'The proposal was rejected by an admin. No publication path remains open for this proposal.'
+        : proposal.status === ProposalStatus.APPROVED
+        ? 'The proposal was approved by an admin and converted into a skill draft. It still needs to be submitted for review, approved as a version, and published before it is public.'
         : adminReviewDone
         ? 'Admin review has been completed for this proposal.'
         : 'This proposal is awaiting admin review. Automatic judgement is performed, but only an admin can approve, reject or convert it into a published skill.',
       nextStepForSubmitter: !uploadFinalized
-        ? 'Continue attaching files if needed, then call POST /proposals/{id}/finalize-upload when the package is complete. After finalization, poll this endpoint again.'
+        ? 'The upload is still open. Attach any remaining files, then call POST /proposals/{id}/finalize-upload. Finalization is mandatory: do not leave the proposal in_upload. If the upload cannot be completed, delete the proposal with DELETE /proposals/{id} instead of abandoning it.'
+        : proposal.status === ProposalStatus.CONVERTED
+        ? 'The proposal has been converted to a skill draft. If auto-publish succeeded, the skill is already published. If not, an admin must review and publish the draft. Poll this endpoint to see convertedSkillId and the final publication state.'
         : adminReviewDone
         ? 'No further action from the submitter is possible. Check convertedSkillId or rejectionReason for the outcome.'
         : 'Poll this endpoint periodically. Once an admin reviews the proposal, convertedSkillId or rejectionReason will be populated.',
@@ -161,21 +175,38 @@ export class ProposalReadUseCase {
 
   async getNotice(): Promise<ProposalNoticeDto> {
     if (this.catalog) {
-      const totalPending = await this.catalog.countPendingProposals();
+      const [totalPending, byStatus] = await Promise.all([
+        this.catalog.countPendingProposals(),
+        this.catalog.countProposalsByStatus(),
+      ]);
       return {
         hasNewProposals: totalPending > 0,
         totalPending,
+        counts: {
+          in_upload: byStatus.in_upload ?? 0,
+          submitted: byStatus.submitted ?? 0,
+          judged: byStatus.judged ?? 0,
+          converted: byStatus.converted ?? 0,
+        },
       };
     }
 
     const result = await this.repo.findProposals();
-    const totalPending = result.items.filter(
-      (proposal) =>
-        proposal.status === 'submitted' || proposal.status === 'judged'
-    ).length;
+    const byStatus = result.items.reduce(
+      (acc, proposal) => {
+        const status = proposal.status as keyof ProposalNoticeDto['counts'];
+        if (status in acc) {
+          acc[status] += 1;
+        }
+        return acc;
+      },
+      { in_upload: 0, submitted: 0, judged: 0, converted: 0 }
+    );
+    const totalPending = byStatus.submitted + byStatus.judged;
     return {
       hasNewProposals: totalPending > 0,
       totalPending,
+      counts: byStatus,
     };
   }
 

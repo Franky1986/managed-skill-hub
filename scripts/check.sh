@@ -77,7 +77,7 @@ log_info "Found .spec.md files: $SPEC_COUNT"
 
 # Check important scripts.
 for script in \
-  scripts/prepare-deploy.sh \
+  scripts/create-deploy-archive.sh \
   scripts/install_and_start.sh \
   scripts/restart-server.sh \
   scripts/restart-all.sh \

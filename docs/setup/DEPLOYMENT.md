@@ -37,14 +37,15 @@
 
 2. Create the deploy archive:
    ```bash
-   bash scripts/prepare-deploy.sh
+   ./scripts/check.sh
+   npm run build:prod
+   bash scripts/create-deploy-archive.sh
    ```
 
-   The script runs:
-   - `./scripts/check.sh` for structure, lint, typecheck, and tests
-   - `npm run build:prod`
-   - creates `.tmp/deploy/managed-skill-hub-deploy.tar.gz`
-   - excludes `data/` from the archive
+   The script archives the committed Git tree to
+   `.tmp/deploy/managed-skill-hub-deploy.tar.gz`. It intentionally excludes
+   untracked/ignored runtime data and secrets. Commit the reviewed release state
+   before creating the archive.
 
 3. Copy the archive to the server:
    ```bash

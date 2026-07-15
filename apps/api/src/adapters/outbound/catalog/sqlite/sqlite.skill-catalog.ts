@@ -471,11 +471,11 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
     const db = this.getDb();
     const query = excludeId
       ? `${buildProposalSelect()}
-         WHERE content_digest = ? AND id != ?
+         WHERE content_digest = ? AND id != ? AND status IN ('submitted', 'judged')
          ORDER BY created_at DESC
          LIMIT 1`
       : `${buildProposalSelect()}
-         WHERE content_digest = ?
+         WHERE content_digest = ? AND status IN ('submitted', 'judged')
          ORDER BY created_at DESC
          LIMIT 1`;
     const params = excludeId ? [contentDigest, excludeId] : [contentDigest];
@@ -532,6 +532,27 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
       )
       .get(ProposalStatus.SUBMITTED, ProposalStatus.JUDGED) as { count: number };
     return row.count;
+  }
+
+  async countProposalsByStatus(): Promise<Record<ProposalStatus, number>> {
+    const db = this.getDb();
+    const rows = db
+      .prepare(
+        `SELECT status, COUNT(*) as count
+         FROM skill_catalog_proposals
+         GROUP BY status`
+      )
+      .all() as Array<{ status: string; count: number }>;
+    const result = {} as Record<ProposalStatus, number>;
+    for (const status of Object.values(ProposalStatus)) {
+      result[status] = 0;
+    }
+    for (const row of rows) {
+      if (row.status in result) {
+        result[row.status as ProposalStatus] = row.count;
+      }
+    }
+    return result;
   }
 
   async rebuild(skills: Skill[], options?: { clearProjections?: boolean }): Promise<void> {

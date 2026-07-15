@@ -285,7 +285,7 @@ Required checks:
 - No tracked private custom adapter implementation files.
 - No absolute local user paths in public docs except explicitly allowed examples.
 - Git history scan command is documented and can be run before public release.
-- Public README, README_DE, LICENSE, SECURITY, CONTRIBUTING, and NOTICE exist.
+- Public README, README_de, LICENSE, SECURITY, CONTRIBUTING, and NOTICE exist.
 
 Artifacts:
 

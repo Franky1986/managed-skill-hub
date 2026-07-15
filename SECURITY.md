@@ -11,8 +11,12 @@ Until stable release governance is established, users should track the latest
 
 ## Reporting A Vulnerability
 
-Please do not report security issues in public issues.
-Use private coordinator channels for vulnerability reports and include:
+Please do not report security issues in public issues. Submit reports through
+[GitHub private vulnerability reporting](https://github.com/frankrichter/managed-skill-hub/security/advisories/new).
+If GitHub private reporting is unavailable, contact the maintainer privately
+through the profile linked in the repository before sharing vulnerability details.
+
+Include:
 
 - branch / commit
 - exact steps to reproduce

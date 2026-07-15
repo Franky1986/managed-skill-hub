@@ -18,6 +18,39 @@ async function buildApp(container: Container, trustProxy: boolean | string[] = f
 }
 
 describe('registerProposalRoutes', () => {
+  it('does not forward an arbitrary proposalId from the public duplicate preflight', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      submittedContentDigest: null,
+      exactDuplicateProposalId: null,
+      exactDuplicateSkillId: null,
+      similarMatches: [],
+      skillIdCollision: { exists: false, existingSkillId: null, note: '' },
+      resolutionOptions: [],
+      note: '',
+    });
+    const container = {
+      config: { proposalAuthMode: 'none' },
+      proposalDuplicateCheck: { execute },
+    } as unknown as Container;
+    const app = await buildApp(container);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/proposals/check-duplicate',
+      payload: {
+        proposalId: '../../private-proposal',
+        title: 'Public metadata',
+        description: 'Fingerprint-only preflight',
+        category: 'tooling',
+        entrypoint: 'SKILL.md',
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('guards proposal endpoints and derives actor from bearer auth', async () => {
     const submitProposal = vi.fn().mockResolvedValue({ id: 'prop-1' });
     const container = {
@@ -126,7 +159,7 @@ describe('registerProposalRoutes', () => {
   });
 
   it('rate limits refreshed OIDC tokens by stable principal and client identity', async () => {
-    const getNotice = vi.fn().mockResolvedValue({ hasNewProposals: false, totalPending: 0 });
+    const getNotice = vi.fn().mockResolvedValue({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 } });
     const container = {
       config: {
         proposalAuthMode: 'oidc',

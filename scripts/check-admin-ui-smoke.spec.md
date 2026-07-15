@@ -14,11 +14,13 @@ The proof is source-contract based and does not require a browser driver. It is 
 - Admin routes stay behind `AdminRoute` and redirect anonymous users to `/admin/login`.
 - Primary admin navigation entries are gated by `isAuthenticated`.
 - Admin login, session refresh, logout, and logout redirect are wired.
-- How-to-propose setup guidance is config-aware and only renders the setup download when the API returns a setup script URL.
-- Auth error copy can point users and agents to the setup script without exposing tokens.
+- How-to-propose auth guidance is config-aware and tells users never to paste
+  bearer tokens into chat.
+- Auth error copy can expose the affected auth area and safe recommendation
+  without exposing tokens.
 - Proposal detail and judgement UI distinguish `no_judge_available` / not-judged states.
 - Admin proposal review, draft/conversion, and proposal-decision refresh paths are reachable from the UI source.
-- Proposal navigation, admin list/detail, and public status views use the shared
+- Proposal navigation, admin list/count/detail, and public status views use the shared
   non-overlapping 10-second background poller with request cancellation.
 
 ## Artifacts

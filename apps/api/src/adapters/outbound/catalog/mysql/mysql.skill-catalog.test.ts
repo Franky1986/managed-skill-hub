@@ -547,7 +547,9 @@ class FakeMysqlClient {
   private queryProposalByContentDigest(params: unknown[]): ProposalRow[] {
     const [contentDigest, excludeId] = params;
     const match = [...this.proposals.values()].find((proposal) =>
-      proposal.content_digest === String(contentDigest) && (!excludeId || proposal.id !== String(excludeId))
+      proposal.content_digest === String(contentDigest)
+      && (proposal.status === 'submitted' || proposal.status === 'judged')
+      && (!excludeId || proposal.id !== String(excludeId))
     );
     return match ? [this.hydrateProposalJudgementProjection(match)] : [];
   }

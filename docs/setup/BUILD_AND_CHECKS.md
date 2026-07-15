@@ -143,7 +143,7 @@ bash scripts/smoke-test.sh
 ## Deployment
 
 ```bash
-bash scripts/prepare-deploy.sh
+bash scripts/create-deploy-archive.sh
 # Then manually extract and start on the server.
 # See `docs/setup/DEPLOYMENT.md` and `docs/setup/NGINX.md`.
 ```

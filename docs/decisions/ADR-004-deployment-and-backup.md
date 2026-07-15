@@ -17,7 +17,7 @@ must survive redeploys.
 - `/path/to/deploy-root/data/` contains skills, uploads, index, audit log,
   and backups, and remains untouched during redeploys.
 - Deployment follows a staged archive rollout pattern:
-  - Local: `scripts/prepare-deploy.sh` creates a `tar.gz` archive.
+  - Local: `scripts/create-deploy-archive.sh` creates a `tar.gz` archive from the committed tree.
   - Server: the archive is extracted, `src/` is replaced, and `data/` remains.
 - In the MVP, the stack starts in the background via `scripts/restart-server.sh`
   (`nohup`, PID file).

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigurationError } from '../domain/errors';
 import {
   loadConfig,
@@ -656,5 +656,33 @@ describe('security config', () => {
 
     expect(config.proposalAuthMode).toBe('none');
     expect(config.allowOpenProposalsInProduction).toBe(true);
+  });
+});
+
+describe('AUTO_PUBLISH_SIMILARITY_THRESHOLD default', () => {
+  let originalThreshold: string | undefined;
+
+  beforeEach(() => {
+    originalThreshold = process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD;
+    delete process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD;
+  });
+
+  afterEach(() => {
+    if (originalThreshold === undefined) {
+      delete process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD;
+    } else {
+      process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD = originalThreshold;
+    }
+  });
+
+  it('defaults to 0.5 when AUTO_PUBLISH_SIMILARITY_THRESHOLD is not set', () => {
+    const config = loadConfig();
+    expect(config.autoPublishSimilarityThreshold).toBe(0.5);
+  });
+
+  it('reads the threshold from AUTO_PUBLISH_SIMILARITY_THRESHOLD when set', () => {
+    process.env.AUTO_PUBLISH_SIMILARITY_THRESHOLD = '0.65';
+    const config = loadConfig();
+    expect(config.autoPublishSimilarityThreshold).toBe(0.65);
   });
 });

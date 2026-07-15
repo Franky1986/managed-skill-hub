@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { adminApi } from '../api/admin';
+import { adminApi, type ProposalNotice } from '../api/admin';
 import { hasAdminRole, useAuthStore } from '../store/auth';
 import { useLanguage, type LanguageCode } from '../i18n';
 import { useBackgroundPolling } from '../hooks/useBackgroundPolling';
@@ -11,7 +11,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-    const [proposalNotice, setProposalNotice] = useState<{ hasNewProposals: boolean; totalPending: number } | null>(null);
+    const [proposalNotice, setProposalNotice] = useState<ProposalNotice | null>(null);
     const [agentAuthAreas, setAgentAuthAreas] = useState<string[]>([]);
     const location = useLocation();
     const navigate = useNavigate();
@@ -122,9 +122,14 @@ export function Layout({ children }: LayoutProps) {
                                 <>
                                     {canReview && <Link
                                         to="/admin/proposals"
+                                        title={proposalNotice ? t('app.nav.openProposalsBreakdown', proposalNotice.counts) : t('app.nav.openProposals', { count: 0 })}
                                         className="bg-surface text-on-surface border border-outline-variant px-3 py-2 rounded-lg font-body text-small font-semibold hover:opacity-90 transition-opacity active:scale-95 duration-150 whitespace-nowrap"
                                     >
-                                        {t('app.nav.openProposals', { count: proposalNotice?.hasNewProposals ? proposalNotice.totalPending : 0 })}
+                                        {t('app.nav.openProposalsBadge', {
+                                            open: (proposalNotice?.counts.submitted ?? 0) + (proposalNotice?.counts.judged ?? 0),
+                                            in_upload: proposalNotice?.counts.in_upload ?? 0,
+                                            converted: proposalNotice?.counts.converted ?? 0,
+                                        })}
                                     </Link>}
                                     <Link
                                         to="/admin/drafts"

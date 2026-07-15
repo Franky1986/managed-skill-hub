@@ -194,7 +194,7 @@ export async function buildContainer(
     judger,
     config.publishJudgementPolicy
   );
-  const proposalDuplicateCheck = new ProposalDuplicateCheckUseCase(catalog);
+  const proposalDuplicateCheck = new ProposalDuplicateCheckUseCase(catalog, storage, scanner, judger);
 
   const autoPublishProposal = new AutoPublishProposalUseCase(
     repo,

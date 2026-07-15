@@ -73,7 +73,7 @@ function container(testCase: MatrixCase): Container {
       listTags: async () => ['agent'],
     } as unknown as Container['skillQuery'],
     proposalRead: {
-      getNotice: async () => ({ hasNewProposals: false, totalPending: 0 }),
+      getNotice: async () => ({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 } }),
     } as unknown as Container['proposalRead'],
     agentSessionRepository: new InMemoryAgentSessionRepository(),
   } as Container;

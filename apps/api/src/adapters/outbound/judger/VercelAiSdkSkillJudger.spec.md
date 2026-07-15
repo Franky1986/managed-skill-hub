@@ -10,6 +10,8 @@ Provide a concrete `SkillJudgerPort` implementation backed by the Vercel AI SDK.
 - Pass shared prompt contract and max text limits to the AI SDK call.
 - Validate provider output with structured output schema and then reuse the shared judgement
   parser, safety/quality-fit dimensions, and domain `Judgement` creation.
+- Support structured auto-publish category classification and semantic duplicate
+  similarity assessment through dedicated prompt/output contracts.
 - Fail fast for invalid model configuration and map transport/protocol failures
   to domain-specific judger errors.
 
@@ -23,8 +25,9 @@ Provide a concrete `SkillJudgerPort` implementation backed by the Vercel AI SDK.
 
 - Resolve models through the provider registry (`vercel-ai-sdk.registry.ts`) at
   adapter construction time.
-- Call `generateText` with `output: Output.object({ schema })` and consume
-  `result.output` to request AI SDK structured output.
+- Call `generateObject` with the relevant Zod schema, timeout signal, and retry limit.
+- Delimit and encode duplicate-comparison content as untrusted data so submitted
+  text cannot terminate the prompt sections.
 - Handle timeout, unavailable, and invalid structured output with explicit domain errors.
 - Return an immutable `Judgement` created by the shared contract.
 
@@ -35,7 +38,7 @@ Provide a concrete `SkillJudgerPort` implementation backed by the Vercel AI SDK.
 
 ## Dependencies
 
-- `ai` transport and `Output.object` through the stable `output` contract
+- `ai` structured-output transport
 - `@ai-sdk/openai` as default registry provider
 - `judgement-contract` for prompt text and domain mapping
 
@@ -53,3 +56,4 @@ Provide a concrete `SkillJudgerPort` implementation backed by the Vercel AI SDK.
 - Structured output is parsed via shared `parseJudgementOutput()`.
 - Adapter sets model metadata to `vercel-ai-sdk:<model-id>`.
 - Invalid model configuration fails before the first judgement request.
+- Duplicate reasons remain high level and the prompt forbids quoting compared content.

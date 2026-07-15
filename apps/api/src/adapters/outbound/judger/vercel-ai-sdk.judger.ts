@@ -2,6 +2,8 @@ import { generateObject, type LanguageModel } from 'ai';
 import {
   AutoPublishCategoryCheckInput,
   AutoPublishCategoryCheckResult,
+  SemanticDuplicateInput,
+  SemanticDuplicateResult,
   SkillJudgerPort,
   JudgementTarget,
 } from '../../../application/ports/outbound/judger.port';
@@ -13,6 +15,12 @@ import {
   buildAutoPublishCategoryUserPrompt,
   parseAutoPublishCategoryOutput,
 } from './auto-publish-category-contract';
+import {
+  buildDuplicateSimilaritySystemPrompt,
+  buildDuplicateSimilarityUserPrompt,
+  duplicateSimilarityResponseZodSchema,
+  parseDuplicateSimilarityOutput,
+} from './duplicate-similarity-contract';
 import {
   buildJudgementSystemPrompt,
   buildJudgementUserPrompt,
@@ -110,6 +118,36 @@ export class VercelAiSdkSkillJudger implements SkillJudgerPort {
     }
 
     return parseAutoPublishCategoryOutput(output, `Vercel AI SDK (${this.config.model})`, `vercel-ai-sdk:${this.config.model}`);
+  }
+
+  async assessDuplicateSimilarity(input: SemanticDuplicateInput): Promise<SemanticDuplicateResult> {
+    let output: Record<string, unknown>;
+    try {
+      const result = await this.generateObject({
+        model: this.model,
+        system: buildDuplicateSimilaritySystemPrompt(),
+        prompt: buildDuplicateSimilarityUserPrompt(input, this.config.maxTextChars),
+        schema: duplicateSimilarityResponseZodSchema,
+        maxRetries: this.config.maxRetries,
+        abortSignal: AbortSignal.timeout(this.config.timeoutMs),
+      });
+
+      output = result.object as Record<string, unknown>;
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        throw new JudgerTimeoutError(`Vercel AI SDK duplicate similarity check timed out after ${this.config.timeoutMs} ms`);
+      }
+      if (isProtocolError(error)) {
+        throw new JudgerProtocolError(
+          `Vercel AI SDK duplicate similarity output does not match the schema: ${(error as Error).message}`
+        );
+      }
+      throw new JudgerUnavailableError(
+        `Vercel AI SDK duplicate similarity request failed: ${(error as Error).message}`
+      );
+    }
+
+    return parseDuplicateSimilarityOutput(output, `Vercel AI SDK (${this.config.model})`, `vercel-ai-sdk:${this.config.model}`);
   }
 }
 

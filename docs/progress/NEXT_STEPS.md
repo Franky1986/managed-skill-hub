@@ -30,8 +30,41 @@
       auto-publish eligibility, and publication flow.
 - [x] Add semantic duplicate gate so auto-publish only proceeds for genuinely
       new skills, not near-duplicates of existing published skills.
+      - [x] Lower default threshold to `0.5` and make it configurable via `.env`.
+      - [x] Add LLM-based full `SKILL.md` content comparison on top heuristic matches.
+      - [x] Use the higher of heuristic and LLM score for the auto-publish gate.
+      - [x] Return `manual_review_required` with candidate name and score when blocked.
+      - [x] Block auto-publish when the proposal targets an existing `skillId` (new version path).
+      - [x] Update agent-facing wording to distinguish proposal vs skill lifecycle states.
 
 ## Production Readiness Verification
+
+### Minimum Public Release Path (non-Authentik)
+
+For the default release profile, complete:
+
+- [x] Automated baseline: `./scripts/check.sh`, `npm run build:prod`, `npm audit`.
+- [ ] Restart both services with the default simple-admin / bearer-agent profile.
+- [x] Verify the semantic duplicate gate blocks auto-publish for a near-duplicate
+      skill and allows it for a genuinely new skill.
+- [x] Verify the admin proposal badge shows the correct `open/in_upload/converted`
+      breakdown. (Top navigation shows `Proposals (open/in_upload/converted)`;
+      proposal page open filter shows submitted/judged breakdown and refreshes it.)
+- [x] Verify agent-facing wording in `/howToPropose` and `/proposals/:id/status`
+      distinguishes proposal vs skill lifecycle states. (skillIdCollision now explicitly recommends the new-version path and explains no auto-publish; status endpoint already distinguishes proposal and skill states.)
+- [ ] Run the judgement acceptance scenarios for `noop`, `vercel-ai-sdk`, and one
+      custom adapter, including provider failure/unavailable handling.
+- [ ] Run the publication-policy matrix (`disabled`, `warn`, `required`) and the
+      admin override path.
+- [ ] Verify static bearer production fail-fast rejects short/default/example secrets.
+- [ ] Verify backup/restore for SQLite + filesystem content storage.
+- [ ] Confirm reverse-proxy request/body limits and CORS origins in the target
+      deployment.
+
+### Authentik / OIDC Preview Path (experimental)
+
+OIDC and Authentik are code-complete but treated as experimental for the first
+release. Complete these only when OIDC is the target profile:
 
 - Execute `docs/setup/PRODUCTION_READINESS_HANDOFF.md` and record results in the
   existing authentication and judgement acceptance checklists.
@@ -96,7 +129,11 @@ Before closing future language work, run the German-text search checklist and
 - Expand smoke tests for admin proposal/skill/judgement flows.
 - Decide whether rejected skill versions need a separate archived/rejected admin
   view beyond their current visibility in the review queue.
-- Harden duplicate-check UX and agent-side preflight heuristics.
+- [x] Harden duplicate-check boundaries and agent-side preflight heuristics. The
+      public route is metadata/fingerprint-only; internal semantic checks exclude
+      the current proposal and use only published-skill candidate content.
+- Keep semantic reasons internal to review/auto-publish decisions; public
+  duplicate responses must not expose model-generated summaries of stored content.
 - EPIC-010 follow-up: evolve the implemented first-stage portable `commands/`
   validation and manifest convention into deterministic consumer-side install
   mapping for Cursor, Codex, Claude Code, and generic runtimes.

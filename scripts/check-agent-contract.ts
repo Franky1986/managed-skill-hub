@@ -4,6 +4,7 @@ import { AgentApiAuth } from '../apps/api/src/adapters/inbound/http/agent-api-au
 import { registerApiErrorHandler } from '../apps/api/src/adapters/inbound/http/error-response';
 import { registerProposalRoutes } from '../apps/api/src/adapters/inbound/http/proposal.controller';
 import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/skill-read.controller';
+import { registerAgentSessionRoutes } from '../apps/api/src/adapters/inbound/http/agent-session.controller';
 import type { AppConfig } from '../apps/api/src/infrastructure/config';
 import type { Container } from '../apps/api/src/infrastructure/container';
 
@@ -37,6 +38,11 @@ function config(profile: AuthProfile): AppConfig {
     proposalMaxFileSizeBytes: 10 * 1024 * 1024,
     proposalDisallowedPaths: ['node_modules/', '.venv/', 'venv/'],
     autoPublishOnGreen: false,
+    agentSessionEnabled: true,
+    agentSessionTtlSeconds: 10800,
+    agentSessionCodeLength: 8,
+    agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+    agentSessionMaxActive: null,
   } as AppConfig;
 }
 
@@ -51,7 +57,11 @@ function container(profile: AuthProfile): Container {
       listTags: async () => ['agent'],
     } as unknown as Container['skillQuery'],
     proposalRead: {
-      getNotice: async () => ({ hasNewProposals: false, totalPending: 0 }),
+      getNotice: async () => ({
+        hasNewProposals: false,
+        totalPending: 0,
+        counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 },
+      }),
     } as unknown as Container['proposalRead'],
   } as Container;
 }
@@ -62,6 +72,16 @@ async function buildApp(profile: AuthProfile) {
   const auth = new AgentApiAuth(c.config);
   registerSkillReadRoutes(app, c, auth);
   registerProposalRoutes(app, c, auth);
+  if (profile === 'proposal-auth') {
+    c.agentSessionRepository = {
+      create: async () => undefined,
+    } as unknown as Container['agentSessionRepository'];
+    registerAgentSessionRoutes(app, c, auth, {
+      mode: 'simple',
+      validate: async () => null,
+      requireRole: async () => null,
+    } as unknown as import('../apps/api/src/adapters/inbound/http/admin-auth').AdminAuth);
+  }
   registerApiErrorHandler(app);
   return app;
 }
@@ -80,12 +100,12 @@ async function runProfile(profile: AuthProfile): Promise<CheckResult> {
   const app = await buildApp(profile);
   const discoverResponse = await app.inject({ method: 'GET', url: '/discover' });
   const howToResponse = await app.inject({ method: 'GET', url: '/howToPropose' });
-  const setupResponse = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
+  const legacySetupResponse = await app.inject({ method: 'GET', url: '/agent-credentials/setup.sh' });
   await app.close();
 
   assert(discoverResponse.statusCode === 200, profile + ' discover status');
   assert(howToResponse.statusCode === 200, profile + ' howToPropose status');
-  assert(setupResponse.statusCode === 200, profile + ' setup script status');
+  assert(legacySetupResponse.statusCode === 404, profile + ' legacy setup route removed');
 
   const discover = parseJson(discoverResponse.payload);
   const howTo = parseJson(howToResponse.payload);
@@ -98,17 +118,23 @@ async function runProfile(profile: AuthProfile): Promise<CheckResult> {
     proposalSubmitEntrypoint: entrypointPaths.has('/proposals'),
     proposalStatusEntrypoint: entrypointPaths.has('/proposals/:id/status'),
     howToEntrypoint: entrypointPaths.has('/howToPropose'),
-    setupUrlPresenceMatchesAuth: Boolean(discover.credentialSetupScriptUrl) === hasAnyAuth,
-    howToSetupPresenceMatchesAuth: Boolean(howTo.apiNotes?.credentialSetupScriptUrl) === hasAnyAuth,
-    howToFirstStepMatchesAuth: howTo.requiredSteps?.[0]?.title === (hasAnyAuth ? 'Handle registry authentication outside chat' : 'Read this workflow first'),
+    legacySetupUrlAbsent: discover.credentialSetupScriptUrl === undefined
+      && howTo.apiNotes?.credentialSetupScriptUrl === undefined,
+    agentSessionPresenceMatchesAuth: discover.authSchemes.some(
+      (scheme: { type: string }) => scheme.type === 'agent-session'
+    ) === hasAnyAuth,
+    agentSessionUrlMatchesAuth: hasAnyAuth
+      ? discover.authSchemes.some(
+          (scheme: { type: string; url?: string }) => scheme.type === 'agent-session'
+            && scheme.url === 'https://contract.example.com/frontend/agent-auth'
+        )
+      : true,
+    howToFirstStepMatchesAuth: howTo.requiredSteps?.[0]?.title === (hasAnyAuth ? 'Delegate access through the agent-auth page' : 'Read this workflow first'),
     packageRulesPresent: JSON.stringify(howTo).includes('SKILL.md') && JSON.stringify(howTo).includes('finalize-upload'),
     preUploadPackageProofPresent: howTo.preUploadPackageProof?.requiredBeforeProposalCreation === true
       && JSON.stringify(howTo.preUploadPackageProof).includes('.cursor/skills/')
       && JSON.stringify(howTo.preUploadPackageProof).includes('POST /proposals'),
-    setupScriptNoSecret: !setupResponse.payload.includes('proposal-token') && !setupResponse.payload.includes('read-token'),
-    setupScriptConfigAware: profile === 'proposal-auth'
-      ? setupResponse.payload.includes("MSH_REQUIRE_PROPOSAL='true'") && !setupResponse.payload.includes('Read bearer token')
-      : setupResponse.payload.includes("MSH_REQUIRE_PROPOSAL='false'") && !setupResponse.payload.includes('Proposal bearer token'),
+    legacySetupRouteRemoved: legacySetupResponse.statusCode === 404,
   };
 
   for (const [name, passed] of Object.entries(checks)) {

@@ -293,6 +293,42 @@ describe('SqliteSkillCatalog', () => {
     expect(pendingCount).toBe(1);
   });
 
+  it('finds exact proposal content only in finalized review states and supports self-exclusion', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-catalog-'));
+    tempDirs.push(dataDir);
+    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const file = ProposalFile.create({
+      id: 'SKILL.md',
+      path: 'SKILL.md',
+      mimeType: 'text/markdown',
+      sizeBytes: 14,
+      sha256: 'same-content',
+    });
+    const uploading = Proposal.create({
+      id: 'proposal-uploading',
+      title: 'Same proposal',
+      description: 'Same content metadata',
+      category: 'automation',
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    }).addFile(file);
+    const submitted = Proposal.create({
+      id: 'proposal-submitted',
+      title: 'Same proposal',
+      description: 'Same content metadata',
+      category: 'automation',
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    }).addFile(file).finalizeUpload();
+
+    await catalog.upsertProposal(uploading);
+    await catalog.upsertProposal(submitted);
+
+    expect(uploading.contentDigest).toBe(submitted.contentDigest);
+    expect((await catalog.findProposalByContentDigest(submitted.contentDigest!))?.id).toBe(submitted.id);
+    expect(await catalog.findProposalByContentDigest(submitted.contentDigest!, submitted.id)).toBeNull();
+  });
+
   it('maps noop proposal judgements to no_judge_available', async () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-catalog-'));
     tempDirs.push(dataDir);

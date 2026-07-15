@@ -8,6 +8,17 @@ import { deriveFinalizeJudgementStatus } from '../../../application/usecases/jud
 
 export type ProposalRateLimiter = ReturnType<typeof createProposalRateLimiter>;
 
+const DUPLICATE_CHECK_BODY_FIELDS = new Set([
+  'skillId',
+  'title',
+  'description',
+  'category',
+  'tags',
+  'capabilities',
+  'entrypoint',
+  'files',
+]);
+
 export function registerProposalRoutes(
   app: FastifyInstance,
   container: Container,
@@ -80,7 +91,7 @@ export function registerProposalRoutes(
 
   app.post('/proposals/check-duplicate', proposalGuard, async (request, reply) => {
     try {
-      const body = request.body as {
+      const body = request.body as Record<string, unknown> & {
         skillId?: string;
         title: string;
         description: string;
@@ -90,6 +101,16 @@ export function registerProposalRoutes(
         entrypoint?: string;
         files?: Array<{ path: string; sha256?: string | null }>;
       };
+      const unexpectedFields = Object.keys(body ?? {}).filter(
+        (field) => !DUPLICATE_CHECK_BODY_FIELDS.has(field)
+      );
+      if (unexpectedFields.length > 0) {
+        return sendApiError(reply, request, {
+          statusCode: 422,
+          code: 'VALIDATION_ERROR',
+          message: `Unknown duplicate-check fields: ${unexpectedFields.join(', ')}`,
+        });
+      }
       const result = await container.proposalDuplicateCheck.execute({
         skillId: body.skillId,
         title: body.title,

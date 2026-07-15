@@ -775,8 +775,11 @@ paths:
       description: 'May require proposalBearer when PROPOSAL_AUTH_MODE=bearer or agentOidc
         when PROPOSAL_AUTH_MODE=oidc.
 
-        Checks whether an identical or similar proposal/skill already exists before
-        creating a proposal.
+        Checks metadata and optional file fingerprints against existing proposals
+        and published skills before creating a proposal. This public preflight never
+        accepts a proposal id, reads stored proposal files, or invokes the semantic
+        judger. Content-aware semantic checks run only inside the finalized proposal
+        review and auto-publish boundary.
 
         Agents should call this endpoint before submitting. Submission is not blocked
         by matches;
@@ -2527,6 +2530,44 @@ paths:
         token for each requested area in the dedicated X-Agent-*-Token headers. Returns
         an 8-character session code the agent can use as "Authorization: AgentSession
         <code>".'
+      parameters:
+      - name: X-Agent-Discovery-Token
+        in: header
+        required: false
+        description: Required when `areas` includes `discovery`.
+        schema:
+          type: string
+      - name: X-Agent-Read-Token
+        in: header
+        required: false
+        description: Required when `areas` includes `public-read`.
+        schema:
+          type: string
+      - name: X-Agent-Proposal-Token
+        in: header
+        required: false
+        description: Required when `areas` includes `proposal`.
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentSessionRequest'
+      responses:
+        '201':
+          description: Short-lived area-scoped agent session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAgentSessionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
   /admin/agent-sessions:
     get:
       operationId: listAgentSessions
@@ -3836,6 +3877,7 @@ components:
           - download_only
     CheckDuplicateProposalRequest:
       type: object
+      additionalProperties: false
       required:
       - title
       - description
@@ -3905,6 +3947,9 @@ components:
           type: string
         category:
           type: string
+        entrypoint:
+          type: string
+          nullable: true
         version:
           type: string
           nullable: true
@@ -4266,11 +4311,33 @@ components:
       required:
       - hasNewProposals
       - totalPending
+      - counts
       properties:
         hasNewProposals:
           type: boolean
         totalPending:
           type: integer
+          minimum: 0
+        counts:
+          type: object
+          required:
+          - in_upload
+          - submitted
+          - judged
+          - converted
+          properties:
+            in_upload:
+              type: integer
+              minimum: 0
+            submitted:
+              type: integer
+              minimum: 0
+            judged:
+              type: integer
+              minimum: 0
+            converted:
+              type: integer
+              minimum: 0
     ProposalAttachmentResponse:
       type: object
       required:
@@ -4966,6 +5033,16 @@ components:
               - agent-session
             discoverUrl:
               type: string
+            agentSessionUrl:
+              type: string
+            sessionAreas:
+              type: array
+              items:
+                type: string
+                enum:
+                - discovery
+                - public-read
+                - proposal
             recommendation:
               type: string
         originalError:

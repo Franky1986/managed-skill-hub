@@ -559,6 +559,8 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
           'POST /proposals/check-duplicate',
           'Payload: title, description, category, tags, capabilities, entrypoint=SKILL.md, optional skillId, files[].sha256 from the final package.',
           'If title/description intent is similar, exact duplicate fields are set, or the target skill already exists, stop before upload.',
+          'When skillIdCollision.exists is true, the proposed skillId is already taken. The default and preferred resolution is to create a new draft version of the existing skill. Explain to the user that this will not auto-publish; an admin must later convert the proposal into a new draft version of the existing skill.',
+          'When exactDuplicateSkillId is set, the same content already exists as a published skill. Do not upload a duplicate unless the user explicitly asks for a new skill under a different id.',
           'Before asking, present the duplicate candidate, core overlap, intended resolution option, and concise metadata/file-fingerprint diff.',
           'Ask for explicit user confirmation to upload despite the duplicate or to choose another returned resolution option.',
         ],
@@ -576,8 +578,10 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
           'Then POST /proposals/{id}/validate-upload and fix every returned finding with blocksFinalize=true in the temporary upload package before finalization.',
           'Validate-upload findings include kind, severity, blocksFinalize, file, line, candidate, and suggestedReplacement; variable placeholder runtime-output paths such as {output}/screenshots/{name}.png, documentation-only external references, and portable command guidance findings are not hard-blocking package references.',
           'Then POST /proposals/{id}/finalize-upload to mark the package complete and start proposal/file judgements.',
+          'Finalization is mandatory: always call finalize-upload, even if validate-upload reported findings or if judgements fail. Never leave a proposal in in_upload. If you cannot finalize, delete the proposal with DELETE /proposals/{id} instead of abandoning it.',
+          'Verify the next status response contains uploadFinalized: true. If it does not, retry finalize-upload once after a short delay or delete the proposal.',
           'Tell the submitter which temporary normalizations were applied, which installed dependency folders were excluded, and what the final server-side structure looks like, including preserved subfolders.',
-          'GET /proposals/{id}/status for review state',
+          'GET /proposals/{id}/status for review state. Distinguish proposal status (in_upload, submitted, judged, converted, rejected) from skill status (draft, in_review, approved, published). Converted means a skill draft was created; it is only public after the skill version is published.',
         ],
       },
       {
@@ -605,11 +609,13 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
       requiredUserFacingSummary: [
         'Name each relevant duplicate candidate with kind, id, skillId/title when available, status/version when available, and similarity score for similar matches.',
         'Summarize the core overlap: matching title or intent, shared category, shared tags/capabilities, matching entrypoint, and exact content digest when available.',
+        'When skillIdCollision.exists is true, state clearly: the user is about to propose a new draft version of the existing skill. Auto-publish is not possible because an admin must decide whether to convert the proposal into a new version. The alternative is to choose a different skillId and create a completely new skill.',
+        'When exactDuplicateSkillId is set, state clearly: the same content is already published. A new upload can only become a new skill under a different id, which is usually not what the user wants.',
         'Summarize what would change if uploaded: new skill, new draft version, admin update request, unchanged duplicate, changed metadata, changed capabilities/tags, changed entrypoint, added files, removed files, or changed file fingerprints.',
         'Provide a concise diff from the duplicate-check differences and local file fingerprint comparison. If file contents are not available through the public API, say that only hashes/metadata were compared.',
       ],
       confirmationRequired:
-        'Ask the user explicitly whether to upload despite the duplicate or choose one of the returned resolutionOptions. Do not call POST /proposals until the user confirms.',
+        'Ask the user explicitly which resolutionOption to use. If skillIdCollision.exists is true, prefer and recommend the create_new_version option first, explain that it requires an admin conversion and cannot auto-publish, and only offer create_new_skill under a different id if the user explicitly wants a separate skill. Do not call POST /proposals until the user confirms.',
     },
     normalizationRules: {
       entrypointFile: 'SKILL.md',
@@ -670,9 +676,11 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
     uploadFinalization: {
       required: true,
       finalizeEndpoint: 'POST /proposals/{id}/finalize-upload',
+      cleanupEndpoint: 'DELETE /proposals/{id}',
+      note: 'Finalization is mandatory and must not be skipped. If the upload cannot be completed, delete the proposal instead of leaving it in_upload.',
       statusFollowUp: container.config.autoPublishOnGreen
-        ? 'After upload finalization, check the proposal status again after about one minute to see whether it was published automatically.'
-        : 'After upload finalization, poll the proposal status endpoint to follow judgement and admin review progress.',
+        ? 'After upload finalization, poll GET /proposals/{id}/status. If the proposal is fully green and not blocked, it will be converted into a skill and the skill version will be published automatically. If auto-publish is skipped or blocked, the proposal remains as a judged/converted draft awaiting a human admin decision.'
+        : 'After upload finalization, poll GET /proposals/{id}/status. The proposal moves to submitted/judged and waits for a human admin to convert it into a skill draft, approve the version, and publish it. Only the status converted + a populated convertedSkillId means a draft exists; the skill is public only when a published version exists.',
     },
     uploadGuardrails: [
       'Use SKILL.md as the final entrypoint file in the uploaded package.',

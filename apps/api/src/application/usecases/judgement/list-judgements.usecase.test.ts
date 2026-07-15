@@ -188,6 +188,9 @@ class JudgementCatalog implements SkillCatalogPort {
   async listProposalFiles() { return []; }
   async listProposalJudgements() { return []; }
   async countPendingProposals() { return 0; }
+  async countProposalsByStatus(): Promise<Record<ProposalStatus, number>> {
+    return { in_upload: 0, submitted: 0, judged: 0, converted: 0 };
+  }
   async rebuild(_skills: Skill[]): Promise<void> {}
   async listCategories(): Promise<string[]> { return []; }
   async listLatestSkillVersions() { return { items: [], total: 0 }; }

@@ -225,7 +225,7 @@ Build a fully functional self-hosted skill registry that:
 
 **Deliverables:**
 
-- `scripts/prepare-deploy.sh` tested
+- `scripts/create-deploy-archive.sh` tested
 - `scripts/install_and_start.sh` tested
 - `scripts/restart-server.sh` tested
 - `scripts/backup.sh` and `scripts/restore.sh` present

@@ -27,11 +27,16 @@ export class FileSystemSkillStorage implements SkillFileStoragePort {
   constructor(private readonly dataDir: string) {}
 
   private skillDir(skillId: string, version: string): string {
-    return path.join(this.dataDir, 'skills', skillId, version);
+    return path.join(
+      this.dataDir,
+      'skills',
+      this.storageSegment(skillId, 'Skill id'),
+      this.storageSegment(version, 'Skill version')
+    );
   }
 
   private proposalDir(proposalId: string): string {
-    return path.join(this.dataDir, 'proposals', proposalId);
+    return path.join(this.dataDir, 'proposals', this.storageSegment(proposalId, 'Proposal id'));
   }
 
   private skillExtractPath(skillId: string, version: string): string {
@@ -302,5 +307,20 @@ export class FileSystemSkillStorage implements SkillFileStoragePort {
     } catch (error) {
       throw new StorageError((error as Error).message);
     }
+  }
+
+  private storageSegment(value: string, fieldLabel: string): string {
+    if (
+      value.length === 0
+      || value.length > 200
+      || value === '.'
+      || value === '..'
+      || value.includes('/')
+      || value.includes('\\')
+      || /[\u0000-\u001f\u007f]/.test(value)
+    ) {
+      throw new StorageError(`${fieldLabel} is not a valid storage identifier.`);
+    }
+    return value;
   }
 }

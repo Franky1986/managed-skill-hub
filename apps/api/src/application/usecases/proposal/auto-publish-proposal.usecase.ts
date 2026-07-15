@@ -11,7 +11,6 @@ import { ReviewProposalUseCase } from './review-proposal.usecase';
 import { SkillCommandPort } from '../../ports/inbound/skill-command.port';
 import { buildProposalAggregateFromCatalog } from './catalog-proposal-hydrator';
 import { ProposalDuplicateCheckUseCase } from './duplicate-check.usecase';
-import { DuplicateCheckInputDto } from '../../dtos/proposal.dto';
 import { isExtractableArtifact } from '../skill/public-metadata';
 import { JudgementRisk } from '../../../domain/judgement/Judgement';
 
@@ -78,22 +77,6 @@ export class AutoPublishProposalUseCase {
       };
     }
 
-    const auditEntries = await this.audit.findByProposalId(proposalId);
-    const duplicateBlocked = await this.hasDuplicateBlocker(proposal);
-    const semanticDuplicate = await this.hasSemanticDuplicate(proposal);
-    if (semanticDuplicate) {
-      return this.recordEvaluation(proposal.id, {
-        enabled: true,
-        eligible: false,
-        blockedReason: 'manual_review_required',
-        blockedByCategory: null,
-        classifierReason: `Similarity score ${semanticDuplicate.similarityScore.toFixed(2)} to existing ${semanticDuplicate.kind} '${semanticDuplicate.title}' (id: ${semanticDuplicate.id}) exceeds the auto-publish threshold of ${this.config.similarityThreshold ?? 0.7}. A human reviewer must decide whether to create a new skill or update the existing one.`,
-        matchedExcludedCategory: null,
-        autoPublished: false,
-        publishedSkillId: null,
-        publishedVersion: null,
-      });
-    }
     if (proposal.status === 'in_upload') {
       return this.recordEvaluation(proposal.id, {
         enabled: true,
@@ -107,19 +90,7 @@ export class AutoPublishProposalUseCase {
         publishedVersion: null,
       });
     }
-    if (duplicateBlocked) {
-      return this.recordEvaluation(proposal.id, {
-        enabled: true,
-        eligible: false,
-        blockedReason: 'duplicate_or_collision',
-        blockedByCategory: null,
-        classifierReason: 'Duplicate published content or duplicate proposal content blocks automation.',
-        matchedExcludedCategory: null,
-        autoPublished: false,
-        publishedSkillId: null,
-        publishedVersion: null,
-      });
-    }
+    const auditEntries = await this.audit.findByProposalId(proposalId);
     if (hasManualReviewBlocker(auditEntries, proposal.submittedBy)) {
       return this.recordEvaluation(proposal.id, {
         enabled: true,
@@ -143,6 +114,78 @@ export class AutoPublishProposalUseCase {
         classifierReason: noRealJudgements
           ? 'Auto-publish requires real judgements. Set AUTO_APPROVE_WITHOUT_JUDGER=true to allow noop judgments.'
           : 'Proposal-level or file-level judgement is missing or not fully green.',
+        matchedExcludedCategory: null,
+        autoPublished: false,
+        publishedSkillId: null,
+        publishedVersion: null,
+      });
+    }
+
+    if (this.duplicateCheck) {
+      const duplicateAssessment = await this.duplicateCheck.executeForProposal(proposal);
+      const duplicateResult = duplicateAssessment.result;
+      if (duplicateResult.skillIdCollision.exists && duplicateResult.skillIdCollision.existingSkillId) {
+        const existingSkillId = duplicateResult.skillIdCollision.existingSkillId;
+        return this.recordEvaluation(proposal.id, {
+          enabled: true,
+          eligible: false,
+          blockedReason: 'manual_review_required',
+          blockedByCategory: null,
+          classifierReason: `Auto-publish is not allowed when the proposal targets an existing skill '${existingSkillId}'. A human reviewer must decide whether this should become a new draft version of '${existingSkillId}' or a new skill under a different id.`,
+          matchedExcludedCategory: null,
+          autoPublished: false,
+          publishedSkillId: null,
+          publishedVersion: null,
+        });
+      }
+      if (duplicateResult.exactDuplicateProposalId || duplicateResult.exactDuplicateSkillId) {
+        return this.recordEvaluation(proposal.id, {
+          enabled: true,
+          eligible: false,
+          blockedReason: 'duplicate_or_collision',
+          blockedByCategory: null,
+          classifierReason: 'Duplicate published content or duplicate finalized proposal content blocks automation.',
+          matchedExcludedCategory: null,
+          autoPublished: false,
+          publishedSkillId: null,
+          publishedVersion: null,
+        });
+      }
+      if (duplicateAssessment.semanticCheck.status === 'unavailable') {
+        return this.recordEvaluation(proposal.id, {
+          enabled: true,
+          eligible: false,
+          blockedReason: 'manual_review_required',
+          blockedByCategory: null,
+          classifierReason: duplicateAssessment.semanticCheck.reason,
+          matchedExcludedCategory: null,
+          autoPublished: false,
+          publishedSkillId: null,
+          publishedVersion: null,
+        });
+      }
+
+      const similarDuplicate = duplicateResult.similarMatches[0];
+      if (similarDuplicate && similarDuplicate.similarityScore >= this.config.similarityThreshold) {
+        return this.recordEvaluation(proposal.id, {
+          enabled: true,
+          eligible: false,
+          blockedReason: 'manual_review_required',
+          blockedByCategory: null,
+          classifierReason: `Duplicate similarity check blocked auto-publish. The submitted content is too similar to the existing ${similarDuplicate.kind} '${similarDuplicate.title}' (id: ${similarDuplicate.id}, similarity ${similarDuplicate.similarityScore.toFixed(2)}). It reaches the auto-publish threshold of ${this.config.similarityThreshold}. A human reviewer must decide whether this is a new skill, a new version, or a duplicate.`,
+          matchedExcludedCategory: null,
+          autoPublished: false,
+          publishedSkillId: null,
+          publishedVersion: null,
+        });
+      }
+    } else if (await this.hasDuplicateBlocker(proposal)) {
+      return this.recordEvaluation(proposal.id, {
+        enabled: true,
+        eligible: false,
+        blockedReason: 'duplicate_or_collision',
+        blockedByCategory: null,
+        classifierReason: 'Duplicate published content or duplicate finalized proposal content blocks automation.',
         matchedExcludedCategory: null,
         autoPublished: false,
         publishedSkillId: null,
@@ -294,36 +337,6 @@ export class AutoPublishProposalUseCase {
       parts.join('\n\n'),
     ].join('\n');
   }
-
-
-  private async hasSemanticDuplicate(proposal: Proposal): Promise<{ kind: 'proposal' | 'skill'; id: string; title: string; similarityScore: number } | null> {
-    if (!this.duplicateCheck || (this.config.similarityThreshold ?? 0.7) <= 0) {
-      return null;
-    }
-    const input: DuplicateCheckInputDto = {
-      skillId: proposal.skillId ?? undefined,
-      title: proposal.title,
-      description: proposal.description,
-      category: proposal.category,
-      tags: proposal.tags,
-      capabilities: proposal.capabilities,
-      entrypoint: proposal.entrypoint ?? undefined,
-      files: proposal.files.map((file) => ({ path: file.path, sha256: file.sha256 })),
-    };
-
-    const result = await this.duplicateCheck.execute(input);
-    const match = result.similarMatches[0];
-    if (match && match.similarityScore >= (this.config.similarityThreshold ?? 0.7)) {
-      return {
-        kind: match.kind,
-        id: match.id,
-        title: match.title,
-        similarityScore: match.similarityScore,
-      };
-    }
-    return null;
-  }
-
   private async hasDuplicateBlocker(proposal: Proposal): Promise<boolean> {
     if (!this.catalog || !proposal.contentDigest) {
       return false;

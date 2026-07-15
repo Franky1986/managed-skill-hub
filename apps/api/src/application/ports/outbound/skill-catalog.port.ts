@@ -140,6 +140,7 @@ export interface SkillCatalogPort {
   listProposalFiles(proposalId: string): Promise<CatalogProposalFileRecord[]>;
   listProposalJudgements(proposalId: string): Promise<CatalogJudgementRecord[]>;
   countPendingProposals(): Promise<number>;
+  countProposalsByStatus(): Promise<Record<ProposalStatus, number>>;
   rebuild(skills: Skill[], options?: { clearProjections?: boolean }): Promise<void>;
   listCategories(): Promise<string[]>;
   listTags(): Promise<string[]>;

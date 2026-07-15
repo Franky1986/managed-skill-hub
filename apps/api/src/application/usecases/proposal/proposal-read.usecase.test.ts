@@ -7,6 +7,7 @@ import { SkillFileStoragePort, StoredExtractedContent, StoredFile } from '../../
 import { FileScannerPort } from '../../ports/outbound/file-scanner.port';
 import { AuditLogPort } from '../../ports/outbound/audit.port';
 import { Proposal } from '../../../domain/proposal/Proposal';
+import { ProposalStatus } from '../../../domain/proposal/ProposalStatus';
 import { Skill } from '../../../domain/skill/Skill';
 import { Judgement, JudgementRisk } from '../../../domain/judgement/Judgement';
 import { AuditEntry } from '../../../domain/audit/AuditEntry';
@@ -76,7 +77,7 @@ describe('ProposalReadUseCase', () => {
     expect(summaries.items[0]?.latestJudgement?.summary).toBe('Safe proposal');
     expect(summaries.items[0]?.latestJudgement?.dimensions.qualityFit?.risk).toBe('low');
     expect(summaries.items[0]?.labels).toContain('safe');
-    expect(notice).toEqual({ hasNewProposals: true, totalPending: 1 });
+    expect(notice).toEqual({ hasNewProposals: true, totalPending: 1, counts: { in_upload: 0, submitted: 1, judged: 0, converted: 0 } });
   });
 
   it('uses catalog review metadata for detail reads when available', async () => {
@@ -186,7 +187,7 @@ describe('ProposalReadUseCase', () => {
 
     expect(summaries).toEqual({ items: [], total: 0 });
     expect(detail?.title).toBe(proposal.title);
-    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0 });
+    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 } });
     expect(detail?.review.labels).toContain('needs_review');
   });
 
@@ -208,7 +209,7 @@ describe('ProposalReadUseCase', () => {
 
     const notice = await useCase.getNotice();
 
-    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0 });
+    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 1, submitted: 0, judged: 0, converted: 0 } });
   });
 
   it('returns only currently valid admin next steps for each proposal status', async () => {
@@ -359,7 +360,7 @@ describe('ProposalReadUseCase', () => {
     const notice = await useCase.getNotice();
 
     expect(summaries).toEqual({ items: [], total: 0 });
-    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0 });
+    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 } });
   });
 
   it('reads proposal file content from storage', async () => {
@@ -630,6 +631,9 @@ class ProposalCatalog implements SkillCatalogPort {
   }
   async countPendingProposals(): Promise<number> {
     return this.state.pendingCount ?? 0;
+  }
+  async countProposalsByStatus(): Promise<Record<ProposalStatus, number>> {
+    return { in_upload: 0, submitted: this.state.pendingCount ?? 0, judged: 0, converted: 0 };
   }
   async rebuild(_skills: Skill[]): Promise<void> {}
   async listCategories(): Promise<string[]> { return []; }

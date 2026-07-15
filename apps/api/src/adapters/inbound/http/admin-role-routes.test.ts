@@ -54,7 +54,7 @@ function container() {
     },
     proposalRead: {
       getDetail: vi.fn().mockResolvedValue({ id: 'proposal-1', status: 'rejected' }),
-      getNotice: vi.fn().mockResolvedValue({ hasNewProposals: true, totalPending: 1 }),
+      getNotice: vi.fn().mockResolvedValue({ hasNewProposals: true, totalPending: 1, counts: { in_upload: 0, submitted: 1, judged: 0, converted: 0 } }),
     },
   } as unknown as Container;
 }

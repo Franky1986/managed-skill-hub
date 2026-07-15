@@ -5,7 +5,7 @@
 `scripts/check-agent-auth-matrix.ts` provides a deterministic, agent-readable proof
 that the static bearer authentication contract behaves correctly for every
 `PUBLIC_READ_AUTH_MODE`, `PROPOSAL_AUTH_MODE`, and `DISCOVERY_AUTH_MODE`
-`none`/`bearer` permutation.
+`none`/`bearer`/`oidc` permutation.
 
 The script complements the Vitest suite by producing stable log and JSON artifacts
 that can be attached to validation runs or inspected by another agent without
@@ -13,13 +13,15 @@ re-running the full test suite.
 
 ## Scope
 
-The script must validate all eight permutations across:
+The script must validate all 27 permutations across:
 
-- `/discover` visibility, auth flags, and setup-script URL presence.
+- `/discover` visibility, auth flags, OIDC metadata, and agent-session discovery.
 - `/howToPropose` first-step behavior and auth setup metadata.
 - Public-read route protection through `/categories`.
 - Proposal route protection through `/proposals/notice`.
-- Generated setup script fields for read/proposal tokens.
+- Short-lived agent-session creation, area access, and cross-area isolation for
+  bearer-protected routes.
+- Absence of the retired `/agent-credentials/setup.sh` route and metadata.
 
 The script uses in-memory Fastify injection only. It must not start network
 listeners, use real databases, read local secrets, or depend on external services.
@@ -34,10 +36,10 @@ A successful run writes:
 A successful run must include:
 
 ```text
-agent-api-auth-matrix
-totalPermutations=8
-passedPermutations=8
-failedPermutations=0
+agent-auth-matrix
+total=27
+passed=27
+failed=0
 RESULT=PASS
 ```
 

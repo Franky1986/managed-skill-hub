@@ -110,7 +110,7 @@ co-located `*.spec.md` files.
 | [scripts/check-agent-contract.ts](../scripts/check-agent-contract.ts) | Deterministic discovery/how-to/setup-script contract proof |
 | [scripts/check-admin-ui-smoke.ts](../scripts/check-admin-ui-smoke.ts) | Lightweight admin/public UI source-contract smoke proof |
 | [scripts/smoke-test.sh](../scripts/smoke-test.sh) | Automated local API smoke tests |
-| [scripts/prepare-deploy.sh](../scripts/prepare-deploy.sh) | Create deployment archive |
+| [scripts/create-deploy-archive.sh](../scripts/create-deploy-archive.sh) | Create a deployment archive from committed files |
 | [scripts/install_and_start.sh](../scripts/install_and_start.sh) | Install and start on the server |
 | [scripts/restart-server.sh](../scripts/restart-server.sh) | Restart/stop stack |
 | [scripts/backup.sh](../scripts/backup.sh) | Create backup |

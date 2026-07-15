@@ -1,3 +1,167 @@
+## 2026-07-15: Public Release Review Remediation
+
+- Split duplicate detection into a public metadata/fingerprint-only preflight
+  and an internal finalized-proposal assessment. The public route rejects unknown
+  fields such as `proposalId`, reads no stored files, and never invokes an LLM.
+- Internal semantic enrichment excludes the current proposal, compares only with
+  published skills, is bounded to three strong candidates, uses hardened
+  untrusted-content delimiters, and fails closed to manual review.
+- Auto-publish now performs one duplicate assessment after green judgement gates;
+  exact duplicates, skill-ID collisions, threshold matches, and unavailable
+  semantic enrichment all prevent automatic publication.
+- Hardened filesystem identifier segments against traversal and limited exact
+  proposal digest matching to finalized review states.
+- Updated Proposal/OpenAPI contracts, Agent Session proofs, admin count polling,
+  release hygiene, CI branch coverage, deployment packaging, and security-reporting
+  guidance. Removed the stray untracked `EOF` artifact.
+- Verification: 94 co-located specs, 441 API tests, 36 web tests, all deterministic
+  proof scripts, production builds, 25 public-release hygiene checks, and the
+  moderate lockfile audit pass; the audit reports zero vulnerabilities.
+
+## 2026-07-15: Agent And Admin Duplicate UX Hardening
+
+- `/api/howToPropose` step 9 and `duplicateConfirmationRule` now instruct agents
+  to prefer the `create_new_version` resolution when `skillIdCollision.exists`
+  is true, and to explain explicitly that auto-publish is not possible and an
+  admin must convert the proposal into a new draft version.
+- `duplicate-check.usecase.ts` `create_new_version` resolution option now states
+  that the option is recommended for revisions and requires admin conversion
+  and publication; it cannot auto-publish.
+- Admin proposal filter buttons now show a submitted/judged breakdown for the
+  "open" filter (e.g. `Open (4/12)`) while keeping in_upload and converted
+  counts separate. The top navigation already shows the combined
+  `Proposals (open/in_upload/converted)` badge.
+
+## 2026-07-15: Semantic Duplicate Gate Runtime Fix
+
+- `duplicate-check.usecase.ts` now excludes the current proposal id from
+  `findProposalByContentDigest`, preventing a proposal's own content digest
+  from short-circuiting similar-match detection.
+- `proposal.controller.ts` now forwards `proposalId` from the
+  `POST /proposals/check-duplicate` body so the exclusion works for agents
+  re-checking after attaching files.
+- Added unit test verifying that a proposal matching its own content digest
+  still receives scored similar matches when `proposalId` is supplied.
+- Runtime verification:
+  - Near-duplicate of an existing published skill is blocked by auto-publish
+    with `manual_review_required` and a semantic-similarity reason.
+  - Genuinely new skill passes duplicate precheck with no similar matches.
+  - Existing unit tests for duplicate-check, auto-publish, and proposal
+    controller remain green.
+
+## 2026-07-14: Runtime acceptance test of auto-publish gates
+
+Ran a single-shell acceptance test against the running API with
+`AUTO_APPROVE_WITHOUT_JUDGER=true` to isolate the auto-publish gate behavior:
+
+- **SkillId collision gate**: A proposal with `skillId: sample-integration`
+  finalized into `judged` and was blocked with
+  `autoPublishBlockedReason: manual_review_required`. The gate works as intended.
+- **Exact content duplicate gate**: A second upload of the same "Video Trimmer"
+  content was blocked with `autoPublishBlockedReason: duplicate_or_collision`,
+  proving the content-digest duplicate blocker works.
+- **Semantic duplicate gate**: Could not be reached in this run because the
+  Vercel AI SDK judger returned a real judgement that was not fully green for
+  the near-duplicate `Sample Integration Revised` content. The unit tests
+  confirm the gate logic; reaching it at runtime requires content that passes
+  all judgement dimensions as low.
+- **Admin notice counts**: The public `/admin/proposals/notice` endpoint requires
+  an admin session; basic auth is not supported.
+
+The test was run with the API server started and stopped inside one command to
+avoid sandbox background-process termination.
+
+## 2026-07-14: Show proposal counts on admin proposal filter buttons
+
+- `AdminProposalsPage` now loads `GET /admin/proposals/notice` and displays the
+  matching count next to the filter buttons:
+  - Open (submitted + judged)
+  - In upload
+  - Converted
+- The counts update on page load; background polling of the proposal list is
+  still active for the selected filter.
+
+## 2026-07-14: Strengthen finalization guidance so agents never abandon in_upload proposals
+
+- Updated `GET /howToPropose` workflow checks to state that
+  `POST /proposals/{id}/finalize-upload` is mandatory and must be called even
+  when validation reported findings or judgements failed.
+- Added guidance to verify `uploadFinalized: true` in the next status response
+  and to retry finalize once or delete the proposal instead of leaving it in
+  `in_upload`.
+- Added `cleanupEndpoint` and a `note` to the `uploadFinalization` section of
+  `/howToPropose`.
+- Updated public proposal status `nextStepForSubmitter` for `in_upload` to warn
+  that the upload must be finalized or explicitly deleted; abandonment is not a
+  valid workflow end state.
+
+## 2026-07-14: Block auto-publish on skillId collision (new-version path)
+
+- Extended `AutoPublishProposalUseCase` to block auto-publish when the submitted
+  proposal targets an existing `skillId`. This path creates a new draft version
+  of an existing skill, which is a deliberate human decision and must not be
+  automated.
+- Added `hasSkillIdCollision()` which reuses the existing
+  `ProposalDuplicateCheckUseCase` and returns the existing `skillId`.
+- Block reason is `manual_review_required` with a message explaining that the
+  reviewer must decide between a new draft version or a new skill under a
+  different id.
+- Added unit test for the skillId collision gate.
+
+## 2026-07-14: Define minimum public release scope; Authentik/OIDC as experimental preview
+
+- Documented the public release stance: the default release profile uses
+  `ADMIN_AUTH_MODE=simple` and static bearer agent authentication with agent-session
+  delegation. OIDC and Authentik are code-complete but treated as **experimental / preview**
+  for the first public release; real tenant acceptance is tracked as follow-up work.
+- Added a "Minimum Public Release Path" checklist to `NEXT_STEPS.md` covering
+  semantic duplicate gate verification, admin proposal badge, agent wording,
+  judgement scenarios, publication-policy matrix, bearer fail-fast, SQLite backup/restore,
+  and reverse-proxy basics.
+- Kept the Authentik/OIDC preview checklist separate so operators can enable it
+  explicitly without blocking the default release.
+- Reduced LLM duplicate-check cost: semantic enrichment now runs only on heuristic
+  matches with score >= 0.4, and at most on the top 3 candidates.
+
+## 2026-07-14: LLM-based semantic duplicate gate, threshold 0.5, and clearer agent/status wording
+
+- Changed `AUTO_PUBLISH_SIMILARITY_THRESHOLD` default from `0.7` to `0.5` in
+  `apps/api/src/infrastructure/config.ts`, `.env.example`, and local `.env`.
+- Extended `SkillJudgerPort` with an optional `assessDuplicateSimilarity` method
+  and added a dedicated `duplicate-similarity-contract.ts` for the LLM prompt,
+  Zod schema, and parser.
+- Implemented `assessDuplicateSimilarity` in `VercelAiSdkSkillJudger` using
+  `generateObject` and the configured model/timeout/retries.
+- Enhanced `ProposalDuplicateCheckUseCase` with optional `SkillFileStoragePort`,
+  `FileScannerPort`, and `SkillJudgerPort` dependencies. When a proposal ID is
+  provided, the use case reads the submitted entrypoint content and the
+  entrypoint content of top heuristic matches, then asks the LLM for a semantic
+  similarity score between 0 and 1. The final score is the higher of the
+  heuristic score and the LLM score, and the result includes an optional
+  `semanticSimilarity` object with score, reason, compared file path, and model.
+- Wired the enhanced use case into the container and made `AutoPublishProposalUseCase`
+  pass the proposal ID to the duplicate check so the full content comparison runs.
+- Updated auto-publish's `manual_review_required` reason for semantic duplicates
+  to clearly name the candidate, the score, the threshold, and the need for a human
+  decision.
+- Improved agent-facing wording in `GET /howToPropose` and public proposal status
+  responses so agents distinguish proposal states (`in_upload`, `submitted`, `judged`,
+  `converted`, `rejected`) from skill states (`draft`, `in_review`, `approved`,
+  `published`) and understand that auto-publish success means the skill version
+  is public.
+- Extended `SkillCatalogPort` with `countProposalsByStatus()` and implemented it in
+  SQLite and MySQL catalogs. `ProposalReadUseCase.getNotice()` now returns a
+  `counts` object with `in_upload`, `submitted`, `judged`, and `converted` in
+  addition to `totalPending`.
+- Updated the admin proposal badge in `Layout.tsx` to display
+  `Open proposals (open/in_upload/converted)` with a hover tooltip showing the
+  per-status breakdown, and added the corresponding i18n keys in English and
+  German.
+- Updated all relevant test stubs and tests; added new unit tests for the LLM
+  duplicate enrichment and the semantic duplicate auto-publish gate.
+- Verification: `npm run lint/typecheck/test` green for `apps/api` (432 tests)
+  and `apps/web` (31 tests).
+
 ## 2026-07-14: Auto-publish semantic duplicate gate
 
 - Added `AUTO_PUBLISH_SIMILARITY_THRESHOLD` (default 0.7) to `.env.example`.

@@ -27,6 +27,9 @@ Stores and loads files that belong to a `SkillVersion`.
 - Checksum calculation when needed.
 - Keep persisted derived artifacts such as `Extracted Content` versioned next
   to original files.
+- Validate every skill ID, version, and proposal ID used as a storage directory
+  segment. Reject empty, dot, separator-containing, overlong, or control-character
+  values before path resolution.
 
 ## Inputs / Outputs
 
@@ -44,11 +47,13 @@ Stores and loads files that belong to a `SkillVersion`.
 - Storage exhausted -> `StorageError`
 - File not found -> `NotFoundError`
 - Partial write -> recovery through temp mechanism
+- Invalid storage identifier/path traversal attempt -> `ValidationError`
 
 ## Acceptance Criteria
 
 - A file is visible only after the write completed successfully.
 - Redeploys do not delete persisted files.
+- Identifier input cannot escape the configured skills/proposals storage roots.
 
 ## Tests / Checks
 

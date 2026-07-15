@@ -427,6 +427,9 @@ class CatalogStub implements SkillCatalogPort {
   async listProposalFiles() { return []; }
   async listProposalJudgements() { return []; }
   async countPendingProposals() { return 0; }
+  async countProposalsByStatus(): Promise<Record<ProposalStatus, number>> {
+    return { in_upload: 0, submitted: 0, judged: 0, converted: 0 };
+  }
   async listCategories() { return []; }
   async listTags() { return []; }
   async listLatestSkillVersions() { return { items: [], total: 0 }; }

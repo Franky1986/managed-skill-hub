@@ -93,6 +93,17 @@ export interface AdminAuthMethodsResponse {
     adminUiBasePath: string;
 }
 
+export interface ProposalNotice {
+    hasNewProposals: boolean;
+    totalPending: number;
+    counts: {
+        in_upload: number;
+        submitted: number;
+        judged: number;
+        converted: number;
+    };
+}
+
 export const adminApi = {
     getAuthMethods: () =>
         apiClient.get<AdminAuthMethodsResponse>('/admin/auth/methods'),
@@ -220,7 +231,7 @@ export const adminApi = {
     listProposals: (skillId?: string, status?: string, signal?: AbortSignal) =>
         apiClient.get<{ items: ProposalSummary[]; total: number }>('/admin/proposals', { params: { skillId, status }, signal }),
     proposalNotice: (signal?: AbortSignal) =>
-        apiClient.get<{ hasNewProposals: boolean; totalPending: number }>('/admin/proposals/notice', { signal }),
+        apiClient.get<ProposalNotice>('/admin/proposals/notice', { signal }),
     getProposal: (proposalId: string, signal?: AbortSignal) =>
         apiClient.get<ProposalDetail>(`/admin/proposals/${proposalId}`, { signal }),
     updateProposal: (proposalId: string, data: ProposalUpdatePayload) =>

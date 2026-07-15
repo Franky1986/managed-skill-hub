@@ -107,6 +107,8 @@ logic.
 
 - `GET /proposals/notice` can read aggregated pending counts from SQLite and
   excludes `in_upload` proposals.
+- Notice output includes per-status counts for `in_upload`, `submitted`, `judged`,
+  and `converted`; `totalPending` and `hasNewProposals` cover only submitted/judged.
 - `GET /admin/proposals` can read proposal summaries from SQLite.
 - `GET /admin/proposals` summaries expose submission time and rejection
   metadata where available.

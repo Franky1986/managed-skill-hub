@@ -43,6 +43,8 @@ HTTP adapter for proposal operations.
   use case and mapped error codes.
 - Forward `POST /proposals/check-duplicate` to
   `ProposalDuplicateCheckUseCase`.
+- Accept only allowlisted metadata and optional file fingerprints for duplicate
+  preflight; reject unknown fields, including any proposal ID, with `422`.
 - Call `ProposalCommandPort`.
 - Expose only aggregated proposal notices publicly.
 - Do not deliver proposal details on public path.
@@ -119,8 +121,9 @@ HTTP adapter for proposal operations.
   proposal UUID. Only the stable owning principal may upload, validate,
   finalize, patch, or delete an open proposal; a new token for the same human
   preserves ownership.
-- `POST /proposals/check-duplicate` returns exact duplicates, similarity
-  matches, and skill-ID collisions.
+- `POST /proposals/check-duplicate` returns metadata/fingerprint exact duplicates,
+  heuristic similarity matches, and skill-ID collisions without stored file reads
+  or semantic judger calls.
 - Proposal route bursts beyond the configured rate-limit window return `429`
   and do not reach the command use case.
 - In-memory proposal rate-limit state remains within the configured bucket cap.
