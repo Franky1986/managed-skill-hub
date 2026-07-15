@@ -5,6 +5,8 @@
 - [ ] Rebuild the CBT deployment archive after the loopback-only frontend
       binding change and verify that nginx is the only externally reachable
       entry point.
+- [ ] Commit the JSZip dependency fix and deploy with Node.js 22 LTS on the CBT
+      server to remove the current engine warning.
 
 ## EPIC-012 Agent Session Delegation
 

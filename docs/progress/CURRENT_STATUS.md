@@ -14,6 +14,9 @@ The API and Vite frontend default to loopback binding (`127.0.0.1`). Reverse
 proxy deployments must keep `FRONTEND_HOST=127.0.0.1` so nginx remains the only
 external entry point.
 
+The API declares `jszip` directly for PPTX extraction, so clean server installs
+can reproduce the production build without relying on a hoisted local module.
+
 ## Security Hardening Baseline
 
 The current public-release hardening baseline includes restrictive configured

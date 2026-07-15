@@ -1310,3 +1310,8 @@ avoid sandbox background-process termination.
   defaulting to `127.0.0.1`.
 - Added the bind-address setting to environment templates and deployment
   guidance so ports `3040` and `3041` stay local when nginx fronts the service.
+## 2026-07-15: Declare JSZip API Dependency
+
+- Added `jszip` as a direct `apps/api` dependency because the PPTX text scanner
+  dynamically imports it during production compilation and runtime.
+- Verified the production build and full project check after updating the lockfile.
