@@ -35,6 +35,8 @@ Copy/Paste-Prozessen in eine auditierbare Registry zu überführen: mit klarer
 Ownership, Review-Status, unveränderlichen veröffentlichten Versionen und
 maschinenlesbaren Contracts.
 
+Erstellt und gepflegt von [Frank Richter](https://www.linkedin.com/in/frank-richter-24657078/).
+
 ## Warum Das Wertvoll Ist
 
 - Agents können sich über `GET /discover`, `GET /howToPropose`,

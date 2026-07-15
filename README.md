@@ -33,6 +33,8 @@ The goal is to move skill reuse out of chat history, local folders, and ad-hoc
 copy/paste workflows into an auditable registry with clear ownership, review
 state, immutable published versions, and machine-readable contracts.
 
+Created and maintained by [Frank Richter](https://www.linkedin.com/in/frank-richter-24657078/).
+
 ## Why It Matters
 
 - Agents can bootstrap themselves from `GET /discover`, `GET /howToPropose`,
