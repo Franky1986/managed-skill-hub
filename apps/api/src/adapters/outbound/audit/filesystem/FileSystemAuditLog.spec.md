@@ -19,6 +19,9 @@ Writes audit entries as append-only JSONL files.
 ## Responsibilities
 
 - Append every action as JSONL line to `data/audit/{skillId|proposalId|global}.jsonl`.
+- When an entry contains both `skillId` and `proposalId`, reads by either
+  identifier must still return the entry; the persisted fields are the source
+  of truth, not only the filename selected during append.
 - Ensure timestamp, actor, action, before/after.
 - Optionally mirror audit entries into SQLite read projection during writes.
 
@@ -39,6 +42,8 @@ Writes audit entries as append-only JSONL files.
 ## Acceptance Criteria
 
 - Entries are chronologically sorted when enumerated with `findAll()`.
+- Proposal-linked entries remain visible through `findByProposalId()` even when
+  their file is keyed by `skillId`.
 - Log files are never overwritten.
 
 ## Tests / Checks

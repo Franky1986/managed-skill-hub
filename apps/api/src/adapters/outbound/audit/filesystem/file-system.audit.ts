@@ -47,7 +47,12 @@ export class FileSystemAuditLog implements AuditLogPort {
   }
 
   async findByProposalId(proposalId: string): Promise<AuditEntry[]> {
-    return this.readLines(this.fileName(null, proposalId));
+    // Entries such as `convert_proposal` carry both identifiers and are stored
+    // under the skill file because `append()` chooses the skill key first.
+    // Read all append-only files and filter by the persisted proposalId so
+    // proposal status/history does not lose those cross-aggregate actions.
+    const entries = await this.findAll();
+    return entries.filter((entry) => entry.proposalId === proposalId);
   }
 
   async findAll(): Promise<AuditEntry[]> {

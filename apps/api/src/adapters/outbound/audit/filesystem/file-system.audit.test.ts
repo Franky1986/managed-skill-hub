@@ -40,6 +40,30 @@ describe('FileSystemAuditLog', () => {
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.action).toBe('publish_skill');
   });
+
+  it('finds proposal-linked entries stored under the skill audit file', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-audit-'));
+    tempDirs.push(dataDir);
+    const audit = new FileSystemAuditLog(dataDir);
+
+    await audit.append(AuditEntry.create({
+      id: 'audit-convert',
+      skillId: 'converted-skill',
+      skillVersion: '1.0.0',
+      proposalId: 'proposal-1',
+      action: 'convert_proposal',
+      actor: 'admin',
+      before: { status: 'judged' },
+      after: { status: 'converted', skillId: 'converted-skill', version: '1.0.0' },
+      createdAt: new Date('2026-07-02T12:00:00.000Z'),
+    }));
+
+    const proposalEntries = await audit.findByProposalId('proposal-1');
+    expect(proposalEntries).toHaveLength(1);
+    expect(proposalEntries[0]?.action).toBe('convert_proposal');
+    expect((await audit.findBySkillId('converted-skill'))[0]?.proposalId).toBe('proposal-1');
+  });
+
   it('enumerates skill, proposal, and global audit entries in deterministic order', async () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-audit-'));
     tempDirs.push(dataDir);

@@ -52,6 +52,8 @@ For the default release profile, complete:
       proposal page open filter shows submitted/judged breakdown and refreshes it.)
 - [x] Verify agent-facing wording in `/howToPropose` and `/proposals/:id/status`
       distinguishes proposal vs skill lifecycle states. (skillIdCollision now explicitly recommends the new-version path and explains no auto-publish; status endpoint already distinguishes proposal and skill states.)
+- [x] Verify converted proposal status retains `convertedSkillId` with filesystem
+      audit storage after conversion.
 - [ ] Run the judgement acceptance scenarios for `noop`, `vercel-ai-sdk`, and one
       custom adapter, including provider failure/unavailable handling.
 - [ ] Run the publication-policy matrix (`disabled`, `warn`, `required`) and the

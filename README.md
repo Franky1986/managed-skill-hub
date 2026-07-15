@@ -26,9 +26,8 @@ Governed skill registry for AI agents.
 
 ManagedSkillHub turns reusable agent instructions into governed, versioned,
 discoverable assets. Product managers, developers, and reviewers can maintain,
-review, approve, version, and publish skills; coding agents such as Codex,
-Claude, OpenCode, Gemini, Cursor, and Windsurf can discover and consume only
-published skills through a stable public API.
+review, approve, version, and publish skills; AI agents can discover and consume
+only published skills through a stable public API.
 
 The goal is to move skill reuse out of chat history, local folders, and ad-hoc
 copy/paste workflows into an auditable registry with clear ownership, review
@@ -65,6 +64,54 @@ state, immutable published versions, and machine-readable contracts.
    proposals after real judgements.
 5. Published versions become available immediately through the public API and
    deterministic package download.
+
+## How It Fits Together
+
+```mermaid
+flowchart LR
+  agent["AI agent"] --> discover["Discover contract<br/>/discover · /howToPropose · /openapi.yaml"]
+  agent --> read["Search and download<br/>published versions only"]
+  agent --> submit["Submit proposal<br/>metadata + files"]
+
+  submit --> validate["Validate package<br/>references · limits · secrets"]
+  validate --> finalize["Finalize upload"]
+  finalize --> status["Poll proposal status"]
+  finalize --> judge{"Judger"}
+
+  admin["Admin workbench"] --> review["Review lifecycle<br/>convert · submit for review · approve"]
+  judge --> review
+  review --> publish["Publish version"]
+
+  publish --> artifacts["Filesystem content<br/>published artifacts"]
+  publish --> catalog["SQLite / MySQL<br/>catalog and search projections"]
+  publish --> audit["Append-only audit log"]
+  catalog --> read
+  artifacts --> read
+  audit --> status
+```
+
+The flow is selected by independent deployment settings:
+
+```mermaid
+flowchart LR
+  profile["Deployment profile"] --> auth["Auth<br/>admin: simple / OIDC preview<br/>agent areas: none / bearer / OIDC preview"]
+  profile --> judger["Automatic judgement<br/>noop / vercel-ai-sdk / custom"]
+  profile --> publication["Publication<br/>manual / auto-publish on green"]
+  profile --> gate["Publish gate<br/>disabled / warn / required"]
+  profile --> storage["Storage<br/>SQLite / MySQL<br/>filesystem / database content"]
+```
+
+| Concern | Configuration | Meaning |
+| --- | --- | --- |
+| Authentication | `ADMIN_AUTH_MODE=simple\|oidc`; `DISCOVERY_AUTH_MODE`, `PUBLIC_READ_AUTH_MODE`, and `PROPOSAL_AUTH_MODE` each use `none\|bearer\|oidc` | Admin authentication and the three agent areas are configured independently. OIDC/Authentik remains preview-only for the first release. |
+| Judgement | `JUDGER_PROVIDER=noop\|vercel-ai-sdk\|custom` | Finalization can run proposal and file judgement automatically. `noop` records `no_judge_available`; the built-in provider uses the configured model; custom adapters use `JUDGER_ADAPTER_PATH`. |
+| Publication | `AUTO_PUBLISH_ON_GREEN=false\|true` and `AUTO_APPROVE_WITHOUT_JUDGER=false\|true` | Manual review is the default. Green, eligible proposals can be converted and published automatically when enabled; allowing noop auto-publish is an explicit override. |
+| Publication gate | `PUBLISH_JUDGEMENT_POLICY=disabled\|warn\|required` | Ignore missing results, allow with an audit warning, or block publication until the required judgements are complete. Admin overrides are audited. |
+| Storage | `CATALOG_PROVIDER=sqlite\|mysql`, `SEARCH_PROVIDER=sqlite\|mysql`, `CONTENT_STORAGE_PROVIDER=filesystem\|database` | Catalog/search metadata and skill/proposal content can be selected independently behind the same application ports. |
+
+The public read path exposes only published skill versions. Proposal intake,
+judgement, review, publication, storage, search, and audit remain separate
+responsibilities connected through the OpenAPI contract and application ports.
 
 ## Status
 

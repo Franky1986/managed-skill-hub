@@ -27,8 +27,8 @@ Governed Skill Registry für KI-Agenten.
 ManagedSkillHub macht wiederverwendbare Agent-Anleitungen zu geprüften,
 versionierten und auffindbaren Assets. Produktmanager, Entwickler und Reviewer
 können Skills pflegen, prüfen, freigeben, versionieren und veröffentlichen;
-Coding Agents wie Codex, Claude, OpenCode, Gemini, Cursor und Windsurf können
-nur veröffentlichte Skills über eine stabile Public API entdecken und nutzen.
+KI-Agenten können ausschließlich veröffentlichte Skills über eine stabile Public
+API entdecken und nutzen.
 
 Das Ziel ist, Skill-Wiederverwendung aus Chat-Historien, lokalen Ordnern und
 Copy/Paste-Prozessen in eine auditierbare Registry zu überführen: mit klarer
@@ -67,6 +67,56 @@ maschinenlesbaren Contracts.
    grün bewertete, eligible Proposals nach realen Judgements veröffentlichen.
 5. Veröffentlichte Versionen sind sofort über die Public API und den
    deterministischen Package-Download verfügbar.
+
+## Wie alles zusammenhängt
+
+```mermaid
+flowchart LR
+  agent["KI-Agent"] --> discover["Discovery-Vertrag<br/>/discover · /howToPropose · /openapi.yaml"]
+  agent --> read["Suchen und laden<br/>nur veröffentlichte Versionen"]
+  agent --> submit["Proposal einreichen<br/>Metadaten + Dateien"]
+
+  submit --> validate["Paket validieren<br/>Referenzen · Limits · Secrets"]
+  validate --> finalize["Upload finalisieren"]
+  finalize --> status["Proposal-Status pollen"]
+  finalize --> judge{"Judger"}
+
+  admin["Admin-Workbench"] --> review["Review-Lifecycle<br/>konvertieren · Review einreichen · freigeben"]
+  judge --> review
+  review --> publish["Version veröffentlichen"]
+
+  publish --> artifacts["Filesystem-Inhalte<br/>veröffentlichte Artefakte"]
+  publish --> catalog["SQLite / MySQL<br/>Katalog- und Suchprojektionen"]
+  publish --> audit["Append-only Audit-Log"]
+  catalog --> read
+  artifacts --> read
+  audit --> status
+```
+
+Der Ablauf wird durch voneinander unabhängige Deployment-Einstellungen
+ausgewählt:
+
+```mermaid
+flowchart LR
+  profile["Deployment-Profil"] --> auth["Auth<br/>Admin: simple / OIDC Preview<br/>Agent-Bereiche: none / bearer / OIDC Preview"]
+  profile --> judger["Automatisches Judgement<br/>noop / vercel-ai-sdk / custom"]
+  profile --> publication["Veröffentlichung<br/>manuell / Auto-Publish bei green"]
+  profile --> gate["Publish-Gate<br/>disabled / warn / required"]
+  profile --> storage["Persistenz<br/>SQLite / MySQL<br/>Filesystem / Datenbank-Inhalte"]
+```
+
+| Bereich | Konfiguration | Bedeutung |
+| --- | --- | --- |
+| Authentifizierung | `ADMIN_AUTH_MODE=simple\|oidc`; `DISCOVERY_AUTH_MODE`, `PUBLIC_READ_AUTH_MODE` und `PROPOSAL_AUTH_MODE` jeweils `none\|bearer\|oidc` | Admin-Authentifizierung und die drei Agent-Bereiche sind unabhängig konfigurierbar. OIDC/Authentik bleibt für den ersten Release nur Preview. |
+| Judgement | `JUDGER_PROVIDER=noop\|vercel-ai-sdk\|custom` | Beim Finalisieren können Proposal und Dateien automatisch bewertet werden. `noop` speichert `no_judge_available`; der eingebaute Provider nutzt das konfigurierte Modell; Custom-Adapter verwenden `JUDGER_ADAPTER_PATH`. |
+| Veröffentlichung | `AUTO_PUBLISH_ON_GREEN=false\|true` und `AUTO_APPROVE_WITHOUT_JUDGER=false\|true` | Standardmäßig erfolgt ein manuelles Review. Green- und eligible Proposals können bei Aktivierung automatisch konvertiert und veröffentlicht werden; Auto-Publish mit noop ist ein expliziter Override. |
+| Publish-Gate | `PUBLISH_JUDGEMENT_POLICY=disabled\|warn\|required` | Fehlende Ergebnisse ignorieren, mit Audit-Warnung erlauben oder die Veröffentlichung blockieren, bis alle erforderlichen Judgements vollständig sind. Admin-Overrides werden auditiert. |
+| Persistenz | `CATALOG_PROVIDER=sqlite\|mysql`, `SEARCH_PROVIDER=sqlite\|mysql`, `CONTENT_STORAGE_PROVIDER=filesystem\|database` | Katalog/Suche sowie Skill-/Proposal-Inhalte können unabhängig hinter denselben Application-Ports gewählt werden. |
+
+Der öffentliche Leseweg stellt ausschließlich veröffentlichte Skill-Versionen
+bereit. Proposal-Aufnahme, Judgement, Review, Veröffentlichung, Speicherung,
+Suche und Audit bleiben getrennte Verantwortlichkeiten, die über den
+OpenAPI-Vertrag und Application-Ports verbunden sind.
 
 ## Status
 

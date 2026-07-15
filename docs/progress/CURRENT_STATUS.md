@@ -127,6 +127,9 @@ creating a public skill:
   `in_review`, `approved`, `published`). Auto-publish success means the skill
   version is published; otherwise the proposal becomes a judged/converted draft
   awaiting a human admin decision.
+- Filesystem audit reads retain proposal-linked conversion entries even when
+  those entries are stored under a skill-keyed audit file, so converted public
+  proposal status can expose the created `convertedSkillId`.
 
 ## Admin Proposal Navigation
 

@@ -1,5 +1,10 @@
 ## 2026-07-15: Public Release Review Remediation
 
+- Fixed filesystem audit reads for cross-linked proposal/skill entries so a
+  converted proposal's public status retains its `convertedSkillId`.
+- Added adapter regression coverage and acceptance-spec guidance for entries
+  that carry both `proposalId` and `skillId`.
+
 - Split duplicate detection into a public metadata/fingerprint-only preflight
   and an internal finalized-proposal assessment. The public route rejects unknown
   fields such as `proposalId`, reads no stored files, and never invokes an LLM.
