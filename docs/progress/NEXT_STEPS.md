@@ -2,9 +2,9 @@
 
 ## Deployment Hardening
 
-- [ ] Rebuild the CBT deployment archive after the loopback-only frontend
-      binding change and verify that nginx is the only externally reachable
-      entry point.
+- [ ] Deploy the CBT archive with loopback-only binding and
+      `FRONTEND_START_MODE=preview`; verify the production frontend, API, and
+      nginx entry point end to end.
 - [ ] Commit the JSZip dependency fix and deploy with Node.js 22 LTS on the CBT
       server to remove the current engine warning.
 

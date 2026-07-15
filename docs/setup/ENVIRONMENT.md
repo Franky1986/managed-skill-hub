@@ -284,6 +284,7 @@ Notes:
 | `FRONTEND_HOST` | no | Vite bind address. Keep `127.0.0.1` for nginx-fronted deployments; use an explicit non-loopback address only for intentional LAN development. | `127.0.0.1` |
 | `VITE_API_BASE_URL` | yes | Backend base URL. | `http://localhost:3040` |
 | `VITE_USE_API_PROXY` | no | Set `false` to bypass Vite proxy. | `true` |
+| `FRONTEND_START_MODE` | no | Frontend process mode used by `scripts/restart-server.sh`: `dev` for local development or `preview` to serve the already-built production bundle. | `dev` |
 
 ## Environment switching
 When switching environments, copy the template and update the required keys:

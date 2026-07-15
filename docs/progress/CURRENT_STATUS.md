@@ -17,6 +17,12 @@ external entry point.
 The API declares `jszip` directly for PPTX extraction, so clean server installs
 can reproduce the production build without relying on a hoisted local module.
 
+The restart helper supports `FRONTEND_START_MODE=preview` for deployments: after
+`npm run build:prod`, the frontend serves the built `apps/web/dist` bundle via
+Vite preview instead of running the development server with `NODE_ENV=production`.
+The CBT private profile uses this mode while local development retains the
+default `dev` mode.
+
 ## Security Hardening Baseline
 
 The current public-release hardening baseline includes restrictive configured

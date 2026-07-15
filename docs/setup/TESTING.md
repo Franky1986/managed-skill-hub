@@ -162,8 +162,9 @@ npm run build:prod
 node apps/api/dist/server.js
 ```
 
-The frontend is served by the same `npm run dev`/start flow; for pure production
-preview after a build, use `npm run dev` from the repo root.
+The frontend is served by the same `npm run dev`/start flow in local development.
+For a production-bundle preview after a build, set
+`FRONTEND_START_MODE=preview` before running `scripts/restart-server.sh`.
 
 ## 5. Automated Smoke Test
 

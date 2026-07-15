@@ -15,7 +15,18 @@ load_managed_skill_hub_env "${PROJECT_ROOT}"
 
 FRONTEND_PORT="${FRONTEND_PORT:-3041}"
 API_PORT="${API_PORT:-3040}"
+FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
+FRONTEND_START_MODE="${FRONTEND_START_MODE:-dev}"
 PORTS=("${FRONTEND_PORT}" "${API_PORT}")
+
+case "$FRONTEND_START_MODE" in
+  dev|preview)
+    ;;
+  *)
+    echo "Unsupported FRONTEND_START_MODE: ${FRONTEND_START_MODE}. Use dev or preview." >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p "$LOG_DIR"
 
@@ -133,11 +144,19 @@ wait_for_ports() {
 
 start_services() {
   log "Starting project in ${PROJECT_ROOT}"
+  log "Frontend start mode: ${FRONTEND_START_MODE}"
   log "Logs: ${LOG_FILE}"
   cd "$PROJECT_ROOT"
   if [ "$START_IN_BACKGROUND" = "1" ]; then
     : > "${LOG_FILE}"
-    nohup env TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" npm run dev >"${LOG_FILE}" 2>&1 < /dev/null &
+    if [ "$FRONTEND_START_MODE" = "preview" ]; then
+      nohup env TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" FRONTEND_HOST="${FRONTEND_HOST}" \
+        bash -c 'npm run dev --workspace=apps/api & npm run preview --workspace=apps/web -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" & wait' \
+        >"${LOG_FILE}" 2>&1 < /dev/null &
+    else
+      nohup env TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" npm run dev \
+        >"${LOG_FILE}" 2>&1 < /dev/null &
+    fi
     printf '%s\n' "$!" > "${PID_FILE}"
     log "Server started (PID: $(cat "${PID_FILE}")), running in the background."
     log "Frontend: http://localhost:${FRONTEND_PORT}"
@@ -146,7 +165,12 @@ start_services() {
     log "Stoppen mit: ./scripts/restart-server.sh stop"
   else
     log "Im Vordergrund starten..."
-    TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" npm run dev
+    if [ "$FRONTEND_START_MODE" = "preview" ]; then
+      TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" FRONTEND_HOST="${FRONTEND_HOST}" \
+        bash -c 'npm run dev --workspace=apps/api & npm run preview --workspace=apps/web -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" & wait'
+    else
+      TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" npm run dev
+    fi
   fi
 }
 

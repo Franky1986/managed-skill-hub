@@ -1,3 +1,12 @@
+# 2026-07-15: Use the built frontend bundle for deployment startup
+
+- Added configurable `FRONTEND_START_MODE` support to `restart-server.sh`.
+- Local development keeps the default Vite `dev` server; production deployment
+  profiles can use `preview` to serve the already-built frontend bundle.
+- Enabled `FRONTEND_START_MODE=preview` in the ignored CBT deployment profile to
+  avoid running React's production mode through the Vite development server.
+- Updated environment, testing, deployment, and progress documentation.
+
 ## 2026-07-15: Public Release Review Remediation
 
 - Removed confidential provider identifiers, implementation paths, disposable
