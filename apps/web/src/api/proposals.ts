@@ -37,6 +37,19 @@ export interface HowToProposeResponse {
     conversationLanguage: string;
     metadataLanguageGuidance: string;
     agentHttpGuidance: AgentHttpGuidance;
+    proposalIntentDecision: {
+        requiredBeforePackagePreparation: boolean;
+        outcomes: Array<
+            | 'use_existing_skill'
+            | 'keep_local'
+            | 'install_local'
+            | 'propose_new_skill'
+            | 'propose_new_version'
+            | 'request_admin_update'
+        >;
+        decisionRules: string[];
+        commandRules: string[];
+    };
     requiredSteps: Array<{
         step: number;
         title: string;

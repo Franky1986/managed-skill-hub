@@ -77,6 +77,9 @@ log_info "Found .spec.md files: $SPEC_COUNT"
 
 # Check important scripts.
 for script in \
+  scripts/deployment/prepare-release.sh \
+  scripts/deployment/service.sh \
+  scripts/deployment/upload.sh \
   scripts/create-deploy-archive.sh \
   scripts/install_and_start.sh \
   scripts/restart-server.sh \
@@ -95,6 +98,7 @@ for script in \
   scripts/export-content-filesystem.ts \
   scripts/check-content-export.ts \
   scripts/check-provider-cutover.ts \
+  scripts/check-deployment-blueprint.sh \
   scripts/check-pinned-package-versions.mjs \
   scripts/check-public-release-hygiene.sh \
   scripts/check-judger-autopublish-matrix.ts \
@@ -113,6 +117,11 @@ done
 log_info "Checking pinned package versions ..."
 if ! node scripts/check-pinned-package-versions.mjs >".tmp/pinned-package-versions.check.log" 2>&1; then
   log_error "Pinned package version check failed (see .tmp/pinned-package-versions.check.log)"
+fi
+
+log_info "Starting generic deployment blueprint proof ..."
+if ! bash scripts/check-deployment-blueprint.sh >".tmp/deployment-blueprint.check.log" 2>&1; then
+  log_error "Deployment blueprint proof failed (see .tmp/deployment-blueprint.check.log)"
 fi
 
 # Check build tooling configuration files.

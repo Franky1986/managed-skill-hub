@@ -29,6 +29,21 @@ function testDouble<T extends object>(implementation: Partial<T> = {}): T {
   });
 }
 
+interface ProposalGuidanceStep {
+  step: number;
+  title: string;
+  checks: string[];
+}
+
+function requireProposalGuidanceStep(steps: ProposalGuidanceStep[], title: string): ProposalGuidanceStep {
+  const step = steps.find((candidate) => candidate.title === title);
+  expect(step, `Expected proposal guidance step "${title}"`).toBeDefined();
+  if (!step) {
+    throw new Error(`Expected proposal guidance step "${title}"`);
+  }
+  return step;
+}
+
 function buildTestContainer(overrides: {
   config?: Partial<AppConfig>;
   nameSuggestion?: Partial<SkillReadRouteContainer['nameSuggestion']>;
@@ -350,25 +365,45 @@ describe('SkillReadController /discover', () => {
 
     expect(response.statusCode).toBe(200);
     const payload = JSON.parse(response.payload);
+    const requiredSteps = payload.requiredSteps as ProposalGuidanceStep[];
     expect(payload.id).toBe('how-to-propose');
     expect(payload.conversationLanguage).toContain('language the user is currently using');
     expect(payload.metadataLanguageGuidance).toContain('Proposal metadata should preferably be written in English');
     expect(payload.agentHttpGuidance.toolSelection).toContain('VPN-restricted');
     expect(payload.agentHttpGuidance.proposalExecution).toContain('GET /howToPropose');
     expect(payload.agentHttpGuidance.authenticationDiagnosis.join(' ')).toContain('exact requested endpoint');
-    expect(Array.isArray(payload.requiredSteps)).toBe(true);
-    expect(payload.requiredSteps.length).toBeGreaterThan(0);
-    expect(payload.requiredSteps.some((step: { title: string }) => step.title === 'Use the user conversation language')).toBe(true);
-    expect(payload.requiredSteps.some((step: { title: string }) => step.title === 'Prefer English proposal metadata')).toBe(true);
-    const inspectStep = payload.requiredSteps.find((step: { title: string }) => step.title === 'Inspect the local package');
+    expect(Array.isArray(requiredSteps)).toBe(true);
+    expect(requiredSteps.length).toBeGreaterThan(0);
+    expect(requiredSteps.some((step) => step.title === 'Use the user conversation language')).toBe(true);
+    expect(requiredSteps.some((step) => step.title === 'Prefer English proposal metadata')).toBe(true);
+    const intentStep = requireProposalGuidanceStep(
+      requiredSteps,
+      'Clarify the intended outcome and registry value'
+    );
+    expect(intentStep.checks.join(' ')).toContain('keep or install the artifact locally');
+    expect(intentStep.checks.join(' ')).toContain('optional commands should be installed');
+    const inspectStep = requireProposalGuidanceStep(requiredSteps, 'Inspect the local package');
+    expect(intentStep.step).toBeLessThan(inspectStep.step);
     expect(inspectStep.checks.join(' ')).toContain('node_modules');
     expect(inspectStep.checks.join(' ')).toContain('commands/foo.md');
     expect(inspectStep.checks.join(' ')).toContain('commands/manifest.json');
     expect(inspectStep.checks.join(' ')).toContain('templates');
     expect(inspectStep.checks.join(' ')).toContain('PPTX');
-    const duplicateStep = payload.requiredSteps.find((step: { title: string }) => step.title === 'Run duplicate precheck');
+    const duplicateStep = requireProposalGuidanceStep(requiredSteps, 'Run duplicate precheck');
     expect(duplicateStep.checks.join(' ')).toContain('concise metadata/file-fingerprint diff');
+    expect(duplicateStep.checks.join(' ')).toContain('Using the published skill');
+    expect(duplicateStep.checks.join(' ')).toContain('strong similarity threshold of 0.5');
+    expect(duplicateStep.checks.join(' ')).toContain('exploratory context');
+    expect(payload.proposalIntentDecision).toMatchObject({
+      requiredBeforePackagePreparation: true,
+      outcomes: expect.arrayContaining(['use_existing_skill', 'keep_local', 'install_local', 'propose_new_skill']),
+      decisionRules: expect.arrayContaining([expect.stringContaining('Do not infer proposal intent')]),
+      commandRules: expect.arrayContaining([expect.stringContaining('separate decisions')]),
+    });
     expect(payload.duplicateConfirmationRule.confirmationRequired).toContain('Do not call POST /proposals');
+    expect(payload.duplicateConfirmationRule.confirmationRequired).toContain('proposal outcome');
+    expect(payload.duplicateConfirmationRule.strongSimilarityThreshold).toBe(0.5);
+    expect(payload.duplicateConfirmationRule.requiredUserFacingSummary.join(' ')).toContain('lower-scoring similar match');
     expect(payload.duplicateConfirmationRule.requiredUserFacingSummary.join(' ')).toContain('core overlap');
     expect(payload.escalationRule).toContain('referenced local artifacts are missing');
     expect(payload.normalizationRules).toMatchObject({
@@ -390,12 +425,13 @@ describe('SkillReadController /discover', () => {
       required: true,
       finalizeEndpoint: 'POST /proposals/{id}/finalize-upload',
     });
-    const normalizeStep = payload.requiredSteps.find((step: { title: string }) => step.title === 'Normalize only when needed');
+    const normalizeStep = requireProposalGuidanceStep(requiredSteps, 'Normalize only when needed');
     expect(normalizeStep.checks.join(' ')).toContain('commands/');
     expect(normalizeStep.checks.join(' ')).toContain('scripts/');
     expect(normalizeStep.checks.join(' ')).toContain('Adjust relative references');
-    const proofStep = payload.requiredSteps.find((step: { title: string }) =>
-      step.title === 'Build and prove the final upload package before network upload'
+    const proofStep = requireProposalGuidanceStep(
+      requiredSteps,
+      'Build and prove the final upload package before network upload'
     );
     expect(proofStep.checks.join(' ')).toContain('Before POST /proposals');
     expect(proofStep.checks.join(' ')).toContain('.cursor/skills/');
@@ -406,19 +442,28 @@ describe('SkillReadController /discover', () => {
       finalPackageHashSource: 'temporary upload package after all normalization',
     });
     expect(payload.preUploadPackageProof.forbiddenBeforeProof).toEqual(expect.arrayContaining(['POST /proposals']));
-    const createStep = payload.requiredSteps.find((step: { title: string }) => step.title === 'Create proposal only after confirmation');
+    const createStep = requireProposalGuidanceStep(
+      requiredSteps,
+      'Create proposal only after confirmation'
+    );
     expect(createStep.checks.join(' ')).toContain('final temporary upload package');
     expect(createStep.checks.join(' ')).toContain('multipart path=<relative package path>');
-    const downloadStep = payload.requiredSteps.find((step: { title: string }) =>
-      step.title === 'Download published skill packages per version'
+    const downloadStep = requireProposalGuidanceStep(
+      requiredSteps,
+      'Download published skill packages per version'
     );
     expect(downloadStep.checks.join(' ')).toContain('GET /skills/{skillId}/package?version=<published-version>');
     expect(downloadStep.checks.join(' ')).toContain('commands/manifest.json');
     expect(payload.uploadGuardrails.join(' ')).toContain('installed dependency directories');
     expect(payload.uploadGuardrails.join(' ')).toContain('missing templates');
     expect(payload.uploadGuardrails.join(' ')).toContain('folder structure');
-    expect(payload.requiredSteps[0].title).toBe('Read this workflow first');
-    expect(payload.requiredSteps.some((step: { title: string }) => step.title === 'Handle registry authentication outside chat')).toBe(false);
+    const firstStep = requiredSteps[0];
+    expect(firstStep).toBeDefined();
+    if (!firstStep) {
+      throw new Error('Expected at least one proposal guidance step');
+    }
+    expect(firstStep.title).toBe('Read this workflow first');
+    expect(requiredSteps.some((step) => step.title === 'Handle registry authentication outside chat')).toBe(false);
     expect(payload.apiNotes.authSetupFlow).toBeUndefined();
     expect(payload.apiNotes.credentialSetupScriptUrl).toBeUndefined();
   });

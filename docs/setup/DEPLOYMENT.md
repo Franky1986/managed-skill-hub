@@ -3,6 +3,51 @@
 > Warning: production deployment is not automated. This document describes the
 > manual process.
 
+## Reusable Deployment Blueprint
+
+The public repository provides organization-neutral building blocks under
+`scripts/deployment/`:
+
+| File | Responsibility |
+|------|----------------|
+| `prepare-release.sh` | Run the normal checks/build and create the committed public archive, checksum, and service controller |
+| `upload.sh` | Upload an explicit artifact list using a local non-secret target profile |
+| `service.sh` | Control the active installed release through `start`, `restart`, `stop`, `status`, `health`, `logs`, and `config` |
+| `deployment.env.example` | Configure source, secret, log, and healthcheck locations at the deployment root |
+| `upload-profile.env.example` | Configure SSH host, user, target directory, and optional port |
+
+Internal hostnames, custom adapters, certificates, nginx files, and real
+target profiles do not belong in the public repository. Keep them in an
+ignored `.local/` directory or a separate private operations repository.
+
+Prepare the public artifacts:
+
+```bash
+bash scripts/deployment/prepare-release.sh
+```
+
+Create an operator-owned upload profile outside Git:
+
+```bash
+cp scripts/deployment/upload-profile.env.example /secure/path/skill-hub-upload.env
+${EDITOR:-vi} /secure/path/skill-hub-upload.env
+```
+
+Upload an explicit artifact set:
+
+```bash
+bash scripts/deployment/upload.sh \
+  /secure/path/skill-hub-upload.env \
+  .tmp/deploy/managed-skill-hub-deploy.tar.gz \
+  .tmp/deploy/managed-skill-hub-deploy.tar.gz.sha256 \
+  .tmp/deploy/service.sh \
+  .tmp/deploy/deployment.env.example
+```
+
+The upload helper never executes remote commands. Environment-specific
+automation may add a private overlay and a safe staged cutover/rollback
+wrapper around these public artifacts.
+
 ## Target Environment
 
 ```text
@@ -108,10 +153,32 @@ bash src/scripts/install_and_start.sh start
 ## Restart/Stop
 
 ```bash
-bash /path/to/deploy-root/src/scripts/restart-server.sh
-bash /path/to/deploy-root/src/scripts/restart-server.sh stop
-bash /path/to/deploy-root/src/scripts/restart-server.sh status
+install -m 0700 /path/to/uploaded/service.sh /path/to/deploy-root/service.sh
+cp /path/to/deploy-root/src/scripts/deployment/deployment.env.example \
+  /path/to/deploy-root/deployment.env
+${EDITOR:-vi} /path/to/deploy-root/deployment.env
+
+cd /path/to/deploy-root
+bash ./service.sh start
+bash ./service.sh status
+bash ./service.sh health
+bash ./service.sh logs
+bash ./service.sh stop
 ```
+
+The default settings expect:
+
+```text
+/path/to/deploy-root/
+  deployment.env
+  service.sh
+  .env.secrets
+  src/
+```
+
+For a different layout, change only the non-secret `MSH_*` settings in
+`deployment.env`. The controller always exports the selected active release
+and persistent secret path before delegating to the release scripts.
 
 ## Data Directory
 

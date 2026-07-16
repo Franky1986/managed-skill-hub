@@ -39,6 +39,9 @@ existing catalog behavior from application contracts.
   -> `StorageError` from MySQL adapter.
 - MySQL unavailable or misconfigured -> startup/configured-at-boot initialization
   may fail when provider selection requires MySQL.
+- The shared MySQL client must resolve `mysql2/promise` from the adapter file
+  location so compiled API processes and supported Node.js 20 `tsx` proof runs
+  use the same installed driver.
 
 ## Acceptance Criteria
 
@@ -50,6 +53,8 @@ existing catalog behavior from application contracts.
 - Version/file metadata supports deduplicated public reads and admin file trees.
 - Provider failures are surfaced as `StorageError` and do not alter filesystem
   state.
+- The full Node.js 20 MySQL validation gate can load the driver and complete
+  provider, cutover, and content-storage checks.
 
 ## Tests / Checks
 

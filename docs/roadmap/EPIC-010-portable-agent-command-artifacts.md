@@ -100,6 +100,20 @@ Example:
 The manifest describes target destinations as hints. The consumer agent must
 still ask the user before writing outside the extracted skill directory.
 
+Skill use, command installation, and registry publication are three separate
+decisions:
+
+- A user may use or download a published skill without installing any command
+  shortcut.
+- Installing a command into `.cursor/`, `.codex/`, `.claude/`, or another
+  runtime folder requires separate user consent after the skill is selected.
+- Portable commands belong to the same skill package by default. They do not
+  require separate skill IDs or separate proposals.
+- Command presence alone is not evidence that a new public proposal adds
+  registry value. The skill still needs a distinct reusable purpose, and
+  `SKILL.md` must remain the usable entrypoint when optional commands are not
+  installed.
+
 ## Proposal Upload Contract
 
 When a submitter package references runtime command paths outside the skill

@@ -84,6 +84,7 @@ co-located `*.spec.md` files.
 | [docs/setup/NPM_VERIFICATION.md](setup/NPM_VERIFICATION.md) | NPM package verification and vulnerabilities |
 | [docs/setup/DEPENDENCY_UPDATE_LOG.md](setup/DEPENDENCY_UPDATE_LOG.md) | Dependency update log |
 | [docs/setup/NGINX.md](setup/NGINX.md) | Example nginx configuration |
+| [scripts/README.md](../scripts/README.md) | Script ownership, stable entrypoints, and deployment blueprint |
 
 ## Scripts
 
@@ -111,6 +112,10 @@ co-located `*.spec.md` files.
 | [scripts/check-admin-ui-smoke.ts](../scripts/check-admin-ui-smoke.ts) | Lightweight admin/public UI source-contract smoke proof |
 | [scripts/smoke-test.sh](../scripts/smoke-test.sh) | Automated local API smoke tests |
 | [scripts/create-deploy-archive.sh](../scripts/create-deploy-archive.sh) | Create a deployment archive from committed files |
+| [scripts/deployment/prepare-release.sh](../scripts/deployment/prepare-release.sh) | Create generic public deployment artifacts |
+| [scripts/deployment/upload.sh](../scripts/deployment/upload.sh) | Upload explicit artifacts through an operator-owned target profile |
+| [scripts/deployment/service.sh](../scripts/deployment/service.sh) | Generic deployment-root runtime controller |
+| [scripts/check-deployment-blueprint.sh](../scripts/check-deployment-blueprint.sh) | Deterministic generic deployment blueprint proof |
 | [scripts/install_and_start.sh](../scripts/install_and_start.sh) | Install and start on the server |
 | [scripts/restart-server.sh](../scripts/restart-server.sh) | Restart/stop stack |
 | [scripts/backup.sh](../scripts/backup.sh) | Create backup |

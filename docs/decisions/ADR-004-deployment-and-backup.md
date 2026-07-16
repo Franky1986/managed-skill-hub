@@ -22,6 +22,10 @@ must survive redeploys.
     directory before `src/` is replaced; `data/` remains untouched.
   - Environment-specific wrappers may retain the previous release and restore
     it when application healthchecks or reverse-proxy validation fail.
+- Public deployment helpers are organization-neutral and use operator-owned,
+  non-secret profiles for SSH targets and deployment-root runtime paths.
+- Internal hostnames, certificate paths, reverse-proxy details, custom private
+  adapters, and real secrets remain outside the public repository.
 - Server preparation installs the committed lockfile graph and creates
   production artifacts before stopping the active release.
 - The stack starts in the background via `scripts/restart-server.sh`, with
@@ -42,6 +46,8 @@ must survive redeploys.
   persistent data.
 - App update history remains traceable in archives.
 - A later switch to systemd service or containers is possible.
+- One public blueprint can support different server roots and SSH targets
+  without forking application runtime scripts.
 
 ## Open Points
 

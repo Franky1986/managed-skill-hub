@@ -89,11 +89,12 @@ paths:
                     summary: Mandatory preflight before submit
                     description: Read this endpoint before every proposal upload.
                       Agents must communicate with the user in the language the user
-                      is currently using, validate the local package, normalize it
-                      only when needed, ensure SKILL.md is the root entrypoint, keep
-                      dependency installation artifacts out of the uploaded package,
-                      verify self-contained references, scan for credentials or PII,
-                      and only then continue to duplicate prechecks and submission.
+                      is currently using, clarify whether the user wants to use an
+                      existing skill, keep or install an artifact locally, improve
+                      an existing skill, or publish reusable registry content,
+                      explain whether a proposal adds meaningful registry value,
+                      and only then prepare, validate, duplicate-check, and submit
+                      a confirmed proposal.
                     conversationLanguage: When communicating with the user, use the
                       language the user is currently using unless the user explicitly
                       asks for another language.
@@ -151,31 +152,71 @@ paths:
                           command: 'curl -fSL -OJ "<api-base-url>/skills/{skillId}/package?version=<published-version>"'
                           authArea: public-read
                           authorizationRequired: false
+                    proposalIntentDecision:
+                      requiredBeforePackagePreparation: true
+                      outcomes:
+                      - use_existing_skill
+                      - keep_local
+                      - install_local
+                      - propose_new_skill
+                      - propose_new_version
+                      - request_admin_update
+                      decisionRules:
+                      - Do not infer proposal intent merely because the user asks
+                        to create, test, or prepare a skill.
+                      - First determine whether the user wants to use an existing
+                        published skill, keep or install the artifact locally,
+                        improve an existing skill, or submit reusable registry
+                        content.
+                      - Explain whether publication adds distinct reusable value
+                        before asking for upload confirmation.
+                      - For trivial demos, one-off helpers, or behavior already
+                        covered by a published skill, recommend the existing skill
+                        or a local outcome unless the user gives a registry-wide
+                        test or reuse reason.
+                      commandRules:
+                      - Portable commands are optional artifacts inside the same
+                        skill package, not separate proposals by default.
+                      - Choosing to use a skill and choosing to install its commands
+                        are separate decisions.
+                      - Ask before copying commands into runtime-specific folders;
+                        optional command installation must not be required to use
+                        SKILL.md.
+                      - Command presence alone does not make a public proposal
+                        worthwhile.
                     escalationRule: Do not proceed with proposal creation while the
-                      package is structurally ambiguous, references are broken, sensitive
+                      user outcome or registry value is unresolved, the package is
+                      structurally ambiguous, references are broken, sensitive
                       content is present, or duplicate intent is unconfirmed.
                     duplicateConfirmationRule:
+                      strongSimilarityThreshold: 0.5
                       appliesWhen:
                       - exactDuplicateProposalId is set
                       - exactDuplicateSkillId is set
                       - skillIdCollision.exists is true
-                      - similarMatches contains a strong title/description intent
-                        match
+                      - similarMatches contains a title/description intent match
+                        with similarityScore at or above strongSimilarityThreshold
                       requiredUserFacingSummary:
                       - Name each relevant duplicate candidate with kind, id, skillId/title
                         when available, status/version when available, and similarity
                         score for similar matches.
+                      - Do not label a lower-scoring similar match as a duplicate
+                        or blocker solely because it appears in similarMatches.
                       - Summarize the core overlap including matching title or intent,
                         shared category, shared tags/capabilities, matching entrypoint,
                         and exact content digest when available.
+                      - State whether using the existing skill, keeping the artifact
+                        local, or installing it locally is the more useful outcome.
                       - Summarize what would change if uploaded, including resolution
                         option, metadata changes, file additions/removals, or changed
                         file fingerprints.
                       - Provide a concise diff from duplicate-check differences and
                         local file fingerprint comparison.
-                      confirmationRequired: Ask the user explicitly whether to upload
-                        despite the duplicate or choose one of the returned resolutionOptions.
-                        Do not call POST /proposals until the user confirms.
+                      confirmationRequired: First ask whether to use the existing
+                        skill, keep or install the artifact locally, or continue
+                        with a proposal. Only after proposal intent is confirmed,
+                        ask for the applicable resolutionOption. Do not call POST
+                        /proposals until both decisions are confirmed.
                     normalizationRules:
                       entrypointFile: SKILL.md
                       packageRoot: proposal package root
@@ -217,6 +258,21 @@ paths:
                       - Use English API and contract fields as documented
                       - Respond to the user in the language they are currently using
                     - step: 3
+                      title: Clarify the intended outcome and registry value
+                      checks:
+                      - Ask whether the user wants to use an existing skill, keep
+                        or install the artifact locally, improve an existing skill,
+                        or submit reusable registry content
+                      - Do not infer proposal intent from create, make, prepare,
+                        or test requests
+                      - Recommend an existing or local outcome for trivial, one-off,
+                        or already-covered behavior unless there is a clear registry
+                        reuse purpose
+                      - Ask separately whether optional commands should be installed
+                        into the user's runtime
+                      - Do not begin package preparation until a proposal outcome
+                        is confirmed
+                    - step: 4
                       title: Inspect the local package
                       checks:
                       - Determine whether the package already matches the upload contract
@@ -237,7 +293,7 @@ paths:
                         overwrite command artifacts
                       - Keep dependency manifests and lockfiles, but do not upload
                         installed package trees
-                    - step: 4
+                    - step: 5
                       title: Normalize only when needed
                       checks:
                       - Final entrypoint must be SKILL.md in the package root
@@ -250,19 +306,19 @@ paths:
                         when the command ships with the package
                       - Strip installed dependency folders from the temporary upload
                         package
-                    - step: 5
+                    - step: 6
                       title: Prefer English proposal metadata
                       checks:
                       - Prefer English for title, description, category, tags and
                         capabilities
                       - Uploaded content files may be in any language
-                    - step: 6
+                    - step: 7
                       title: Validate self-contained and safe content
                       checks:
                       - No required artifact reference may still resolve outside the
                         temporary upload package root
                       - Broken references, credentials or PII must block the upload
-                    - step: 7
+                    - step: 8
                       title: Build and prove the final upload package before network
                         upload
                       checks:
@@ -280,21 +336,26 @@ paths:
                         after normalization
                       - Do not call POST /proposals until this local package proof
                         is complete
-                    - step: 8
+                    - step: 9
                       title: Search the public catalog exploratively
                       checks:
                       - GET /skills/search?q=<title>&mode=keyword
                       - GET /skills/search?q=<short description keywords>&mode=keyword
                       - Inspect matching descriptions and public files when relevant
-                    - step: 9
+                    - step: 10
                       title: Run duplicate precheck
                       checks:
                       - POST /proposals/check-duplicate
-                      - Stop on exact duplicates, skill-id collisions, or strong intent
-                        matches
-                      - Show duplicate candidate, overlap, intended resolution, and
-                        concise metadata/file-fingerprint diff before asking
-                    - step: 10
+                      - Stop on exact duplicates, skill-id collisions, or matching
+                        intent at or above strongSimilarityThreshold
+                      - Treat lower-scoring similar matches as exploratory context
+                        rather than upload blockers
+                      - Revisit whether using the existing skill or keeping/installing
+                        the artifact locally is more useful
+                      - Only after proposal intent remains confirmed, show the duplicate
+                        candidate, overlap, intended resolution, and concise metadata/file-fingerprint
+                        diff before asking
+                    - step: 11
                       title: Create proposal only after confirmation
                       checks:
                       - Final temporary upload package is complete, locally scanned,
@@ -2989,6 +3050,7 @@ components:
       - summary
       - description
       - agentHttpGuidance
+      - proposalIntentDecision
       - requiredSteps
       - escalationRule
       - duplicateConfirmationRule
@@ -3011,6 +3073,35 @@ components:
           type: string
         agentHttpGuidance:
           $ref: '#/components/schemas/AgentHttpGuidance'
+        proposalIntentDecision:
+          type: object
+          required:
+          - requiredBeforePackagePreparation
+          - outcomes
+          - decisionRules
+          - commandRules
+          properties:
+            requiredBeforePackagePreparation:
+              type: boolean
+            outcomes:
+              type: array
+              items:
+                type: string
+                enum:
+                - use_existing_skill
+                - keep_local
+                - install_local
+                - propose_new_skill
+                - propose_new_version
+                - request_admin_update
+            decisionRules:
+              type: array
+              items:
+                type: string
+            commandRules:
+              type: array
+              items:
+                type: string
         requiredSteps:
           type: array
           items:
@@ -3036,6 +3127,10 @@ components:
         duplicateConfirmationRule:
           type: object
           properties:
+            strongSimilarityThreshold:
+              type: number
+              minimum: 0
+              maximum: 1
             appliesWhen:
               type: array
               items:

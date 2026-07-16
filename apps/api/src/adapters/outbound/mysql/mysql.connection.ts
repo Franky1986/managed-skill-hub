@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { StorageError } from '../../../domain/errors';
 import { AppConfig } from '../../../infrastructure/config';
 
@@ -34,6 +35,7 @@ export interface MysqlConnection {
 }
 
 const DEFAULT_QUERY_TIMEOUT_MS = 30_000;
+const requireFromMysqlConnection = createRequire(__filename);
 
 export class MysqlClient {
   private pool: MysqlPool | null = null;
@@ -122,9 +124,8 @@ export class MysqlClient {
   }
 
   private async loadMysqlDriver(): Promise<{ createPool: (config: Record<string, unknown>) => MysqlPool }> {
-    const moduleName = 'mysql2/promise';
     try {
-      const moduleNamespace = (await import(moduleName)) as {
+      const moduleNamespace = requireFromMysqlConnection('mysql2/promise') as {
         createPool: (config: Record<string, unknown>) => MysqlPool;
       };
       return moduleNamespace;

@@ -190,55 +190,68 @@ Local proposal agents must do more than `check-duplicate`:
 
 1. `GET /howToPropose`
 2. Communicate with the user in the language the user is currently using
-3. Inspect the local files and determine the effective entrypoint
-4. Normalize only when needed into a temporary upload package
-5. Ensure the final package has `SKILL.md` in the package root
-6. Prefer English for proposal metadata: title, description, category, tags,
+3. Clarify whether the user wants to use an existing published skill, keep or
+   install an artifact locally, improve an existing skill, or submit reusable
+   registry content. Do not infer proposal intent from a request to create,
+   make, prepare, or test a skill.
+4. Explain whether publication adds distinct reusable value before asking for
+   submission confirmation. For trivial demos, one-off helpers, or behavior
+   already covered by a published skill, recommend the existing skill or a
+   local outcome unless the user identifies a registry-wide test or reuse need.
+5. Only after the user chooses a proposal outcome, inspect the local files and
+   determine the effective entrypoint
+6. Normalize only when needed into a temporary upload package
+7. Ensure the final package has `SKILL.md` in the package root
+8. Prefer English for proposal metadata: title, description, category, tags,
    capabilities, `useWhen`, and `doNotUseWhen`
-7. Keep uploaded content files in their original language; do not rewrite them
+9. Keep uploaded content files in their original language; do not rewrite them
    solely for language reasons
-8. Exclude initialized dependency directories such as `node_modules/`, `.venv/`,
+10. Exclude initialized dependency directories such as `node_modules/`, `.venv/`,
    `venv/`, `vendor/`, `dist-packages/`, or `site-packages/`
-9. Keep setup manifests and lockfiles such as `package.json`,
+11. Keep setup manifests and lockfiles such as `package.json`,
    `pnpm-lock.yaml`, `pyproject.toml`, or `requirements.txt` when they explain
    later initialization
-10. Infer which local artifacts the skill actually depends on by reading
+12. Infer which local artifacts the skill actually depends on by reading
     `SKILL.md`, adjacent docs, scripts, examples, templates, assets, prompts,
     fixtures, and setup files together
-11. Upload those required local artifacts as part of the proposal package;
+13. Upload those required local artifacts as part of the proposal package;
     examples include templates, example manifests, images, PDFs, PPTX files,
     prompt files, and fixture data when the skill depends on them
-12. Detect references that point outside the effective skill root, such as
+14. Detect references that point outside the effective skill root, such as
     parent-directory references, absolute local paths, IDE/agent workspace
     folders, command folders, generated-output folders, or other
     project-root-relative paths. If such a reference points to a required
     artifact, copy that artifact into the temporary upload package and rewrite
     the reference to its package-relative path before creating the proposal.
-13. Do not treat a local artifact as proprietary, optional, or external unless
+15. Do not treat a local artifact as proprietary, optional, or external unless
     the skill explicitly documents it as an external prerequisite and the
     uploaded package remains truthful and usable without it
-14. Verify that relative references still resolve after normalization
-15. Verify that no required artifact reference still resolves outside the
+16. Verify that relative references still resolve after normalization
+17. Verify that no required artifact reference still resolves outside the
     temporary upload package root.
-16. Verify that every required local artifact is either included or explicitly
+18. Verify that every required local artifact is either included or explicitly
     documented as an external prerequisite
-17. Scan readable files for credentials, tokens, private keys and obvious PII
-18. Build the final temporary upload package before any proposal network write
-19. Recursively scan every readable file in that final package, not only
+19. Scan readable files for credentials, tokens, private keys and obvious PII
+20. Build the final temporary upload package before any proposal network write
+21. Recursively scan every readable file in that final package, not only
     `SKILL.md`
-20. Compute SHA-256 values from the final temporary upload package after all
+22. Compute SHA-256 values from the final temporary upload package after all
     normalization
-21. Inspect `/tags` when choosing proposal metadata or discovery filters
-22. Search `/skills/search` exploratively by title and short description intent
-23. Run `POST /proposals/check-duplicate` using metadata and hashes from the
+23. Inspect `/tags` when choosing proposal metadata or discovery filters
+24. Search `/skills/search` exploratively by title and short description intent
+25. Run `POST /proposals/check-duplicate` using metadata and hashes from the
     final temporary upload package
-24. Stop for explicit confirmation if duplicates, ambiguity, missing required artifacts, or sensitive content is detected
-25. Keep the package within the runtime upload limits returned by
+26. If a duplicate is found, revisit whether using the existing skill, keeping
+    the artifact local, or installing it locally is more useful. Only present
+    upload resolution options after proposal intent remains confirmed.
+27. Stop for explicit confirmation if duplicates, ambiguity, missing required
+    artifacts, or sensitive content is detected
+28. Keep the package within the runtime upload limits returned by
     `GET /howToPropose`
-26. After the last file upload, call `POST /proposals/{id}/validate-upload`,
+29. After the last file upload, call `POST /proposals/{id}/validate-upload`,
     fix every finding in the temporary upload package, upsert changed files,
     and repeat until `valid=true`
-27. Then call `POST /proposals/{id}/finalize-upload` explicitly
+30. Then call `POST /proposals/{id}/finalize-upload` explicitly
 
 The temporary normalization step is conditional:
 
@@ -252,6 +265,9 @@ The temporary normalization step is conditional:
   the skill, copy or merge that command into `commands/foo.md`, rewrite active
   references to the package-relative command path, and add or merge
   `commands/manifest.json` with runtime target hints.
+- Portable commands remain optional artifacts of the same skill package. They
+  do not create a separate skill identity or justify a separate proposal by
+  themselves.
 - If the source package already contains `commands/`, preserve existing command
   files. Compare collisions, merge manifest entries when safe, and stop for user
   input instead of silently overwriting command artifacts.
@@ -312,6 +328,10 @@ The temporary normalization step is conditional:
 - The agent should pre-check the configured maximum file count, file-size cap,
   and blocked dependency-tree paths from `GET /howToPropose` before the first
   upload request so the package fails locally, not halfway through upload.
+- Choosing to use or download a skill and choosing to copy its commands into a
+  runtime-specific folder are separate decisions. Ask for command-installation
+  consent after the user chooses to consume the skill; the skill must remain
+  usable through `SKILL.md` when optional commands are not installed.
 
 ## Pre-submission duplicate check (required for local upload flow)
 
@@ -344,11 +364,19 @@ echo "$RESPONSE" | jq .
 # - skillIdCollision: whether the target skillId already exists
 ```
 
-`check-duplicate` is informational on the API contract. A local submission flow should still apply a blocking confirmation rule:
+`check-duplicate` is informational on the API contract. A local submission
+flow should still apply a blocking confirmation rule, but it must not assume
+that every duplicate decision ends in an upload:
 
 - stop and ask the user when an exact duplicate is found
-- stop and ask the user when a similar candidate crosses the threshold (default `0.62`) with matching title/description intent
+- stop and ask the user when a similar candidate crosses the
+  `strongSimilarityThreshold` returned by `GET /howToPropose` (default `0.5`)
+  with matching title/description intent
 - stop and ask the user when the chosen `skillId` already exists
+- first recommend using the existing skill, keeping the artifact local, or
+  installing it locally when that better matches the user's outcome
+- treat lower-scoring similar matches as exploratory context, not as duplicates
+  or blockers solely because they appear in `similarMatches`
 
 Before asking, the agent must show enough context for the user to make the
 decision:
@@ -367,8 +395,8 @@ decision:
   contents, say that only metadata and hashes were compared
 
 The agent must not call `POST /proposals` until the user explicitly confirms
-uploading despite the duplicate or chooses one of the returned
-`resolutionOptions`.
+that a proposal is still the desired outcome and then chooses one of the
+applicable returned `resolutionOptions`.
 
 The response contains `resolutionOptions` when there is a collision or exact duplicate. Each option has:
 
@@ -381,10 +409,16 @@ The response contains `resolutionOptions` when there is a collision or exact dup
 Example decision flow:
 
 1. Call `POST /proposals/check-duplicate`.
-2. If `exactDuplicateSkillId` is set, ask the user whether to create a new draft version of that skill (`create_new_version`) or request an admin update (`request_admin_update`).
-3. If `skillIdCollision.exists` is true, ask the user whether to keep the id (new draft version), pick the auto-suggested new id (`create_new_skill`), or request an admin update.
-4. Use the selected `suggestedSkillId` in `POST /proposals`.
-5. Attach files and poll the status endpoint as usual.
+2. Explain the overlap and whether using the existing skill or keeping/installing
+   the artifact locally is the more useful outcome.
+3. Only if the user confirms proposal intent and `exactDuplicateSkillId` is set,
+   ask whether to create a new draft version of that skill
+   (`create_new_version`) or request an admin update (`request_admin_update`).
+4. If proposal intent remains confirmed and `skillIdCollision.exists` is true,
+   ask whether to keep the id (new draft version), pick the auto-suggested new
+   id (`create_new_skill`), or request an admin update.
+5. Use the selected `suggestedSkillId` in `POST /proposals`.
+6. Attach files and poll the status endpoint as usual.
 
 ## Submitting a proposal (agent side)
 

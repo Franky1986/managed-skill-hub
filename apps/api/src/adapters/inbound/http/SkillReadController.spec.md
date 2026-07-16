@@ -64,14 +64,28 @@ requests into inbound port calls and maps results back to JSON or file streams.
   with the user in the language the user is currently using unless asked
   otherwise.
 - `GET /howToPropose` returns the mandatory proposal preflight for agents,
-  including the `SKILL.md` entrypoint rule, temporary normalization, self-
-  contained reference checks, required-local-artifact identification,
-  secrets/PII checks, installed-dependency exclusion rules, duplicate precheck
-  order, and the same user-conversation-language rule.
+  including an outcome and registry-value decision before package preparation,
+  the `SKILL.md` entrypoint rule, temporary normalization, self-contained
+  reference checks, required-local-artifact identification, secrets/PII checks,
+  installed-dependency exclusion rules, duplicate precheck order, and the same
+  user-conversation-language rule.
+- `GET /howToPropose.proposalIntentDecision` prevents agents from inferring
+  publication intent from requests to create or test a skill. Agents first
+  distinguish using an existing skill, keeping or installing an artifact
+  locally, improving an existing skill, and proposing reusable registry
+  content.
+- Portable command files remain optional artifacts inside the same skill
+  package. Command installation into a runtime-specific folder is a separate
+  user decision and command presence alone does not justify a proposal.
 - `GET /howToPropose.duplicateConfirmationRule` tells agents to stop before
-  upload when duplicate/collision signals are present, summarize the duplicate
-  candidate, core overlap, intended resolution, and concise metadata/file-
-  fingerprint diff, then ask the user for explicit confirmation.
+  upload when duplicate/collision signals are present, reconsider whether an
+  existing or local outcome is more useful, summarize the duplicate candidate,
+  core overlap, intended resolution, and concise metadata/file-fingerprint
+  diff, then ask the user for explicit confirmation only when proposal intent
+  remains confirmed.
+- The duplicate rule exposes the configured strong-similarity threshold.
+  Lower-scoring search matches are exploratory context and are not upload
+  blockers by themselves.
 - `GET /howToPropose.metadataLanguageGuidance` recommends English for new
   proposal metadata while allowing uploaded content files in any language.
 - `GET /howToPropose` includes an auth setup flow telling agents to use the
@@ -166,6 +180,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
 
 - HTTP controller tests
 - Strict TypeScript check through `apps/api/tsconfig.agent-contract-tests.json`
+- Proposal guidance tests parse `requiredSteps` as a typed collection and use
+  an existence-asserting lookup helper before accessing a named step, so IDE
+  and command-line strict-null checks agree.
 - OpenAPI generation/checks
 - `./scripts/check.sh`
 

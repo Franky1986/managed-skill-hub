@@ -452,12 +452,36 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
     title: 'Proposal workflow for agents',
     summary: 'Mandatory preflight before submit',
     description:
-      'Read this endpoint before every proposal upload. Agents must communicate with the user in the language the user is currently using, validate the local package, normalize it only when needed, ensure SKILL.md is the root entrypoint, keep meaningful relative subfolders intact, keep dependency installation artifacts out of the uploaded package, identify every local artifact that the skill actually needs, verify self-contained references, scan for credentials/PII, and only then continue to duplicate prechecks and submission.',
+      'Read this endpoint before every proposal upload. Agents must communicate with the user in the language the user is currently using, clarify whether the user wants to use an existing skill, keep or install an artifact locally, improve an existing skill, or publish reusable registry content, explain whether a proposal adds meaningful registry value, and only then prepare a confirmed proposal. Proposal preparation includes validating the local package, normalizing it only when needed, ensuring SKILL.md is the root entrypoint, keeping meaningful relative subfolders intact, excluding dependency installation artifacts, identifying every required local artifact, verifying self-contained references, scanning for credentials/PII, and completing duplicate prechecks before submission.',
     conversationLanguage:
       'When communicating with the user, use the language the user is currently using unless the user explicitly asks for another language.',
     metadataLanguageGuidance:
       'Proposal metadata should preferably be written in English: title, description, category, tags, capabilities, useWhen and doNotUseWhen. Uploaded content files may be in any language.',
     agentHttpGuidance,
+    proposalIntentDecision: {
+      requiredBeforePackagePreparation: true,
+      outcomes: [
+        'use_existing_skill',
+        'keep_local',
+        'install_local',
+        'propose_new_skill',
+        'propose_new_version',
+        'request_admin_update',
+      ],
+      decisionRules: [
+        'Do not infer proposal intent merely because the user asks to create, test, or prepare a skill or because a local package already exists.',
+        'First determine whether the user wants to use an existing published skill, keep the artifact local, install it for personal or team use, improve an existing skill, or submit reusable content to the registry.',
+        'Before asking for upload confirmation, explain whether publication would add distinct reusable value through a different audience or use case, clearer useWhen/doNotUseWhen boundaries, new capabilities, materially different content, or a maintained workflow.',
+        'For trivial demos, one-off helpers, or behavior already covered by a published skill, recommend using the existing skill or keeping the artifact local unless the user gives a clear registry-wide test or reuse reason.',
+        'Only start package preparation and proposal writes after the user chooses a proposal outcome or explicitly asks to propose, submit, or publish to the registry.',
+      ],
+      commandRules: [
+        'Portable commands are optional artifacts inside the same skill package, not separate skill identities or separate proposals by default.',
+        'Choosing to use or download a skill and choosing to install its commands into a runtime-specific folder are separate decisions.',
+        'Ask before copying command files into Cursor, Codex, Claude Code, or another runtime folder. The skill must remain usable through SKILL.md when optional commands are not installed.',
+        'The presence of a command file alone does not make a public proposal worthwhile.',
+      ],
+    },
     requiredSteps: [
       ...authSetupStep,
       {
@@ -481,6 +505,19 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
       },
       {
         step: 3 + stepOffset,
+        title: 'Clarify the intended outcome and registry value',
+        purpose: 'Do not assume that creating or testing a skill means publishing it to the registry.',
+        checks: [
+          'Ask first whether the user wants to use an existing published skill, keep or install the artifact locally, improve an existing skill, or submit reusable registry content.',
+          'Treat requests such as create, make, prepare, or test a skill as ambiguous until the user chooses an outcome. An existing local package does not establish proposal intent.',
+          'If a published skill already covers the need, recommend using or downloading it before proposing another skill. Ask separately whether optional commands should be installed into the user runtime.',
+          'For a trivial demo, one-off helper, or low-distinctiveness package, recommend keeping it local unless the user identifies a clear registry-wide test or reuse purpose.',
+          'Explain why a proposal would or would not add distinct reusable value before asking for submission confirmation.',
+          'Do not begin package preparation or call proposal write endpoints until a proposal outcome is confirmed.',
+        ],
+      },
+      {
+        step: 4 + stepOffset,
         title: 'Inspect the local package',
         purpose: 'Decide whether the submitted files already match the upload contract or need temporary normalization.',
         checks: [
@@ -500,7 +537,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 4 + stepOffset,
+        step: 5 + stepOffset,
         title: 'Normalize only when needed',
         purpose: 'Every uploaded proposal package must arrive with SKILL.md in the root.',
         checks: [
@@ -515,7 +552,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 5 + stepOffset,
+        step: 6 + stepOffset,
         title: 'Prefer English proposal metadata',
         purpose: 'Keep registry discovery useful across teams and agents while allowing content files in any language.',
         checks: [
@@ -525,7 +562,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 6 + stepOffset,
+        step: 7 + stepOffset,
         title: 'Validate self-contained and safe content',
         purpose: 'The package must work on its own and must not leak secrets or personal data.',
         checks: [
@@ -538,7 +575,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 7 + stepOffset,
+        step: 8 + stepOffset,
         title: 'Build and prove the final upload package before network upload',
         purpose: 'Avoid server-driven repair loops by proving the exact temporary package before creating a proposal.',
         checks: [
@@ -554,7 +591,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 8 + stepOffset,
+        step: 9 + stepOffset,
         title: 'Search the public catalog exploratively',
         purpose: 'Avoid duplicate public skills with the same title or intent.',
         checks: [
@@ -566,21 +603,23 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 9 + stepOffset,
+        step: 10 + stepOffset,
         title: 'Run duplicate precheck',
         purpose: 'Compare final metadata and file hashes with existing proposals and published skills.',
         checks: [
           'POST /proposals/check-duplicate',
           'Payload: title, description, category, tags, capabilities, entrypoint=SKILL.md, optional skillId, files[].sha256 from the final package.',
-          'If title/description intent is similar, exact duplicate fields are set, or the target skill already exists, stop before upload.',
+          `Stop before upload when exact duplicate fields are set, the target skill already exists, or a similar match reaches the strong similarity threshold of ${container.config.autoPublishSimilarityThreshold} and has matching title/description intent.`,
+          'Treat lower-scoring similar matches as exploratory context, not as duplicates or upload blockers by themselves.',
           'When skillIdCollision.exists is true, the proposed skillId is already taken. The default and preferred resolution is to create a new draft version of the existing skill. Explain to the user that this will not auto-publish; an admin must later convert the proposal into a new draft version of the existing skill.',
           'When exactDuplicateSkillId is set, the same content already exists as a published skill. Do not upload a duplicate unless the user explicitly asks for a new skill under a different id.',
-          'Before asking, present the duplicate candidate, core overlap, intended resolution option, and concise metadata/file-fingerprint diff.',
-          'Ask for explicit user confirmation to upload despite the duplicate or to choose another returned resolution option.',
+          'Revisit the intended outcome before presenting upload resolution options. Using the published skill, keeping the artifact local, or installing it locally may be better outcomes than another proposal.',
+          'Before asking, present the duplicate candidate, core overlap, whether a proposal still adds reusable registry value, intended resolution option when applicable, and concise metadata/file-fingerprint diff.',
+          'Only ask for an upload resolution option after the user confirms that a proposal remains the desired outcome.',
         ],
       },
       {
-        step: 10 + stepOffset,
+        step: 11 + stepOffset,
         title: 'Create proposal only after confirmation',
         purpose: 'Upload only when the final package is valid and no blocking ambiguity remains.',
         checks: [
@@ -599,7 +638,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 11 + stepOffset,
+        step: 12 + stepOffset,
         title: 'Download published skill packages per version',
         purpose: 'Get deterministic artifacts for local consumption and validation.',
         checks: [
@@ -612,24 +651,27 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
       },
     ],
     escalationRule:
-      'Do not proceed with proposal creation while the package is structurally ambiguous, referenced local artifacts are missing or unjustifiably omitted, references are broken, sensitive content is present, or duplicate intent is unconfirmed. Ask the submitter to confirm or clean up first.',
+      'Do not proceed with proposal creation while the user outcome or registry value is unresolved, the package is structurally ambiguous, referenced local artifacts are missing or unjustifiably omitted, references are broken, sensitive content is present, or duplicate intent is unconfirmed. Ask the submitter to choose an outcome, confirm the proposal value, or clean up first.',
     duplicateConfirmationRule: {
+      strongSimilarityThreshold: container.config.autoPublishSimilarityThreshold,
       appliesWhen: [
         'exactDuplicateProposalId is set',
         'exactDuplicateSkillId is set',
         'skillIdCollision.exists is true',
-        'similarMatches contains a strong title/description intent match',
+        'similarMatches contains a title/description intent match with similarityScore at or above strongSimilarityThreshold',
       ],
       requiredUserFacingSummary: [
         'Name each relevant duplicate candidate with kind, id, skillId/title when available, status/version when available, and similarity score for similar matches.',
+        'Do not label a lower-scoring similar match as a duplicate or blocker solely because it appears in similarMatches.',
         'Summarize the core overlap: matching title or intent, shared category, shared tags/capabilities, matching entrypoint, and exact content digest when available.',
+        'State whether using the existing skill, keeping the artifact local, or installing it locally is the more useful outcome. Do not assume every duplicate decision must end in an upload.',
         'When skillIdCollision.exists is true, state clearly: the user is about to propose a new draft version of the existing skill. Auto-publish is not possible because an admin must decide whether to convert the proposal into a new version. The alternative is to choose a different skillId and create a completely new skill.',
         'When exactDuplicateSkillId is set, state clearly: the same content is already published. A new upload can only become a new skill under a different id, which is usually not what the user wants.',
         'Summarize what would change if uploaded: new skill, new draft version, admin update request, unchanged duplicate, changed metadata, changed capabilities/tags, changed entrypoint, added files, removed files, or changed file fingerprints.',
         'Provide a concise diff from the duplicate-check differences and local file fingerprint comparison. If file contents are not available through the public API, say that only hashes/metadata were compared.',
       ],
       confirmationRequired:
-        'Ask the user explicitly which resolutionOption to use. If skillIdCollision.exists is true, prefer and recommend the create_new_version option first, explain that it requires an admin conversion and cannot auto-publish, and only offer create_new_skill under a different id if the user explicitly wants a separate skill. Do not call POST /proposals until the user confirms.',
+        'First ask the user whether to use the existing skill, keep or install the artifact locally, or continue with a proposal. Only if the user confirms proposal intent, ask which resolutionOption to use. If skillIdCollision.exists is true, prefer and recommend the create_new_version option first, explain that it requires an admin conversion and cannot auto-publish, and only offer create_new_skill under a different id if the user explicitly wants a separate skill. Do not call POST /proposals until the user confirms both the proposal outcome and the applicable resolution.',
     },
     normalizationRules: {
       entrypointFile: 'SKILL.md',

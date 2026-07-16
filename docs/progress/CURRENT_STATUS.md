@@ -34,10 +34,27 @@ separately, refuses to terminate unverified listeners, starts production
 artifacts, and reports success only after API readiness and frontend HTTP
 checks pass.
 
+Public deployment helpers now live under `scripts/deployment/`. They prepare a
+committed release archive and checksum, upload explicit artifacts through an
+operator-owned non-secret SSH profile, and provide one deployment-root
+`service.sh` for start, stop, status, health, logs, and resolved configuration.
+Internal targets, reverse-proxy files, private adapters, and secrets remain
+outside Git. Existing top-level development, validation, migration, and
+operations commands remain stable and are classified in `scripts/README.md`.
+The deployment blueprint normalizes upload artifacts to absolute paths, works
+with or without an SSH port on Bash 3.2, constrains remote target syntax, and
+rejects parent traversal plus symbolic links in managed deployment path
+components.
+
 Root-level TypeScript proof scripts are part of `npm run typecheck`. Their
 complete `AppConfig` fixtures share one type-safe baseline, so newly required
 runtime configuration fields fail during normal development checks instead of
 remaining hidden behind `tsx` execution.
+
+The shared MySQL client resolves `mysql2/promise` through a module loader
+anchored to the adapter file. This keeps compiled API startup and Node.js 20
+`tsx` validation runs on the same driver-resolution path; the complete local
+Node.js 20 MySQL gate passes with provider, cutover, and content-storage checks.
 
 Frontend file-download and export URL builders preserve the configured API
 prefix when `VITE_API_BASE_URL` is relative (for example `/api`) or absolute.
@@ -165,6 +182,18 @@ creating a public skill:
   `in_review`, `approved`, `published`). Auto-publish success means the skill
   version is published; otherwise the proposal becomes a judged/converted draft
   awaiting a human admin decision.
+- `/howToPropose` now requires an outcome and registry-value decision before
+  package preparation. Agents do not infer publication intent from creating or
+  testing a skill; they first distinguish using an existing skill, keeping or
+  installing it locally, improving an existing skill, and proposing reusable
+  registry content.
+- Portable command files remain optional artifacts inside the same skill
+  package. Skill use, command installation into a runtime-specific folder, and
+  registry publication are separate user decisions, and command presence alone
+  does not justify a proposal.
+- The proposal guidance exposes the configured strong-similarity threshold.
+  Lower-scoring catalog matches remain exploratory context and do not trigger
+  duplicate resolution by themselves.
 - Filesystem audit reads retain proposal-linked conversion entries even when
   those entries are stored under a skill-keyed audit file, so converted public
   proposal status can expose the created `convertedSkillId`.

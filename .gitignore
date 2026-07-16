@@ -12,6 +12,7 @@ dist/
 .env.secrets
 .env.example.private
 .public-release-denylist
+.local/
 scripts/prepare-deploy.sh
 scripts/call-*judger.sh
 docs/setup/*INTERNAL*.md

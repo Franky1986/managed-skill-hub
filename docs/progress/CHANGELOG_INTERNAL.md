@@ -1,3 +1,57 @@
+# 2026-07-16: Align proposal-guidance tests with strict TypeScript
+
+- Typed the `/howToPropose.requiredSteps` test payload instead of allowing
+  `JSON.parse` to erase the collection type.
+- Added an existence-asserting step lookup helper before accessing named
+  proposal guidance steps, closing the IDE-only possibly-undefined errors.
+- Kept the dedicated API agent-contract test TypeScript check in the standard
+  project gate.
+
+# 2026-07-16: Add a generic deployment blueprint
+
+- Added organization-neutral release preparation, explicit artifact upload,
+  and deployment-root service-control helpers under `scripts/deployment/`.
+- Added non-secret example profiles for reusable server layouts and SSH
+  targets while keeping internal hosts, nginx files, private adapters, and
+  secrets outside Git.
+- Added a deterministic deployment blueprint proof for custom release and
+  secret paths plus `start`, `status`, and configuration propagation.
+- Hardened upload behavior for Bash 3.2, optional ports, option-like artifact
+  names, bounded ports, and safe remote target syntax.
+- Made the canonical public `PROJECT_ROOT` available while loading ignored
+  upload profiles so private overlays do not depend on unexported caller state.
+- Rejected symbolic links in every existing deployment path component and
+  expanded the deterministic proof with upload and path-escape negative cases.
+- Kept existing top-level script entrypoints stable and documented their
+  architectural ownership before any wider mechanical directory migration.
+
+# 2026-07-16: Clarify proposal intent before package preparation
+
+- Added a machine-readable proposal-intent decision to `/howToPropose`.
+- Agents now distinguish using an existing skill, keeping or installing an
+  artifact locally, improving an existing skill, and publishing reusable
+  registry content before preparing an upload.
+- Trivial demos, one-off helpers, and already-covered behavior now default to
+  an existing or local outcome unless the user identifies distinct registry
+  value.
+- The duplicate contract now exposes the configured strong-similarity
+  threshold; lower-scoring matches are exploratory context rather than upload
+  blockers by themselves.
+- Separated skill consumption, optional runtime command installation, and
+  registry publication. Portable commands remain artifacts of the same skill
+  package and do not justify separate proposals by themselves.
+- Updated OpenAPI, controller tests, agent bootstrap guidance, the portable
+  command epic, and frontend response types.
+
+# 2026-07-16: Fix Node.js 20 MySQL driver resolution
+
+- Replaced the variable dynamic `mysql2/promise` import with a CommonJS loader
+  anchored to the MySQL adapter file.
+- Prevented Node.js 20 `tsx` proof runs from resolving the driver relative to a
+  transpiler-generated `data:` URL.
+- Verified API typecheck, lint, focused MySQL adapter tests, production build,
+  and the complete Node.js 20 MySQL validation gate.
+
 # 2026-07-16: Clarify agent HTTP retrieval and authentication diagnosis
 
 - Added matching machine-readable `agentHttpGuidance` to `/discover` and

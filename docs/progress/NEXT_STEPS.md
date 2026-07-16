@@ -7,6 +7,16 @@
 - [ ] Verify the updated live discovery response with an external agent that
       can choose between a remote web fetcher and a local terminal HTTP client.
 
+## Proposal Intent Contract
+
+- [x] Require agents to clarify the desired outcome and registry value before
+      package preparation or duplicate-resolution questions.
+- [x] Separate skill consumption, optional runtime command installation, and
+      registry publication in the agent-facing contract.
+- [ ] Repeat the external hello-skill scenario and verify that the agent first
+      recommends using the existing skill or keeping/installing the demo
+      locally before offering proposal resolution options.
+
 ## Test Type Safety
 
 - [x] Add strict TypeScript checking for the API discovery/retrieval
@@ -17,6 +27,12 @@
 
 ## Deployment Hardening
 
+- [x] Add an organization-neutral deployment blueprint with configurable
+      upload targets, deployment-root runtime paths, persistent secret paths,
+      and deterministic proof coverage.
+- [x] Harden the blueprint against Bash 3.2 empty-array failures, option-like
+      artifact names, unsafe remote values, out-of-range ports, and symbolic
+      links in deployment path components.
 - [x] Harden release preparation and restart with locked staged builds,
       separate verified process trees, HTTP healthchecks, and rollback support
       in the ignored environment-specific deployment wrapper.
@@ -26,8 +42,10 @@
 - [ ] Deploy on the constrained Node.js 20 staging runtime and verify the exact
       package-manifest versions, lockfile graph, pinned cookie dependency,
       split prepare/start path, and API/frontend health-gated startup.
+- [x] Fix MySQL driver resolution for Node.js 20 `tsx` proof runs and rerun the
+      complete local MySQL validation gate.
 - [ ] Trigger `ManagedSkillHub Validation` manually with the MySQL gate enabled
-      after pushing the CI-service change; retain the successful run URL as
+      after pushing the driver-resolution fix; retain the successful run URL as
       release evidence.
 
 ## EPIC-012 Agent Session Delegation

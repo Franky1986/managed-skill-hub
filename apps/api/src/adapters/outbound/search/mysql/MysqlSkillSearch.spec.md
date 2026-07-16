@@ -33,6 +33,8 @@ Implements `SkillSearchPort` with MySQL Fulltext search.
 - Regex timeout -> `StorageError`
 - Invalid regex syntax -> `StorageError`
 - MySQL unavailable/misconfigured -> `StorageError` with setup hint
+- Driver resolution failure -> `StorageError`; the shared client must resolve
+  `mysql2/promise` consistently in compiled API and Node.js 20 `tsx` runs.
 
 ## Acceptance Criteria
 
