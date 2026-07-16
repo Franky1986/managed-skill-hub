@@ -1,5 +1,20 @@
 # NEXT_STEPS
 
+## Agent Retrieval Contract
+
+- [x] Expose generic network-context, retrieval-order, and endpoint-specific
+      authentication guidance through both `/discover` and `/howToPropose`.
+- [ ] Verify the updated live discovery response with an external agent that
+      can choose between a remote web fetcher and a local terminal HTTP client.
+
+## Test Type Safety
+
+- [x] Add strict TypeScript checking for the API discovery/retrieval
+      agent-contract tests and web tests to the standard project check.
+- [ ] Migrate the remaining legacy API HTTP, catalog, storage, and use-case
+      test doubles to current port contracts, then broaden the API test
+      TypeScript project to all `src/**/*.test.ts` files.
+
 ## Deployment Hardening
 
 - [x] Harden release preparation and restart with locked staged builds,

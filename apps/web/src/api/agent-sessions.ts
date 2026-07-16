@@ -57,6 +57,36 @@ export interface DiscoveryResponse {
     proposalAuthRequired: boolean;
     discoveryAuthRequired: boolean;
     authSchemes: DiscoveryAuthScheme[];
+    agentHttpGuidance: AgentHttpGuidance;
+}
+
+export interface AgentHttpGuidance {
+    discoveryPurpose: string;
+    toolSelection: string;
+    retrievalSequence: string[];
+    proposalExecution: string;
+    authenticationDiagnosis: string[];
+    authorization: {
+        discovery: AgentHttpAuthorizationGuidance;
+        publicRead: AgentHttpAuthorizationGuidance;
+        proposal: AgentHttpAuthorizationGuidance;
+    };
+    curlExamples: {
+        discover: AgentHttpCurlExample;
+        search: AgentHttpCurlExample;
+        download: AgentHttpCurlExample;
+    };
+}
+
+export interface AgentHttpAuthorizationGuidance {
+    required: boolean;
+    instructions: string;
+}
+
+export interface AgentHttpCurlExample {
+    command: string;
+    authArea: AgentSessionArea;
+    authorizationRequired: boolean;
 }
 
 export const agentSessionsApi = {

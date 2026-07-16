@@ -41,6 +41,22 @@ requests into inbound port calls and maps results back to JSON or file streams.
 - `GET /discover` detects whether it was called through an `/api/` prefix and
   returns entrypoint URLs with that prefix when appropriate.
 - `GET /discover` returns English-only agent-facing guidance.
+- `GET /discover.agentHttpGuidance` distinguishes registry discovery metadata,
+  public skill search, and version-aware package download. It tells agents that
+  the HTTP client's network context is decisive for private DNS, localhost, and
+  VPN-restricted registries; local terminal `curl` is an example, not a special
+  protocol requirement.
+- `GET /discover.agentHttpGuidance` tells agents to diagnose authentication on
+  the exact requested operation and endpoint. A `401` from `/admin/session`, the
+  frontend, a redirect, or another endpoint must not be treated as evidence that
+  public read or proposal access requires authentication.
+- When `/discover` advertises an operation as open but one client receives
+  `401` or `403`, the guidance requires retrying the exact URL with a client in
+  the user's network context before requesting credentials.
+- The guidance exposes separate `required` flags and instructions for
+  `discovery`, `public-read`, and `proposal`. Curl examples identify their auth
+  area and whether authorization is required under the current runtime
+  settings; no token value is embedded.
 - `GET /discover` exposes non-secret auth metadata. When a bearer-protected area
   is enabled, it advertises the absolute agent-session URL; OIDC areas advertise
   Device Authorization metadata. No credential setup script is exposed.
@@ -61,6 +77,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
 - `GET /howToPropose` includes an auth setup flow telling agents to use the
   advertised `agent-session` URL or OIDC Device Authorization flow, and never to
   request tokens in chat.
+- `GET /howToPropose.agentHttpGuidance` repeats the same network-context,
+  endpoint-isolation, and authentication-diagnosis rules so proposal agents do
+  not depend on prior human documentation.
 - `GET /howToPropose.packageHandling` tells agents to upload source artifacts
   and dependency manifests/lockfiles, never initialized package-manager
   outputs such as `node_modules/`, `.venv/`, `venv/`, `vendor/`,
@@ -114,6 +133,10 @@ requests into inbound port calls and maps results back to JSON or file streams.
 ## Dependencies / Ports
 
 - `SkillQueryPort`
+- Route registration accepts a boundary-specific container view containing only
+  the configuration and use cases actually used by this controller. Tests build
+  that view explicitly instead of casting incomplete objects to the full
+  application `Container`.
 
 ## Failure Modes
 
@@ -134,10 +157,15 @@ requests into inbound port calls and maps results back to JSON or file streams.
 - Agent-facing guidance preserves the distinction between English contract
   language and the agent's obligation to answer the user in the user's current
   language.
+- Agent-facing guidance preserves the distinction between an HTTP client's
+  execution context and authentication. It must not claim that `curl` itself
+  bypasses authentication; it explains that a local client may have network,
+  DNS, or VPN access that a remote fetcher lacks.
 
 ## Tests / Checks
 
 - HTTP controller tests
+- Strict TypeScript check through `apps/api/tsconfig.agent-contract-tests.json`
 - OpenAPI generation/checks
 - `./scripts/check.sh`
 

@@ -183,7 +183,16 @@ async function buildSkillPackageBuffer(
   };
 }
 
-function buildDiscoveryResponse(request: import('fastify').FastifyRequest, container: Container, agentAuth: AgentApiAuth) {
+export type SkillReadRouteContainer = Pick<
+  Container,
+  'config' | 'nameSuggestion' | 'skillQuery' | 'listJudgements' | 'extractSkillFileContent' | 'probeSkillFileContent'
+>;
+
+function buildDiscoveryResponse(
+  request: import('fastify').FastifyRequest,
+  container: SkillReadRouteContainer,
+  agentAuth: AgentApiAuth
+) {
   const rawUrl = request.url ?? request.raw.url ?? '/discover';
   const prefix = rawUrl.startsWith('/api/') ? '/api' : '';
   const url = (path: string) => `${prefix}${path}`;
@@ -203,6 +212,7 @@ function buildDiscoveryResponse(request: import('fastify').FastifyRequest, conta
   ].join(' ');
 
   const authMetadata = agentAuth.metadata();
+  const agentHttpGuidance = buildAgentHttpGuidance(authMetadata);
   const publicReadOidc = authMetadata.authSchemes.some(
     (scheme) => scheme.type === 'oauth2' && scheme.appliesTo.includes('public-read')
   );
@@ -218,6 +228,7 @@ function buildDiscoveryResponse(request: import('fastify').FastifyRequest, conta
     proposalAuthRequired: authMetadata.proposalAuthRequired,
     discoveryAuthRequired: authMetadata.discoveryAuthRequired,
     authSchemes: authMetadata.authSchemes,
+    agentHttpGuidance,
     documentation: {
       human: 'https://github.com/frankrichter/managed-skill-hub/blob/main/docs/product/AGENT_BOOTSTRAP.md',
       openapi: url('/openapi.yaml'),
@@ -366,8 +377,9 @@ function buildDiscoveryResponse(request: import('fastify').FastifyRequest, conta
   };
 }
 
-function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth) {
+function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth: AgentApiAuth) {
   const authMetadata = agentAuth.metadata();
+  const agentHttpGuidance = buildAgentHttpGuidance(authMetadata);
   const oidcScheme = authMetadata.authSchemes.find(
     (scheme) => scheme.type === 'oauth2' && (
       scheme.appliesTo.includes('proposal')
@@ -445,6 +457,7 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
       'When communicating with the user, use the language the user is currently using unless the user explicitly asks for another language.',
     metadataLanguageGuidance:
       'Proposal metadata should preferably be written in English: title, description, category, tags, capabilities, useWhen and doNotUseWhen. Uploaded content files may be in any language.',
+    agentHttpGuidance,
     requiredSteps: [
       ...authSetupStep,
       {
@@ -720,10 +733,67 @@ function buildHowToProposeResponse(container: Container, agentAuth: AgentApiAuth
   };
 }
 
+function buildAgentHttpGuidance(authMetadata: ReturnType<AgentApiAuth['metadata']>) {
+  const baseUrl = authMetadata.apiBaseUrl.replace(/\/+$/, '');
+  const authorization = {
+    discovery: buildAgentAuthorizationGuidance('discovery', authMetadata.discoveryAuthRequired),
+    publicRead: buildAgentAuthorizationGuidance('public-read', authMetadata.readAuthRequired),
+    proposal: buildAgentAuthorizationGuidance('proposal', authMetadata.proposalAuthRequired),
+  };
+  return {
+    discoveryPurpose:
+      'GET /discover returns registry metadata, authentication requirements, and endpoint URLs. It does not return skill search results or skill package content.',
+    toolSelection:
+      'The decisive factor is the HTTP client network context, not curl itself. For internal, private-DNS, localhost, or VPN-restricted registry URLs, run requests with a client inside the user network context, for example curl in the local terminal. Do not use a remote web-fetch service unless it is known to share the same network and DNS access.',
+    retrievalSequence: [
+      `Read registry metadata and concrete entrypoint URLs with GET ${baseUrl}/discover.`,
+      `Resolve a user-facing skill name, title, or keywords to the canonical skillId and published version with GET ${baseUrl}/skills/search?q=<name-or-keywords>&mode=keyword.`,
+      `Download the resolved published package with GET ${baseUrl}/skills/{skillId}/package?version=<published-version>. Omit version only when the latest published version is intended.`,
+    ],
+    proposalExecution:
+      'Use the same network-capable client for GET /howToPropose and all proposal API calls. The frontend or an admin session is not part of the agent proposal workflow unless the live discovery contract explicitly advertises it.',
+    authenticationDiagnosis: [
+      'Evaluate authentication independently for discovery, public-read, and proposal operations by using discoveryAuthRequired, readAuthRequired, proposalAuthRequired, and authSchemes.',
+      'Do not infer public-read or proposal authentication from /admin/session, an admin UI login, a frontend response, a redirect, or the status of another endpoint.',
+      'If the exact requested public endpoint returns 401 or 403 while /discover says that operation is open, retry the exact same URL with a local network-capable HTTP client before requesting credentials. Treat a different result as a client, network, DNS, proxy, or remote-fetch context mismatch.',
+      'Only tell the user that authentication is required when the exact requested endpoint returns an authentication error consistent with its advertised auth area, or when /discover explicitly advertises authentication for that area.',
+    ],
+    authorization,
+    curlExamples: {
+      discover: {
+        command: `curl -fsSL "${baseUrl}/discover"`,
+        authArea: 'discovery',
+        authorizationRequired: authMetadata.discoveryAuthRequired,
+      },
+      search: {
+        command:
+          `curl -fsSL --get --data-urlencode "q=<name-or-keywords>" --data-urlencode "mode=keyword" "${baseUrl}/skills/search"`,
+        authArea: 'public-read',
+        authorizationRequired: authMetadata.readAuthRequired,
+      },
+      download: {
+        command:
+          `curl -fSL -OJ "${baseUrl}/skills/{skillId}/package?version=<published-version>"`,
+        authArea: 'public-read',
+        authorizationRequired: authMetadata.readAuthRequired,
+      },
+    },
+  };
+}
+
+function buildAgentAuthorizationGuidance(area: 'discovery' | 'public-read' | 'proposal', required: boolean) {
+  return {
+    required,
+    instructions: required
+      ? `Authentication is required for ${area}. Select a scheme from authSchemes whose appliesTo includes ${area}, and apply it exactly as advertised without printing or pasting secrets into chat.`
+      : `Authentication is not required for ${area}. Do not add credentials unless a later /discover response changes this setting.`,
+  };
+}
+
 async function sendSkillPackage(
   request: import('fastify').FastifyRequest,
   reply: FastifyReply,
-  container: Container
+  container: SkillReadRouteContainer
 ) {
   const { skillId } = request.params as { skillId: string };
   const { version } = request.query as { version?: string };
@@ -766,7 +836,7 @@ async function sendSkillPackage(
 
 export function registerSkillReadRoutes(
   app: FastifyInstance,
-  container: Container,
+  container: SkillReadRouteContainer,
   agentAuth = new AgentApiAuth(container.config),
   adminAuth?: AdminAuth
 ): void {

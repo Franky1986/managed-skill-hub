@@ -42,10 +42,13 @@ The script checks:
 - number of `.spec.md` files
 - executable deployment, backup, and test scripts
 - exact dependency versions in every repository `package.json`
-- presence of `vitest.config.ts` and `vite.config.ts`
+- presence of `vitest.config.ts`, `vite.config.ts`, and dedicated API
+  agent-contract/web test TypeScript configurations
 - `npm run lint` with ESLint flat config
 - `npm run typecheck` across all workspaces and root-level TypeScript proof
   scripts
+- dedicated strict TypeScript checks for API agent-contract controller tests
+  and web test files
 - `npm run test` across all workspaces
 
 The push and pull-request workflow additionally runs the production build and

@@ -1,3 +1,34 @@
+# 2026-07-16: Clarify agent HTTP retrieval and authentication diagnosis
+
+- Added matching machine-readable `agentHttpGuidance` to `/discover` and
+  `/howToPropose`.
+- Distinguished registry discovery metadata, public skill search, and
+  version-aware package download.
+- Told agents to use an HTTP client in the user's network context for internal,
+  private-DNS, localhost, or VPN-restricted registries. Local `curl` is an
+  example; the network execution context is the relevant difference.
+- Prevented agents from inferring public-read or proposal authentication from
+  `/admin/session`, frontend/admin behavior, redirects, or unrelated endpoints.
+- Added runtime-derived authorization flags for discovery, public-read, and
+  proposal operations. Curl examples declare their auth area without embedding
+  credentials, while static OpenAPI examples use `<api-base-url>` instead of a
+  copyable example host.
+- Added OpenAPI, controller, proof-script, frontend type, and bootstrap
+  coverage for the new contract.
+
+# 2026-07-16: Typecheck API agent-contract tests
+
+- Added a dedicated API agent-contract test TypeScript project and made the
+  standard project check typecheck the skill discovery/retrieval controller
+  tests and web tests separately.
+- This closes a validation gap where Vitest could execute test files that the
+  production TypeScript project intentionally excluded, allowing IDE-only test
+  fixture errors to remain unnoticed.
+- A first full-API-test audit also exposed older type drift in other HTTP,
+  catalog, storage, and use-case stubs. That wider cleanup remains separate
+  from this new gate so the standard check does not hide failures or rely on
+  relaxed compiler settings.
+
 # 2026-07-16: Typecheck root proof scripts
 
 - Added a dedicated TypeScript project for root-level proof and migration

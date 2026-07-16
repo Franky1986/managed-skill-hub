@@ -52,6 +52,32 @@ Choose the correct base URL depending on how you reach the registry:
 
 The examples below use `http://localhost:3041/api`. Adjust the path prefix if you call the backend directly.
 
+## HTTP client and network context
+
+The decisive factor is the HTTP client's network context, not `curl` itself.
+For an internal hostname, private DNS name, `localhost`, or a VPN-restricted
+registry, execute requests through a client that runs inside the user's network
+context. A local terminal command such as `curl` is the most portable example.
+A remote web-fetch service may run outside that network and can therefore
+return a gateway-generated `401`, `403`, DNS error, or connection error even
+when the ManagedSkillHub endpoint is anonymously accessible from the user's
+machine.
+
+Diagnose authentication for the exact operation and endpoint:
+
+- `/discover` returns registry metadata and endpoint URLs; it is not a skill
+  search result or package download.
+- Use `/skills/search` to resolve a user-facing name or title to the canonical
+  `skillId` and published version.
+- Use `/skills/{skillId}/package?version=<published-version>` for the actual
+  download.
+- Do not infer public-read authentication from `/admin/session`, an admin UI
+  login, a frontend response, a redirect, or another endpoint.
+- When `/discover` says an operation is open but one client receives `401` or
+  `403`, retry the exact same URL with a local network-capable HTTP client
+  before requesting credentials. A different result indicates a client,
+  network, DNS, proxy, or remote-fetch context mismatch.
+
 ## Discovery
 
 Every agent starts with `GET /discover`:
@@ -70,6 +96,10 @@ The response contains:
 - `capabilities`: what the registry can do
 - `entrypoints`: concrete endpoints with `id`, `name`, `description`, `methods`, `path` and `url`
 - `workflowNotes`: hints about the read path and the proposal path, plus a list of admin-only actions
+- `agentHttpGuidance`: machine-readable tool selection, retrieval order,
+  endpoint-specific authentication diagnosis, per-area authorization flags,
+  and local `curl` examples. Runtime responses use the configured canonical
+  `apiBaseUrl`; static documentation examples use placeholders.
 
 Use the `url` values from `entrypoints` directly so you do not have to guess paths or prefixes.
 

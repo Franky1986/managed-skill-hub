@@ -105,6 +105,25 @@ async function runProfile(profile: AuthProfile): Promise<CheckResult> {
     proposalSubmitEntrypoint: entrypointPaths.has('/proposals'),
     proposalStatusEntrypoint: entrypointPaths.has('/proposals/:id/status'),
     howToEntrypoint: entrypointPaths.has('/howToPropose'),
+    networkContextGuidancePresent: discover.agentHttpGuidance?.toolSelection?.includes('network context, not curl itself')
+      && howTo.agentHttpGuidance?.toolSelection === discover.agentHttpGuidance?.toolSelection,
+    retrievalSequencePresent: discover.agentHttpGuidance?.retrievalSequence?.some(
+      (instruction: string) => instruction.includes('/skills/search')
+    ) && discover.agentHttpGuidance?.retrievalSequence?.some(
+      (instruction: string) => instruction.includes('/skills/{skillId}/package')
+    ),
+    endpointSpecificAuthDiagnosisPresent: discover.agentHttpGuidance?.authenticationDiagnosis?.some(
+      (instruction: string) => instruction.includes('/admin/session')
+    ) && discover.agentHttpGuidance?.authenticationDiagnosis?.some(
+      (instruction: string) => instruction.includes('exact same URL')
+    ),
+    authorizationGuidanceMatchesProfile: discover.agentHttpGuidance?.authorization?.discovery?.required === false
+      && discover.agentHttpGuidance?.authorization?.publicRead?.required === false
+      && discover.agentHttpGuidance?.authorization?.proposal?.required === hasAnyAuth
+      && howTo.agentHttpGuidance?.authorization?.proposal?.required === hasAnyAuth,
+    curlExamplesCarryAuthArea: discover.agentHttpGuidance?.curlExamples?.search?.authArea === 'public-read'
+      && discover.agentHttpGuidance?.curlExamples?.search?.authorizationRequired === false
+      && discover.agentHttpGuidance?.curlExamples?.discover?.authArea === 'discovery',
     legacySetupUrlAbsent: discover.credentialSetupScriptUrl === undefined
       && howTo.apiNotes?.credentialSetupScriptUrl === undefined,
     agentSessionPresenceMatchesAuth: discover.authSchemes.some(
@@ -135,6 +154,8 @@ async function main(): Promise<void> {
   const bootstrap = await readFile('docs/product/AGENT_BOOTSTRAP.md', 'utf8');
   assert(bootstrap.includes('/discover'), 'agent bootstrap must reference /discover');
   assert(bootstrap.includes('/howToPropose'), 'agent bootstrap must reference /howToPropose');
+  assert(bootstrap.includes('network context, not `curl` itself'), 'agent bootstrap must explain local network execution context');
+  assert(bootstrap.includes('/admin/session'), 'agent bootstrap must reject unrelated admin-session auth inference');
   assert(bootstrap.includes('paste bearer tokens into chat') || bootstrap.includes('paste bearer tokens into normal chat') || bootstrap.includes('never paste bearer tokens'), 'agent bootstrap must warn against pasting bearer tokens into chat');
 
   const results = [await runProfile('open'), await runProfile('proposal-auth')];

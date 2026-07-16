@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import type { JudgementRecord } from './judgements';
+import type { AgentHttpGuidance } from './agent-sessions';
 
 export interface ProposalSubmissionResponse {
     id: string;
@@ -35,6 +36,7 @@ export interface HowToProposeResponse {
     description: string;
     conversationLanguage: string;
     metadataLanguageGuidance: string;
+    agentHttpGuidance: AgentHttpGuidance;
     requiredSteps: Array<{
         step: number;
         title: string;

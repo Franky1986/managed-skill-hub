@@ -116,7 +116,7 @@ if ! node scripts/check-pinned-package-versions.mjs >".tmp/pinned-package-versio
 fi
 
 # Check build tooling configuration files.
-for file in apps/api/vitest.config.ts apps/web/vitest.config.ts apps/web/vite.config.ts scripts/tsconfig.json; do
+for file in apps/api/vitest.config.ts apps/api/tsconfig.agent-contract-tests.json apps/web/vitest.config.ts apps/web/vite.config.ts apps/web/tsconfig.test.json scripts/tsconfig.json; do
   if [[ ! -f "$file" ]]; then
     log_error "Missing: $file"
   fi
@@ -132,8 +132,11 @@ log_info "Starting typecheck ..."
 if ! npm run typecheck >".tmp/typecheck.log" 2>&1; then
   log_error "npm run typecheck failed (see .tmp/typecheck.log)"
 fi
-if ! npx tsc -p apps/web/tsconfig.test.json >".tmp/typecheck-tests.log" 2>&1; then
-  log_error "Web test typecheck failed (see .tmp/typecheck-tests.log)"
+if ! npx tsc -p apps/api/tsconfig.agent-contract-tests.json >".tmp/typecheck-api-agent-contract-tests.log" 2>&1; then
+  log_error "API agent-contract test typecheck failed (see .tmp/typecheck-api-agent-contract-tests.log)"
+fi
+if ! npx tsc -p apps/web/tsconfig.test.json >".tmp/typecheck-web-tests.log" 2>&1; then
+  log_error "Web test typecheck failed (see .tmp/typecheck-web-tests.log)"
 fi
 
 log_info "Starting tests ..."

@@ -3,11 +3,67 @@ import os from 'os';
 import path from 'path';
 import { mkdtemp, writeFile, rm } from 'fs/promises';
 import { describe, expect, it, afterEach } from 'vitest';
-import { registerSkillReadRoutes } from './skill-read.controller';
+import { registerSkillReadRoutes, SkillReadRouteContainer } from './skill-read.controller';
 import { AgentApiAuth } from './agent-api-auth';
 import { registerApiErrorHandler } from './error-response';
 import { AdminAuth } from './admin-auth';
 import { AuthenticatedPrincipal, PrincipalRole } from '../../../application/security/authenticated-principal';
+import { AppConfig } from '../../../infrastructure/config';
+import { createScriptAppConfig } from '../../../../../../scripts/script-app-config';
+import { Manifest } from '../../../domain/skill/Manifest';
+import { SkillStatus } from '../../../domain/skill/SkillStatus';
+
+function testDouble<T extends object>(implementation: Partial<T> = {}): T {
+  return new Proxy(implementation as T, {
+    get(target, property, receiver) {
+      if (property in target) {
+        return Reflect.get(target, property, receiver);
+      }
+      if (typeof property === 'symbol') {
+        return undefined;
+      }
+      return async () => {
+        throw new Error(`Unexpected test-double call: ${String(property)}`);
+      };
+    },
+  });
+}
+
+function buildTestContainer(overrides: {
+  config?: Partial<AppConfig>;
+  nameSuggestion?: Partial<SkillReadRouteContainer['nameSuggestion']>;
+  skillQuery?: Partial<SkillReadRouteContainer['skillQuery']>;
+  listJudgements?: Partial<SkillReadRouteContainer['listJudgements']>;
+  extractSkillFileContent?: Partial<SkillReadRouteContainer['extractSkillFileContent']>;
+  probeSkillFileContent?: Partial<SkillReadRouteContainer['probeSkillFileContent']>;
+} = {}): SkillReadRouteContainer {
+  return {
+    config: createScriptAppConfig({
+      openapiYamlPath: '/nonexistent/openapi.yaml',
+      proposalMaxFiles: 30,
+      proposalMaxFileSizeBytes: 10 * 1024 * 1024,
+      proposalDisallowedPaths: ['node_modules/', '.venv/'],
+      autoPublishOnGreen: false,
+      ...overrides.config,
+    }),
+    nameSuggestion: testDouble<SkillReadRouteContainer['nameSuggestion']>({
+      suggestSkillId: async () => ({ suggestion: 'test-skill', alternatives: [], isAvailable: true }),
+      ...overrides.nameSuggestion,
+    }),
+    skillQuery: testDouble<SkillReadRouteContainer['skillQuery']>({
+      listCategories: async () => [],
+      listTags: async () => [],
+      ...overrides.skillQuery,
+    }),
+    listJudgements: testDouble<SkillReadRouteContainer['listJudgements']>(overrides.listJudgements),
+    extractSkillFileContent: testDouble<SkillReadRouteContainer['extractSkillFileContent']>(
+      overrides.extractSkillFileContent
+    ),
+    probeSkillFileContent: testDouble<SkillReadRouteContainer['probeSkillFileContent']>(
+      overrides.probeSkillFileContent
+    ),
+  };
+}
 
 describe('SkillReadController /discover', () => {
   const tempDirs: string[] = [];
@@ -20,13 +76,9 @@ describe('SkillReadController /discover', () => {
   async function buildApp(openapiYamlPath?: string) {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
+    const container = buildTestContainer({
       config: {
         openapiYamlPath: openapiYamlPath ?? '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: ['node_modules/', '.venv/'],
-        autoPublishOnGreen: false,
         registryId: 'local',
         registryName: 'ManagedSkillHub Local',
         publicApiBaseUrl: 'http://localhost:3040',
@@ -40,12 +92,11 @@ describe('SkillReadController /discover', () => {
         discoveryBearerToken: null,
         discoveryBearerActor: 'discovery-agent',
       },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
       skillQuery: {
         listCategories: async () => [],
         listTags: async () => ['ffmpeg', 'video'],
-      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+      },
+    });
     registerSkillReadRoutes(app, container);
     return app;
   }
@@ -73,6 +124,22 @@ describe('SkillReadController /discover', () => {
     expect(payload.capabilities.length).toBeGreaterThan(0);
     expect(payload.workflowNotes.conversationLanguage).toContain('language the user is currently using');
     expect(payload.workflowNotes.proposalPath).toContain('Prefer English for proposal metadata');
+    expect(payload.agentHttpGuidance.discoveryPurpose).toContain('does not return skill search results');
+    expect(payload.agentHttpGuidance.toolSelection).toContain('network context, not curl itself');
+    expect(payload.agentHttpGuidance.retrievalSequence.join(' ')).toContain('/skills/search');
+    expect(payload.agentHttpGuidance.retrievalSequence.join(' ')).toContain('/skills/{skillId}/package');
+    expect(payload.agentHttpGuidance.authenticationDiagnosis.join(' ')).toContain('/admin/session');
+    expect(payload.agentHttpGuidance.authenticationDiagnosis.join(' ')).toContain('local network-capable HTTP client');
+    expect(payload.agentHttpGuidance.authorization).toMatchObject({
+      discovery: { required: false },
+      publicRead: { required: false },
+      proposal: { required: false },
+    });
+    expect(payload.agentHttpGuidance.curlExamples.download).toMatchObject({
+      command: expect.stringContaining('curl -fSL -OJ'),
+      authArea: 'public-read',
+      authorizationRequired: false,
+    });
     const skillEntry = payload.entrypoints.find((entry: { id: string }) => entry.id === 'skills');
     expect(skillEntry).toMatchObject({
       id: 'skills',
@@ -120,17 +187,7 @@ describe('SkillReadController /discover', () => {
   it('detects /api/ prefix and returns prefixed URLs', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
-      config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: ['node_modules/', '.venv/'],
-        autoPublishOnGreen: false,
-      },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
-      skillQuery: {} as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+    const container = buildTestContainer();
     await app.register(async (apiApp) => {
       registerSkillReadRoutes(apiApp, container);
     }, { prefix: '/api' });
@@ -153,13 +210,8 @@ describe('SkillReadController /discover', () => {
   it('reports active auth metadata and serves a no-secret setup script', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
+    const container = buildTestContainer({
       config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: ['node_modules/'],
-        autoPublishOnGreen: false,
         registryId: 'company-prod',
         registryName: 'Company Production Skill Registry',
         publicApiBaseUrl: 'https://skills.example.com/api',
@@ -173,9 +225,7 @@ describe('SkillReadController /discover', () => {
         discoveryBearerToken: null,
         discoveryBearerActor: 'discovery-agent',
       },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
-      skillQuery: {} as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+    });
     registerSkillReadRoutes(app, container, new AgentApiAuth(container.config));
 
     const discover = await app.inject({ method: 'GET', url: '/discover' });
@@ -190,18 +240,19 @@ describe('SkillReadController /discover', () => {
     });
     expect(payload).not.toHaveProperty('credentialSetupScriptUrl');
     expect(payload.authSchemes.map((scheme: { id: string }) => scheme.id)).toEqual(['public-read-bearer', 'proposal-bearer']);
+    expect(payload.agentHttpGuidance.authorization).toMatchObject({
+      discovery: { required: false },
+      publicRead: { required: true },
+      proposal: { required: true },
+    });
+    expect(payload.agentHttpGuidance.curlExamples.search.authorizationRequired).toBe(true);
   });
 
   it('includes auth setup guidance when agent auth is active', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
+    const container = buildTestContainer({
       config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: [],
-        autoPublishOnGreen: false,
         registryId: 'auth-guidance',
         registryName: 'Auth Guidance Registry',
         publicApiBaseUrl: 'https://skills.example.com/api',
@@ -210,9 +261,7 @@ describe('SkillReadController /discover', () => {
         proposalBearerToken: 'proposal-secret',
         discoveryAuthMode: 'none',
       },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
-      skillQuery: {} as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+    });
     registerSkillReadRoutes(app, container, new AgentApiAuth(container.config));
 
     const response = await app.inject({ method: 'GET', url: '/howToPropose' });
@@ -222,29 +271,24 @@ describe('SkillReadController /discover', () => {
     expect(payload.requiredSteps[0].checks.join(' ')).toContain('Never paste it into chat');
     expect(payload.apiNotes.authSetupFlow).toContain('obtain the required bearer token from the administrator');
     expect(payload.apiNotes.credentialSetupScriptUrl).toBeUndefined();
+    expect(payload.agentHttpGuidance.authorization.proposal.required).toBe(true);
   });
 
   it('guards public read endpoints when PUBLIC_READ_AUTH_MODE is bearer', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
+    const container = buildTestContainer({
       config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: [],
-        autoPublishOnGreen: false,
         publicReadAuthMode: 'bearer',
         publicReadBearerToken: 'read-secret',
         publicReadBearerActor: 'read-agent',
         proposalAuthMode: 'none',
         discoveryAuthMode: 'none',
       },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
       skillQuery: {
         listCategories: async () => ['automation'],
-      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+      },
+    });
     registerSkillReadRoutes(app, container, new AgentApiAuth(container.config));
 
     const missing = await app.inject({ method: 'GET', url: '/categories' });
@@ -258,13 +302,8 @@ describe('SkillReadController /discover', () => {
   it('accepts a reader-capable admin session as alternative public read authentication', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
+    const container = buildTestContainer({
       config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: [],
-        autoPublishOnGreen: false,
         publicReadAuthMode: 'bearer',
         publicReadBearerToken: 'read-secret',
         publicReadBearerActor: 'read-agent',
@@ -273,11 +312,10 @@ describe('SkillReadController /discover', () => {
         discoveryBearerToken: 'discovery-secret',
         discoveryBearerActor: 'discovery-agent',
       },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
       skillQuery: {
         listCategories: async () => ['automation'],
-      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+      },
+    });
     const adminAuth = adminAuthForCookieRoles({
       'reader-session': ['reader'],
       'admin-session': ['admin'],
@@ -315,6 +353,9 @@ describe('SkillReadController /discover', () => {
     expect(payload.id).toBe('how-to-propose');
     expect(payload.conversationLanguage).toContain('language the user is currently using');
     expect(payload.metadataLanguageGuidance).toContain('Proposal metadata should preferably be written in English');
+    expect(payload.agentHttpGuidance.toolSelection).toContain('VPN-restricted');
+    expect(payload.agentHttpGuidance.proposalExecution).toContain('GET /howToPropose');
+    expect(payload.agentHttpGuidance.authenticationDiagnosis.join(' ')).toContain('exact requested endpoint');
     expect(Array.isArray(payload.requiredSteps)).toBe(true);
     expect(payload.requiredSteps.length).toBeGreaterThan(0);
     expect(payload.requiredSteps.some((step: { title: string }) => step.title === 'Use the user conversation language')).toBe(true);
@@ -385,25 +426,16 @@ describe('SkillReadController /discover', () => {
   it('downloads published skill package with versioned and latest resolution', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
-      config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: ['node_modules/', '.venv/'],
-        autoPublishOnGreen: false,
-      },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
+    const container = buildTestContainer({
       skillQuery: {
         getManifest: async (skillId: string, version?: string) => {
           if (skillId !== 'download-skill') return null;
-          return {
+          return Manifest.create({
             version: version ?? '1.2.0',
-            status: 'published',
+            status: SkillStatus.PUBLISHED,
             title: 'Download Skill',
             description: '...',
             id: skillId,
-            name: 'Download Skill',
             entrypoint: 'SKILL.md',
             category: 'automation',
             tags: [],
@@ -411,8 +443,7 @@ describe('SkillReadController /discover', () => {
             useWhen: [],
             doNotUseWhen: [],
             files: [],
-            manifestChecksum: 'x',
-          } as any;
+          });
         },
         listFiles: async (skillId: string, version?: string) => {
           if (skillId !== 'download-skill') return [];
@@ -467,7 +498,7 @@ describe('SkillReadController /discover', () => {
           return null;
         },
       },
-    } as import('../../../infrastructure/container').Container;
+    });
     registerSkillReadRoutes(app, container);
 
     const explicitVersionResponse = await app.inject({ method: 'GET', url: '/skills/download-skill/package?version=1.0.0' });
@@ -507,13 +538,8 @@ describe('SkillReadController /discover', () => {
   it('advertises agent-session scheme with url when bearer and agent sessions are enabled', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
+    const container = buildTestContainer({
       config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: ['node_modules/', '.venv/'],
-        autoPublishOnGreen: false,
         registryId: 'session-registry',
         registryName: 'Session Registry',
         publicApiBaseUrl: 'https://skills.example.com/api',
@@ -532,12 +558,11 @@ describe('SkillReadController /discover', () => {
         agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
         agentSessionMaxActive: null,
       },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
       skillQuery: {
         listCategories: async () => [],
         listTags: async () => [],
-      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+      },
+    });
     registerSkillReadRoutes(app, container);
 
     const response = await app.inject({ method: 'GET', url: '/discover' });
@@ -554,13 +579,8 @@ describe('SkillReadController /discover', () => {
   it('rewrites local API port to frontend port in agent-session url', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
-    const container = {
+    const container = buildTestContainer({
       config: {
-        openapiYamlPath: '/nonexistent/openapi.yaml',
-        proposalMaxFiles: 30,
-        proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-        proposalDisallowedPaths: ['node_modules/', '.venv/'],
-        autoPublishOnGreen: false,
         registryId: 'local-session-registry',
         registryName: 'Local Session Registry',
         publicApiBaseUrl: 'http://localhost:3040',
@@ -581,12 +601,11 @@ describe('SkillReadController /discover', () => {
         apiHost: '127.0.0.1',
         apiPort: 3040,
       },
-      nameSuggestion: {} as unknown as import('../../../infrastructure/container').Container['nameSuggestion'],
       skillQuery: {
         listCategories: async () => [],
         listTags: async () => [],
-      } as unknown as import('../../../infrastructure/container').Container['skillQuery'],
-    } as import('../../../infrastructure/container').Container;
+      },
+    });
     registerSkillReadRoutes(app, container);
 
     const response = await app.inject({ method: 'GET', url: '/discover' });
@@ -601,8 +620,11 @@ function adminAuthForCookieRoles(sessionRoles: Record<string, PrincipalRole[]>):
   return {
     mode: 'simple',
     validate: async (request) => {
-      const sessionId = request.headers.cookie?.match(/(?:^|;\s*)test_session=([^;]+)/)?.[1];
-      const roles = sessionId ? sessionRoles[sessionId] : undefined;
+      const sessionId = request.headers.cookie?.match(/(?:^|;\s*)test_session=([^;]+)/)?.[1] ?? null;
+      if (!sessionId) {
+        return null;
+      }
+      const roles = sessionRoles[sessionId];
       if (!roles) {
         return null;
       }

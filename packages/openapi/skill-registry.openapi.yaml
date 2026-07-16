@@ -41,8 +41,10 @@ paths:
       - Discovery
       summary: Registry discovery endpoint
       description: Returns registry identity, canonical API base URL, entrypoints,
-        and runtime auth requirements. May require discoveryBearer when DISCOVERY_AUTH_MODE=bearer
-        or an Authentik access token with the advertised discovery scope when DISCOVERY_AUTH_MODE=oidc.
+        runtime auth requirements, and HTTP-client guidance for local/private network
+        access, search, package download, and endpoint-specific authentication diagnosis.
+        May require discoveryBearer when DISCOVERY_AUTH_MODE=bearer or an Authentik
+        access token with the advertised discovery scope when DISCOVERY_AUTH_MODE=oidc.
       security:
       - discoveryBearer: []
       - agentSession: []
@@ -63,9 +65,10 @@ paths:
       tags:
       - Proposals
       summary: Get proposal workflow instructions for agents
-      description: Returns proposal workflow and runtime proposal auth guidance. May
-        require discoveryBearer when DISCOVERY_AUTH_MODE=bearer or agentOidc when
-        DISCOVERY_AUTH_MODE=oidc.
+      description: Returns proposal workflow, runtime proposal auth guidance, and
+        HTTP-client guidance for private network contexts and endpoint-specific
+        authentication diagnosis. May require discoveryBearer when
+        DISCOVERY_AUTH_MODE=bearer or agentOidc when DISCOVERY_AUTH_MODE=oidc.
       security:
       - discoveryBearer: []
       - agentSession: []
@@ -98,6 +101,56 @@ paths:
                       be written in English: title, description, category, tags, capabilities,
                       useWhen and doNotUseWhen. Uploaded content files may be in any
                       language.'
+                    agentHttpGuidance:
+                      discoveryPurpose: GET /discover returns registry metadata,
+                        authentication requirements, and endpoint URLs. It does not
+                        return skill search results or skill package content.
+                      toolSelection: The decisive factor is the HTTP client network
+                        context, not curl itself. For private or VPN-restricted registries,
+                        use a client inside the user's network context, such as curl
+                        in the local terminal.
+                      retrievalSequence:
+                      - Read registry metadata and concrete entrypoint URLs with GET
+                        <api-base-url>/discover.
+                      - Resolve a user-facing name to the canonical skillId and published
+                        version with GET <api-base-url>/skills/search.
+                      - Download the resolved version with GET <api-base-url>/skills/{skillId}/package?version=<published-version>.
+                      proposalExecution: Use the same network-capable client for GET
+                        /howToPropose and all proposal API calls.
+                      authenticationDiagnosis:
+                      - Evaluate authentication independently for discovery, public-read,
+                        and proposal operations using the live discovery metadata.
+                      - Do not infer public-read or proposal authentication from /admin/session,
+                        the frontend, redirects, or another endpoint.
+                      - If an advertised open endpoint returns 401 or 403, retry the
+                        exact URL with a local network-capable client before requesting
+                        credentials.
+                      - Only report authentication as required when the exact endpoint
+                        result matches its advertised authentication area.
+                      authorization:
+                        discovery:
+                          required: false
+                          instructions: Authentication is not required for discovery.
+                        publicRead:
+                          required: false
+                          instructions: Authentication is not required for public-read.
+                        proposal:
+                          required: false
+                          instructions: Authentication is not required for proposal.
+                      curlExamples:
+                        discover:
+                          command: 'curl -fsSL "<api-base-url>/discover"'
+                          authArea: discovery
+                          authorizationRequired: false
+                        search:
+                          command: 'curl -fsSL --get --data-urlencode "q=<name-or-keywords>"
+                            --data-urlencode "mode=keyword" "<api-base-url>/skills/search"'
+                          authArea: public-read
+                          authorizationRequired: false
+                        download:
+                          command: 'curl -fSL -OJ "<api-base-url>/skills/{skillId}/package?version=<published-version>"'
+                          authArea: public-read
+                          authorizationRequired: false
                     escalationRule: Do not proceed with proposal creation while the
                       package is structurally ambiguous, references are broken, sensitive
                       content is present, or duplicate intent is unconfirmed.
@@ -2766,6 +2819,7 @@ components:
       - readAuthRequired
       - proposalAuthRequired
       - discoveryAuthRequired
+      - agentHttpGuidance
       - documentation
       - capabilities
       - entrypoints
@@ -2790,6 +2844,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RuntimeAuthScheme'
+        agentHttpGuidance:
+          $ref: '#/components/schemas/AgentHttpGuidance'
         workflowNotes:
           type: object
           properties:
@@ -2932,6 +2988,7 @@ components:
       - title
       - summary
       - description
+      - agentHttpGuidance
       - requiredSteps
       - escalationRule
       - duplicateConfirmationRule
@@ -2952,6 +3009,8 @@ components:
           type: string
         metadataLanguageGuidance:
           type: string
+        agentHttpGuidance:
+          $ref: '#/components/schemas/AgentHttpGuidance'
         requiredSteps:
           type: array
           items:
@@ -3090,6 +3149,86 @@ components:
               type: string
             checkDuplicateNote:
               type: string
+    AgentHttpGuidance:
+      type: object
+      required:
+      - discoveryPurpose
+      - toolSelection
+      - retrievalSequence
+      - proposalExecution
+      - authenticationDiagnosis
+      - authorization
+      - curlExamples
+      properties:
+        discoveryPurpose:
+          type: string
+        toolSelection:
+          type: string
+        retrievalSequence:
+          type: array
+          minItems: 3
+          items:
+            type: string
+        proposalExecution:
+          type: string
+        authenticationDiagnosis:
+          type: array
+          minItems: 4
+          items:
+            type: string
+        authorization:
+          type: object
+          required:
+          - discovery
+          - publicRead
+          - proposal
+          properties:
+            discovery:
+              $ref: '#/components/schemas/AgentHttpAuthorizationGuidance'
+            publicRead:
+              $ref: '#/components/schemas/AgentHttpAuthorizationGuidance'
+            proposal:
+              $ref: '#/components/schemas/AgentHttpAuthorizationGuidance'
+        curlExamples:
+          type: object
+          required:
+          - discover
+          - search
+          - download
+          properties:
+            discover:
+              $ref: '#/components/schemas/AgentHttpCurlExample'
+            search:
+              $ref: '#/components/schemas/AgentHttpCurlExample'
+            download:
+              $ref: '#/components/schemas/AgentHttpCurlExample'
+    AgentHttpAuthorizationGuidance:
+      type: object
+      required:
+      - required
+      - instructions
+      properties:
+        required:
+          type: boolean
+        instructions:
+          type: string
+    AgentHttpCurlExample:
+      type: object
+      required:
+      - command
+      - authArea
+      - authorizationRequired
+      properties:
+        command:
+          type: string
+        authArea:
+          type: string
+          enum:
+          - discovery
+          - public-read
+          - proposal
+        authorizationRequired:
+          type: boolean
     SkillNameSuggestionRequest:
       type: object
       required:

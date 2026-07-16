@@ -333,6 +333,14 @@ EPIC-003 is implemented:
   this progress status are English.
 - `GET /discover` and `GET /howToPropose` return English-only agent-facing
   guidance.
+- Both endpoints expose matching machine-readable HTTP guidance: agents
+  distinguish discovery metadata from search and package download, use clients
+  inside the user's network/VPN context for private registries, and diagnose
+  authentication only on the exact requested endpoint and auth area.
+- The discovery/retrieval controller now depends on a narrow typed container
+  view, and its tests use a complete typed runtime configuration and explicit
+  boundary test doubles. The standard check includes a dedicated strict
+  TypeScript project for these agent-contract tests.
 - Agent-facing guidance tells agents to communicate with users in the language
   the user is currently using unless asked otherwise.
 - Proposal guidance recommends English metadata for new proposals while allowing
