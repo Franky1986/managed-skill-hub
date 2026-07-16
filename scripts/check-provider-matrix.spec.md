@@ -26,6 +26,8 @@ For every selected provider case, the proof:
 - Verifies `/discover`, `/skills`, `/skills/search`, `/categories`, `/tags`, manifest, file-list, file-content, and package-download behavior.
 - Compares the normalized public surface of non-baseline provider cases against the `sqlite/sqlite` baseline.
 - Verifies `scripts/restart-all.sh` contains local MySQL auto-start guidance through `start-mysql-stack.sh up`.
+- Emits Fastify error logs when an injected route fails so module-resolution or
+  adapter failures remain diagnosable from the check artifact.
 
 ## Artifacts
 

@@ -6,8 +6,6 @@ on:
     branches:
       - main
       - master
-  schedule:
-    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       run_mysql_full_check:
@@ -61,7 +59,22 @@ jobs:
   mysql-full-check:
     name: MySQL full validation gate
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mysql_full_check == 'true')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mysql_full_check == 'true')
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: admin_root_password
+          MYSQL_DATABASE: managed_skill_hub
+          MYSQL_USER: managed_skill_hub
+          MYSQL_PASSWORD: valpass
+        ports:
+          - 33307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -padmin_root_password"
+          --health-interval=2s
+          --health-timeout=5s
+          --health-retries=30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,7 +89,10 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run full MySQL validation
-        run: RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh
+        env:
+          RUN_MYSQL_FULL_CHECK: 'true'
+          SKIP_MYSQL_STACK_START: 'true'
+        run: ./scripts/full-check.sh
 
       - name: Upload full proof artifacts
         if: always()

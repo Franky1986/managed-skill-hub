@@ -8,7 +8,8 @@ for repository shell entrypoints.
 ## Inputs And Precedence
 
 1. Values explicitly exported by the calling process have highest precedence.
-2. `/.env.secrets` supplies local secret values.
+2. The file selected by `MANAGED_SKILL_HUB_SECRETS_FILE`, or
+   `/.env.secrets` when unset, supplies local secret values.
 3. `/.env` supplies non-secret configuration and has lowest precedence.
 
 Missing files are allowed. Neither file is printed, copied into logs, nor
@@ -19,6 +20,8 @@ written by the loader.
 - `/.env` must not contain keys ending in `_PASSWORD`, `_PASSWORD_HASH`,
   `_SECRET`, `_TOKEN`, or `_API_KEY`.
 - `/.env.secrets` is ignored by Git and should have mode `0600`.
+- Server wrappers may export `MANAGED_SKILL_HUB_SECRETS_FILE` to keep the real
+  secret file outside a replaceable application release directory.
 - Tracked `.env.example*` profiles contain non-secret settings only.
 - `.env.secrets.example` is the canonical blank secret-key inventory.
 - Shell entrypoints source this helper rather than implementing independent

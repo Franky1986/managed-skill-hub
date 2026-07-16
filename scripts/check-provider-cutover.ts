@@ -6,7 +6,8 @@ import { buildContainer, type Container } from '../apps/api/src/infrastructure/c
 import { AgentApiAuth } from '../apps/api/src/adapters/inbound/http/agent-api-auth';
 import { registerApiErrorHandler } from '../apps/api/src/adapters/inbound/http/error-response';
 import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/skill-read.controller';
-import type { AppConfig, CatalogProvider, SearchProvider } from '../apps/api/src/infrastructure/config';
+import type { CatalogProvider, SearchProvider } from '../apps/api/src/infrastructure/config';
+import { createScriptAppConfig } from './script-app-config';
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
@@ -60,27 +61,14 @@ function mysqlConfig() {
   };
 }
 
-function config(dataDir: string, catalogProvider: CatalogProvider, searchProvider: SearchProvider): AppConfig {
+function config(dataDir: string, catalogProvider: CatalogProvider, searchProvider: SearchProvider) {
   const mysql = mysqlConfig();
-  return {
+  return createScriptAppConfig({
     dataDir,
-    openapiYamlPath: path.resolve('packages/openapi/skill-registry.openapi.yaml'),
     registryId: 'provider-cutover-registry',
     registryName: 'Provider Cutover Registry',
     publicApiBaseUrl: 'https://provider-cutover.example.com/api',
-    apiHost: '127.0.0.1',
-    apiPort: 3040,
-    adminUser: 'admin',
-    adminPassword: 'admin',
-    adminPasswordHash: '',
     jwtSecret: 'provider-cutover-secret',
-    sessionTtlSeconds: 3600,
-    judgerProvider: 'noop',
-    judgerAdapterPath: null,
-    vercelAiSdkModel: null,
-    vercelAiSdkTimeoutMs: 30000,
-    vercelAiSdkMaxTextChars: 12000,
-    vercelAiSdkMaxRetries: 0,
     catalogProvider,
     searchProvider,
     mysqlHost: mysql.host,
@@ -89,24 +77,9 @@ function config(dataDir: string, catalogProvider: CatalogProvider, searchProvide
     mysqlUser: mysql.user,
     mysqlPassword: mysql.password,
     mysqlSslMode: 'disabled',
-    mysqlConnectTimeoutMs: 10000,
-    mysqlQueryTimeoutMs: 30000,
     proposalMaxFiles: 5,
     proposalMaxFileSizeBytes: 1024 * 1024,
-    proposalDisallowedPaths: ['node_modules/', '.venv/', 'venv/'],
-    autoPublishOnGreen: false,
-    autoPublishExcludedCategories: ['security', 'network'],
-    autoApproveWithoutJudger: false,
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
-    proposalAuthMode: 'none',
-    proposalBearerToken: null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
-  };
+  });
 }
 
 async function buildApp(container: Container): Promise<FastifyInstance> {

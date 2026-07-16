@@ -13,7 +13,7 @@
 
 ## Server Prerequisites
 
-- Node.js >= 20 LTS
+- Node.js >= 20
 - npm >= 10
 - nginx; see `docs/setup/NGINX.md` for an example configuration
 - SSH access with `REMOTE_HOST` / `REMOTE_USER` from your deployment environment.
@@ -35,6 +35,8 @@
    Production archives may contain the non-secret `.env` profile but must not
    contain `.env.secrets`. Provision secrets separately through the server
    environment, a secret manager, or a mode-`0600` server-side file.
+   When `src/` is replaced atomically, keep the file outside `src/` and export
+   `MANAGED_SKILL_HUB_SECRETS_FILE=/path/to/deploy-root/.env.secrets`.
 
 2. Create the deploy archive:
    ```bash
@@ -73,15 +75,42 @@ bash src/scripts/install_and_start.sh
 
 `install_and_start.sh` runs on the server:
 
-- `npm install --legacy-peer-deps --no-audit --no-fund`
+- validates Node.js 20+, npm 10+, `.env`, and `package-lock.json`
+- accepts secrets from `.env.secrets` or the exported deployment environment
+- `npm ci --include=dev --legacy-peer-deps --no-audit --no-fund`
 - `npm run build:prod`
-- `bash scripts/restart-server.sh`
+- starts the compiled API and built frontend preview with production mode
+  forced, regardless of development defaults in a copied base profile
+
+Deployment profiles should use:
+
+```env
+API_START_MODE=production
+FRONTEND_START_MODE=preview
+```
+
+This starts the compiled API through `node apps/api/dist/server.js` and serves
+the built frontend bundle. The restart helper tracks API and frontend PIDs
+separately, refuses to kill unverified listeners, and fails startup unless both
+local HTTP healthchecks pass.
+
+`--include=dev` is intentional for the preparation phase: TypeScript, Vite, and
+other build-time packages are development dependencies required to create the
+production artifacts.
+
+Preparation and startup can be split for a distinct cutover step:
+
+```bash
+bash src/scripts/install_and_start.sh prepare
+bash src/scripts/install_and_start.sh start
+```
 
 ## Restart/Stop
 
 ```bash
 bash /path/to/deploy-root/src/scripts/restart-server.sh
 bash /path/to/deploy-root/src/scripts/restart-server.sh stop
+bash /path/to/deploy-root/src/scripts/restart-server.sh status
 ```
 
 ## Data Directory

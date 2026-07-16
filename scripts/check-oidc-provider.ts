@@ -8,10 +8,17 @@ import { AuthentikAccessTokenVerifier } from '../apps/api/src/adapters/outbound/
 import { SqliteIdentityPersistence } from '../apps/api/src/adapters/outbound/identity/sqlite-identity.persistence';
 import { AuthorizationPolicy } from '../apps/api/src/application/security/authorization-policy';
 import { PrincipalProjectionService } from '../apps/api/src/application/security/principal-projection.service';
-import type { AppConfig } from '../apps/api/src/infrastructure/config';
+import { createScriptAppConfig } from './script-app-config';
+
+type GeneratedKeyPair = Awaited<ReturnType<typeof generateKeyPair>>;
+type PublicJwk = Awaited<ReturnType<typeof exportJWK>> & {
+  kid: string;
+  alg: string;
+  use: string;
+};
 
 interface ProviderState {
-  keys: JsonWebKey[];
+  keys: PublicJwk[];
   jwksOutage: boolean;
   discoveryRequests: number;
   jwksRequests: number;
@@ -46,13 +53,13 @@ function sendJson(response: import('node:http').ServerResponse, status: number, 
   response.end(payload);
 }
 
-async function publicJwk(publicKey: CryptoKey, kid: string): Promise<JsonWebKey> {
+async function publicJwk(publicKey: GeneratedKeyPair['publicKey'], kid: string): Promise<PublicJwk> {
   const jwk = await exportJWK(publicKey);
   return { ...jwk, kid, alg: 'RS256', use: 'sig' };
 }
 
 async function signAccessToken(
-  privateKey: CryptoKey,
+  privateKey: GeneratedKeyPair['privateKey'],
   kid: string,
   issuer: string,
   clientId: string,
@@ -78,7 +85,7 @@ async function signAccessToken(
 }
 
 async function signIdToken(
-  privateKey: CryptoKey,
+  privateKey: GeneratedKeyPair['privateKey'],
   kid: string,
   issuer: string,
   clientId: string,
@@ -150,7 +157,7 @@ async function run(): Promise<ProofResult> {
   const persistence = new SqliteIdentityPersistence(path.join(directory, 'catalog.db'));
   try {
     const clientId = 'managedskillhub-agent-device';
-    const config = {
+    const config = createScriptAppConfig({
       oidcAgentIssuer: issuer,
       oidcAgentClientId: clientId,
       oidcDiscoveryScope: 'managedskillhub:discovery',
@@ -173,7 +180,7 @@ async function run(): Promise<ProofResult> {
       oidcAccessTokenValidationMode: 'jwt_profile',
       oidcIntrospectionClientId: null,
       oidcIntrospectionClientSecret: null,
-    } as AppConfig;
+    });
     const policy = new AuthorizationPolicy(config);
     const verifier = new AuthentikAccessTokenVerifier(
       config,

@@ -36,7 +36,11 @@ else
 fi
 
 if [ "${RUN_MYSQL_FULL_CHECK:-false}" = "true" ]; then
-  run_step "MySQL stack startup" ".tmp/full-check-mysql-stack.log" bash scripts/start-mysql-stack.sh up
+  if [ "${SKIP_MYSQL_STACK_START:-false}" = "true" ]; then
+    log_info "Using pre-provisioned MySQL; skipping local stack startup."
+  else
+    run_step "MySQL stack startup" ".tmp/full-check-mysql-stack.log" bash scripts/start-mysql-stack.sh up
+  fi
   if [ -x scripts/check-provider-matrix.ts ]; then
     run_step "provider matrix" ".tmp/full-check-provider-matrix.log" env PROVIDER_MATRIX_INCLUDE_MYSQL=true ./node_modules/.bin/tsx scripts/check-provider-matrix.ts
   else

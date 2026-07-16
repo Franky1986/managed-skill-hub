@@ -8,6 +8,7 @@ import { AgentApiAuth } from './agent-api-auth';
 import { normalizeRelativeArtifactPath } from '../../../domain/files/relative-artifact-path';
 import { sendArtifactResponse } from './artifact-response';
 import { AdminAuth } from './admin-auth';
+import { ListSkillsUseCase } from '../../../application/usecases/skill/list-skills.usecase';
 
 function parseTagQuery(value: string | string[] | undefined): string[] {
   if (!value) {
@@ -817,7 +818,7 @@ export function registerSkillReadRoutes(
       limit?: string;
       offset?: string;
     };
-    const useCase = new (await import('../../../application/usecases/skill/list-skills.usecase')).ListSkillsUseCase(container.skillQuery);
+    const useCase = new ListSkillsUseCase(container.skillQuery);
     const tags = parseTagQuery(tag);
     const result = await useCase.execute(
       category ?? group,

@@ -11,7 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
-    "openapi-typescript": "^7.0.4",
-    "typescript": "^5.7.3"
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
   }
 }

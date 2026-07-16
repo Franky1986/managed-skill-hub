@@ -7,6 +7,7 @@ import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/s
 import { registerAgentSessionRoutes } from '../apps/api/src/adapters/inbound/http/agent-session.controller';
 import type { AppConfig } from '../apps/api/src/infrastructure/config';
 import type { Container } from '../apps/api/src/infrastructure/container';
+import { createScriptAppConfig } from './script-app-config';
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
@@ -20,30 +21,16 @@ interface CheckResult {
 }
 
 function config(profile: AuthProfile): AppConfig {
-  return {
+  return createScriptAppConfig({
     registryId: 'agent-contract-registry',
     registryName: 'Agent Contract Registry',
     publicApiBaseUrl: 'https://contract.example.com/api',
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
     proposalAuthMode: profile === 'proposal-auth' ? 'bearer' : 'none',
     proposalBearerToken: profile === 'proposal-auth' ? 'proposal-token' : null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
     openapiYamlPath: 'packages/openapi/skill-registry.openapi.yaml',
-    proposalMaxFiles: 30,
-    proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-    proposalDisallowedPaths: ['node_modules/', '.venv/', 'venv/'],
-    autoPublishOnGreen: false,
     agentSessionEnabled: true,
-    agentSessionTtlSeconds: 10800,
-    agentSessionCodeLength: 8,
-    agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
     agentSessionMaxActive: null,
-  } as AppConfig;
+  });
 }
 
 function container(profile: AuthProfile): Container {

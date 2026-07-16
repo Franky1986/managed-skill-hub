@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "rootDir": "..",
+    "sourceMap": false,
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "./*.ts",
+    "../apps/api/src/server.ts"
+  ],
+  "exclude": [
+    "../node_modules",
+    "../dist",
+    "../**/*.test.ts"
+  ]
+}

@@ -10,6 +10,7 @@ import type { AgentAuthMode, AppConfig } from '../apps/api/src/infrastructure/co
 import type { Container } from '../apps/api/src/infrastructure/container';
 import { registerAgentSessionRoutes } from '../apps/api/src/adapters/inbound/http/agent-session.controller';
 import { ValidateAgentSessionUseCase } from '../apps/api/src/application/usecases/agent-session/validate-agent-session.usecase';
+import { createScriptAppConfig } from './script-app-config';
 
 
 const requireFromScript = createRequire(import.meta.url);
@@ -39,7 +40,7 @@ function caseId(testCase: MatrixCase): string {
 }
 
 function config(testCase: MatrixCase): AppConfig {
-  return {
+  return createScriptAppConfig({
     registryId: 'matrix-registry',
     registryName: 'Matrix Registry',
     publicApiBaseUrl: 'https://matrix.example.com/api',
@@ -59,16 +60,9 @@ function config(testCase: MatrixCase): AppConfig {
     oidcPublicReadScope: 'managedskillhub:skills:read',
     oidcProposalScope: 'managedskillhub:proposals',
     openapiYamlPath: '/nonexistent/openapi.yaml',
-    proposalMaxFiles: 30,
-    proposalMaxFileSizeBytes: 10 * 1024 * 1024,
-    proposalDisallowedPaths: ['node_modules/'],
-    autoPublishOnGreen: false,
     agentSessionEnabled: true,
-    agentSessionTtlSeconds: 10800,
-    agentSessionCodeLength: 8,
-    agentSessionCodeCharset: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
     agentSessionMaxActive: null,
-  } as AppConfig;
+  });
 }
 
 function container(testCase: MatrixCase): Container {

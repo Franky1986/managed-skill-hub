@@ -2,7 +2,7 @@
 
 ## Current Date
 
-2026-07-15
+2026-07-16
 
 ## Project State
 
@@ -22,6 +22,22 @@ The restart helper supports `FRONTEND_START_MODE=preview` for deployments: after
 Vite preview instead of running the development server with `NODE_ENV=production`.
 The ignored staging profile uses this mode while local development retains the
 default `dev` mode.
+
+Server preparation supports the constrained Node.js 20 target, installs the
+exact lockfile graph including build-time dependencies, and can finish a staged
+build before cutover. `@fastify/cookie` is pinned to `11.1.0`, the latest
+Fastify-5-compatible release before its transitive `cookie` dependency raised
+the minimum runtime to Node.js 22. All dependency declarations in repository
+package manifests use exact semantic versions, and the baseline check rejects
+dependency ranges or tags. Runtime restart tracks API and frontend processes
+separately, refuses to terminate unverified listeners, starts production
+artifacts, and reports success only after API readiness and frontend HTTP
+checks pass.
+
+Root-level TypeScript proof scripts are part of `npm run typecheck`. Their
+complete `AppConfig` fixtures share one type-safe baseline, so newly required
+runtime configuration fields fail during normal development checks instead of
+remaining hidden behind `tsx` execution.
 
 Frontend file-download and export URL builders preserve the configured API
 prefix when `VITE_API_BASE_URL` is relative (for example `/api`) or absolute.
@@ -174,7 +190,9 @@ deployment profile.
 Public-release hygiene supports an ignored operator denylist for confidential
 identifiers. The final visibility gate must run with `PUBLIC_RELEASE_STRICT=1`
 against the rewritten release history; normal CI intentionally does not publish
-the confidential denylist.
+the confidential denylist. Strict mode also requires a clean set of
+non-ignored untracked files so a private archive cannot remain unnoticed in the
+release checkout.
 
 Default release profile:
 - `ADMIN_AUTH_MODE=simple`
@@ -516,4 +534,4 @@ Recently verified:
 
 ## EPIC-008 Deterministic Proof Infrastructure
 
-Implemented lightweight deterministic proof scripts for agent auth, agent contract consistency, judger/auto-publish safety, provider matrix parity, provider cutover validation, admin UI smoke validation, skill package downloads, proposal lifecycle, concurrency/abuse safety, observability/audit evidence, OpenAPI parity, and public release hygiene. `./scripts/check.sh` now emits `.tmp/*` proof artifacts for these gates. Extended smoke/MySQL gates are available through `./scripts/full-check.sh`; MySQL remains an explicit local flag and is mandatory in pull-request CI.
+Implemented lightweight deterministic proof scripts for agent auth, agent contract consistency, judger/auto-publish safety, provider matrix parity, provider cutover validation, admin UI smoke validation, skill package downloads, proposal lifecycle, concurrency/abuse safety, observability/audit evidence, OpenAPI parity, and public release hygiene. `./scripts/check.sh` now emits `.tmp/*` proof artifacts for these gates. Extended smoke/MySQL gates are available through `./scripts/full-check.sh`; MySQL remains an explicit local flag and is mandatory in pull-request CI. GitHub pull requests use a runner-provisioned MySQL service, while manual runs can request the same gate without a daily scheduled workflow.

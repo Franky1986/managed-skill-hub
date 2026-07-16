@@ -20,6 +20,9 @@ The script checks:
   publishing those identifiers in the repository. `PUBLIC_RELEASE_STRICT=1`
   requires this denylist before a release decision.
 - Untracked commit candidates are scanned together with tracked files.
+- Strict release mode fails when any non-ignored untracked file remains, so
+  private archives or scratch files cannot sit unnoticed beside the public
+  checkout.
 - Tracked-but-ignored files fail the release gate.
 - Private adapter, helper, deployment, environment, conversation-link, and
   transport markers are absent from every reachable Git commit.

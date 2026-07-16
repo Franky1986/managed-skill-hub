@@ -1,3 +1,61 @@
+# 2026-07-16: Typecheck root proof scripts
+
+- Added a dedicated TypeScript project for root-level proof and migration
+  scripts and included it in `npm run typecheck`.
+- Replaced duplicated and assertion-cast `AppConfig` fixtures with one complete,
+  type-safe script baseline.
+- Fixed stale proof-script contracts revealed by static checking, including the
+  auto-publish similarity threshold, package response typing, OIDC key types,
+  and OpenAPI YAML module resolution.
+
+# 2026-07-16: Harden staged deployment and retain Node.js 20 compatibility
+
+- Retained the target-server Node.js 20 baseline and pinned
+  `@fastify/cookie` to `11.1.0` because `11.1.1` pulls `cookie@2`, which
+  requires Node.js 22.
+- Aligned `.nvmrc`, package engines, CI, badges, deployment checks, and setup
+  documentation with Node.js 20.
+- Replaced dependency ranges in every repository package manifest with the
+  exact versions from the reviewed lockfile and added a baseline gate that
+  rejects future ranges, tags, aliases, or wildcard references.
+- Kept the frontend syntax-highlighting stack on the audited `16.1.1` release
+  and selected its ESM entry explicitly. This avoids the Node.js 20 CommonJS-to-
+  ESM failure without reverting to the vulnerable PrismJS dependency chain in
+  the 15.x release line.
+- Included the existing syntax-highlighter declarations in the web TypeScript
+  configuration because its explicit `types` allowlist otherwise excluded
+  subpath module declarations.
+- Resolved proof-script Fastify plugins from the API workspace so clean npm
+  installs do not depend on incidental root-level hoisting.
+- Replaced the public skill-list route's relative runtime import with a static
+  application-use-case dependency so Node.js 20 proof runs do not attempt to
+  resolve a relative module from a transpiler-generated `data:` URL.
+- Added a restart preflight for native Node modules. Local starts now detect a
+  `better-sqlite3` ABI mismatch immediately, explain the active Node runtime,
+  and provide the bounded rebuild command instead of waiting for the API
+  healthcheck timeout.
+- Changed server preparation to install the exact lockfile graph, including
+  build-time dependencies, before creating production artifacts.
+- Split API/frontend process tracking, removed global process-pattern and port
+  kills, and added API readiness plus frontend HTTP startup checks.
+- Added staged application rollback and safe nginx restore behavior to the
+  ignored environment-specific deployment wrapper.
+- Added co-located script specs and updated deployment setup and architecture
+  documentation.
+
+# 2026-07-16: Stabilize public validation workflow
+
+- Kept lightweight validation on pushes and pull requests, removed the
+  unattended daily run, and retained manual workflow dispatch.
+- Replaced CI startup of the local MySQL/phpMyAdmin Compose stack with a
+  runner-provisioned MySQL service while preserving the local Docker path.
+- Hardened strict public-release hygiene to reject non-ignored untracked files.
+- Moved an untracked private deployment archive out of the repository checkout
+  before the public-release review.
+- Reviewed the concurrent deployment-script hardening, restored portable
+  process-tree handling, retained external secret-manager support, and forced
+  production artifact modes in the server installer.
+
 # 2026-07-15: Preserve API prefixes in frontend resource URLs
 
 - Centralized browser API URL construction for skill files, proposal files, and

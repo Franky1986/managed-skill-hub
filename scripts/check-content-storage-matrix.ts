@@ -8,6 +8,7 @@ import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/s
 import { buildContainer } from '../apps/api/src/infrastructure/container';
 import { MysqlClient } from '../apps/api/src/adapters/outbound/mysql/mysql.connection';
 import type { AppConfig, CatalogProvider, SearchProvider } from '../apps/api/src/infrastructure/config';
+import { createScriptAppConfig } from './script-app-config';
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
@@ -33,25 +34,12 @@ interface CaseResult {
 }
 
 function config(testCase: MatrixCase, dataDir: string): AppConfig {
-  return {
+  return createScriptAppConfig({
     dataDir,
-    openapiYamlPath: path.resolve('packages/openapi/skill-registry.openapi.yaml'),
     registryId: 'content-storage-' + testCase.id,
     registryName: 'Content Storage ' + testCase.id,
     publicApiBaseUrl: 'https://content-storage.example.com/api',
-    apiHost: '127.0.0.1',
-    apiPort: 3040,
-    adminUser: 'admin',
-    adminPassword: 'admin',
-    adminPasswordHash: '',
     jwtSecret: 'content-storage-secret',
-    sessionTtlSeconds: 3600,
-    judgerProvider: 'noop',
-    judgerAdapterPath: null,
-    vercelAiSdkModel: null,
-    vercelAiSdkTimeoutMs: 30000,
-    vercelAiSdkMaxTextChars: 12000,
-    vercelAiSdkMaxRetries: 0,
     catalogProvider: testCase.catalogProvider,
     searchProvider: testCase.searchProvider,
     contentStorageProvider: testCase.storageMode,
@@ -61,24 +49,11 @@ function config(testCase: MatrixCase, dataDir: string): AppConfig {
     mysqlUser: process.env.MYSQL_USER ?? 'managed_skill_hub',
     mysqlPassword: process.env.MYSQL_PASSWORD ?? 'valpass',
     mysqlSslMode: 'preferred',
-    mysqlConnectTimeoutMs: 10000,
-    mysqlQueryTimeoutMs: 30000,
     proposalMaxFiles: 10,
     proposalMaxFileSizeBytes: 1024 * 1024,
     proposalDisallowedPaths: ['node_modules/'],
-    autoPublishOnGreen: false,
     autoPublishExcludedCategories: ['security'],
-    autoApproveWithoutJudger: false,
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
-    proposalAuthMode: 'none',
-    proposalBearerToken: null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
-  };
+  });
 }
 
 async function runCase(testCase: MatrixCase, skillId: string): Promise<CaseResult> {
@@ -91,7 +66,7 @@ async function runCase(testCase: MatrixCase, skillId: string): Promise<CaseResul
     await resetMysqlTables(appConfig);
   }
   const container = await buildContainer(appConfig);
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: { level: 'error' } });
   registerSkillReadRoutes(app, container, new AgentApiAuth(container.config));
   registerApiErrorHandler(app);
 

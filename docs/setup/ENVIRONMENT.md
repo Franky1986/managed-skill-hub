@@ -9,6 +9,11 @@ Do not keep per-app `.env` files. Exported process variables have highest
 precedence, followed by `.env.secrets`, then `.env`. This supports deployment
 secret managers without duplicating the configuration model in JSON.
 
+Server deployments whose application directory is replaced atomically may
+export `MANAGED_SKILL_HUB_SECRETS_FILE=/persistent/path/.env.secrets`. The
+selected file then replaces the repository-root `.env.secrets` location while
+keeping the same precedence and must remain mode `0600`.
+
 Available templates:
 
 - `.env.example`: provider-neutral development template.
@@ -291,7 +296,15 @@ Notes:
 | `FRONTEND_HOST` | no | Vite bind address. Keep `127.0.0.1` for nginx-fronted deployments; use an explicit non-loopback address only for intentional LAN development. | `127.0.0.1` |
 | `VITE_API_BASE_URL` | yes | Backend base URL. | `http://localhost:3040` |
 | `VITE_USE_API_PROXY` | no | Set `false` to bypass Vite proxy. | `true` |
+| `API_START_MODE` | no | API process mode used by `scripts/restart-server.sh`: `dev` runs the TSX watcher; `production` runs the compiled `apps/api/dist/server.js`. | `dev` |
 | `FRONTEND_START_MODE` | no | Frontend process mode used by `scripts/restart-server.sh`: `dev` for local development or `preview` to serve the already-built production bundle. | `dev` |
+| `STARTUP_TIMEOUT_SECONDS` | no | Maximum seconds each API/frontend HTTP healthcheck may wait during restart. | `45` |
+| `API_HEALTH_URL` | no | Local API URL used by the restart helper after process start. | `http://127.0.0.1:3040/api/health/ready` |
+| `FRONTEND_HEALTH_URL` | no | Local frontend URL used by the restart helper after process start. | `http://127.0.0.1:3041/frontend/` |
+
+`scripts/install_and_start.sh` forces `NODE_ENV=production`,
+`API_START_MODE=production`, and `FRONTEND_START_MODE=preview` for deployed
+startup. Direct use of `restart-server.sh` keeps the configured modes.
 
 ## Environment switching
 When switching environments, copy the template and update the required keys:

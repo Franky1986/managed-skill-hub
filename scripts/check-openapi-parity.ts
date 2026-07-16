@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const requireFromScript = createRequire(import.meta.url);
-const yaml = requireFromScript('../node_modules/js-yaml') as typeof import('../node_modules/js-yaml');
+const yaml = requireFromScript('js-yaml') as typeof import('js-yaml');
 
 type HttpMethod = 'get' | 'post';
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 # Source this file, then call load_managed_skill_hub_env with the repository root.
-# Precedence is: exported process environment > .env.secrets > .env.
+# Precedence is: exported process environment > secrets file > .env.
 load_managed_skill_hub_env() {
   local project_root="${1:?project root is required}"
   local config_file="${project_root}/.env"
-  local secrets_file="${project_root}/.env.secrets"
+  local secrets_file="${MANAGED_SKILL_HUB_SECRETS_FILE:-${project_root}/.env.secrets}"
   local env_files=("${config_file}" "${secrets_file}")
   local captured_keys=()
   local captured_values=()

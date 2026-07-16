@@ -2,11 +2,18 @@
 
 ## Deployment Hardening
 
+- [x] Harden release preparation and restart with locked staged builds,
+      separate verified process trees, HTTP healthchecks, and rollback support
+      in the ignored environment-specific deployment wrapper.
 - [ ] Deploy the staging archive with loopback-only binding and
-      `FRONTEND_START_MODE=preview`; verify the production frontend, API, and
-      nginx entry point end to end.
-- [ ] Commit the JSZip dependency fix and deploy with Node.js 22 LTS on the staging
-      server to remove the current engine warning.
+      `API_START_MODE=production` plus `FRONTEND_START_MODE=preview`; verify the
+      production frontend, API, nginx entry point, and rollback path end to end.
+- [ ] Deploy on the constrained Node.js 20 staging runtime and verify the exact
+      package-manifest versions, lockfile graph, pinned cookie dependency,
+      split prepare/start path, and API/frontend health-gated startup.
+- [ ] Trigger `ManagedSkillHub Validation` manually with the MySQL gate enabled
+      after pushing the CI-service change; retain the successful run URL as
+      release evidence.
 
 ## EPIC-012 Agent Session Delegation
 

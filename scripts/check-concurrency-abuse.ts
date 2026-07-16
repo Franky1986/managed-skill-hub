@@ -9,6 +9,7 @@ import { registerApiErrorHandler } from '../apps/api/src/adapters/inbound/http/e
 import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/skill-read.controller';
 import type { AppConfig } from '../apps/api/src/infrastructure/config';
 import type { Container } from '../apps/api/src/infrastructure/container';
+import { createScriptAppConfig } from './script-app-config';
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
@@ -105,51 +106,18 @@ function checkPathNormalizer(): CheckResult[] {
 }
 
 function config(dataDir = '.tmp/concurrency-abuse-data', maxFiles = 30, maxFileSizeBytes = 10 * 1024 * 1024): AppConfig {
-  return {
+  return createScriptAppConfig({
     registryId: 'abuse-proof-registry',
     registryName: 'Abuse Proof Registry',
     publicApiBaseUrl: 'https://abuse.example.com/api',
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
-    proposalAuthMode: 'none',
-    proposalBearerToken: null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
     openapiYamlPath: 'packages/openapi/skill-registry.openapi.yaml',
     dataDir,
-    apiHost: '127.0.0.1',
-    apiPort: 3040,
-    adminUser: 'admin',
-    adminPassword: 'admin',
-    adminPasswordHash: '',
     jwtSecret: 'concurrency-abuse-secret',
-    sessionTtlSeconds: 3600,
-    judgerProvider: 'noop',
-    judgerAdapterPath: null,
-    vercelAiSdkModel: null,
-    vercelAiSdkTimeoutMs: 30000,
-    vercelAiSdkMaxTextChars: 12000,
-    vercelAiSdkMaxRetries: 0,
-    catalogProvider: 'sqlite',
-    searchProvider: 'sqlite',
-    mysqlHost: '127.0.0.1',
-    mysqlPort: 3306,
-    mysqlDatabase: 'managed_skill_hub',
-    mysqlUser: 'managed_skill_hub',
-    mysqlPassword: '',
-    mysqlSslMode: 'preferred',
-    mysqlConnectTimeoutMs: 10000,
-    mysqlQueryTimeoutMs: 30000,
     autoPublishExcludedCategories: ['security'],
-    autoApproveWithoutJudger: false,
     proposalMaxFiles: maxFiles,
     proposalMaxFileSizeBytes: maxFileSizeBytes,
     proposalDisallowedPaths: ['node_modules/'],
-    autoPublishOnGreen: false,
-  } as AppConfig;
+  });
 }
 
 function unsafePackageContainer(): Container {

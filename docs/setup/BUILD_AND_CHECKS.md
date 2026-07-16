@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js >= 20 LTS
+- Node.js >= 20
 - npm >= 10
 
 ## Initialize The Project
@@ -41,26 +41,37 @@ The script checks:
 - docs directory structure
 - number of `.spec.md` files
 - executable deployment, backup, and test scripts
+- exact dependency versions in every repository `package.json`
 - presence of `vitest.config.ts` and `vite.config.ts`
 - `npm run lint` with ESLint flat config
-- `npm run typecheck` across all workspaces
+- `npm run typecheck` across all workspaces and root-level TypeScript proof
+  scripts
 - `npm run test` across all workspaces
 
-The pull-request workflow additionally runs the production build, audits the
-locked dependency graph at moderate severity, and executes the Docker/MySQL full
-validation gate.
+The push and pull-request workflow additionally runs the production build and
+audits the locked dependency graph at moderate severity. Pull requests also run
+the MySQL full validation gate against a runner-provisioned MySQL service.
+Operators can request the same MySQL gate manually through `workflow_dispatch`.
+There is no unattended scheduled workflow.
 
 ## Individual Checks
 
 ```bash
 npm run lint
 npm run typecheck
+npm run typecheck:scripts
 npm run test
 npm run build:prod
+node scripts/check-pinned-package-versions.mjs
 npm audit --audit-level=moderate --package-lock-only
 
 # Requires Docker/OrbStack and runs the full SQLite/MySQL parity path.
 RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh
+
+# CI path when MySQL is already available on 127.0.0.1:33307.
+RUN_MYSQL_FULL_CHECK=true \
+SKIP_MYSQL_STACK_START=true \
+./scripts/full-check.sh
 ```
 
 ## Production Build
@@ -91,6 +102,16 @@ The build creates:
    # Start both apps from repository root:
    npm run dev
    ```
+
+   Native modules such as `better-sqlite3` are built for the Node.js runtime
+   active during installation. After switching Node.js major versions, run:
+
+   ```bash
+   npm rebuild better-sqlite3 --workspace=apps/api
+   ```
+
+   A complete `npm ci --legacy-peer-deps` under the active runtime is the
+   reproducible alternative.
 
 3. Or after a production build:
    ```bash

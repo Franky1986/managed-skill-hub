@@ -4,56 +4,23 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { buildContainer } from '../apps/api/src/infrastructure/container';
 import type { AppConfig } from '../apps/api/src/infrastructure/config';
+import { createScriptAppConfig } from './script-app-config';
 
 const execFileAsync = promisify(execFile);
 
 function config(dataDir: string, storage: 'filesystem' | 'database'): AppConfig {
-  return {
+  return createScriptAppConfig({
     dataDir,
-    openapiYamlPath: path.resolve('packages/openapi/skill-registry.openapi.yaml'),
     registryId: 'migration-proof',
     registryName: 'Migration Proof',
     publicApiBaseUrl: 'https://migration.example.com/api',
-    apiHost: '127.0.0.1',
-    apiPort: 3040,
-    adminUser: 'admin',
-    adminPassword: 'admin',
-    adminPasswordHash: '',
     jwtSecret: 'migration-secret',
-    sessionTtlSeconds: 3600,
-    judgerProvider: 'noop',
-    judgerAdapterPath: null,
-    vercelAiSdkModel: null,
-    vercelAiSdkTimeoutMs: 30000,
-    vercelAiSdkMaxTextChars: 12000,
-    vercelAiSdkMaxRetries: 0,
-    catalogProvider: 'sqlite',
-    searchProvider: 'sqlite',
     contentStorageProvider: storage,
-    mysqlHost: '127.0.0.1',
-    mysqlPort: 3306,
-    mysqlDatabase: 'managed_skill_hub',
-    mysqlUser: 'managed_skill_hub',
-    mysqlPassword: '',
-    mysqlSslMode: 'preferred',
-    mysqlConnectTimeoutMs: 10000,
-    mysqlQueryTimeoutMs: 30000,
     proposalMaxFiles: 10,
     proposalMaxFileSizeBytes: 1024 * 1024,
     proposalDisallowedPaths: ['node_modules/'],
-    autoPublishOnGreen: false,
     autoPublishExcludedCategories: ['security'],
-    autoApproveWithoutJudger: false,
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
-    proposalAuthMode: 'none',
-    proposalBearerToken: null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
-  };
+  });
 }
 
 async function exists(filePath: string): Promise<boolean> {

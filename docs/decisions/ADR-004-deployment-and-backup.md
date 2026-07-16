@@ -18,19 +18,31 @@ must survive redeploys.
   and backups, and remains untouched during redeploys.
 - Deployment follows a staged archive rollout pattern:
   - Local: `scripts/create-deploy-archive.sh` creates a `tar.gz` archive from the committed tree.
-  - Server: the archive is extracted, `src/` is replaced, and `data/` remains.
-- In the MVP, the stack starts in the background via `scripts/restart-server.sh`
-  (`nohup`, PID file).
+  - Server: the archive is validated and prepared in an isolated staging
+    directory before `src/` is replaced; `data/` remains untouched.
+  - Environment-specific wrappers may retain the previous release and restore
+    it when application healthchecks or reverse-proxy validation fail.
+- Server preparation installs the committed lockfile graph and creates
+  production artifacts before stopping the active release.
+- The stack starts in the background via `scripts/restart-server.sh`, with
+  separate verified API and frontend PID files.
+- Deployment startup uses built artifacts, waits for API and frontend HTTP
+  health checks, and fails closed when either process is unhealthy.
+- Stop/restart operations signal only recorded process trees whose working
+  directory belongs to the deployed project; unknown listeners are not killed
+  by port alone.
 - No `rm -rf ./*` in the server root.
 
 ## Consequences
 
 - Simple deployments without Docker or Kubernetes.
 - Persistent data is protected.
+- Build failures do not interrupt the active release.
+- Failed cutovers can restore the previous application without changing
+  persistent data.
 - App update history remains traceable in archives.
 - A later switch to systemd service or containers is possible.
 
 ## Open Points
 
-- Healthcheck endpoint and deploy validation must be added.
-- Backup script must run regularly.
+- Backup scheduling remains deployment-specific.

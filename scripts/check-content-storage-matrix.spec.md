@@ -16,6 +16,8 @@ Proves that `CONTENT_STORAGE_PROVIDER` is externally invisible for the local det
 - Compare scrubbed JSON responses for list, search, detail, manifest, files, categories, tags, and history.
 - Compare direct file download bytes and deterministic package download bytes.
 - Verify database mode does not create managed `data/skills` or `data/proposals` content directories and writes `content.db`.
+- Emit Fastify error logs when an injected route fails so hidden internal
+  adapter or module-resolution errors remain diagnosable.
 
 ## Artifacts
 

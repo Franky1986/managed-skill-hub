@@ -72,6 +72,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
   as an alternative credential on public read routes. This fallback does not
   apply to discovery or proposal routes and does not grant any write access.
 - The controller follows the OpenAPI contract.
+- Request handlers use statically resolved application use cases; they do not
+  perform relative runtime imports that depend on transpiler-specific module
+  URLs.
 - Only `published` skills are reachable through the public read path.
 - Categories and tags are exposed for retrieval and proposal preparation.
 - `GET /skills` and `GET /skills/search` accept repeated `tag` query parameters

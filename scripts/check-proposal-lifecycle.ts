@@ -11,11 +11,14 @@ import { registerAdminAuthRoutes } from '../apps/api/src/adapters/inbound/http/a
 import { registerAdminProposalRoutes } from '../apps/api/src/adapters/inbound/http/admin-proposal.controller';
 import { registerAdminSkillRoutes } from '../apps/api/src/adapters/inbound/http/admin-skill.controller';
 import type { AppConfig } from '../apps/api/src/infrastructure/config';
+import { createScriptAppConfig } from './script-app-config';
 
-const requireFromScript = createRequire(import.meta.url);
-const Fastify = requireFromScript('fastify') as typeof import('fastify');
-const multipart = requireFromScript('@fastify/multipart') as typeof import('@fastify/multipart');
-const cookie = requireFromScript('@fastify/cookie') as typeof import('@fastify/cookie');
+const requireFromApiWorkspace = createRequire(
+  new URL('../apps/api/package.json', import.meta.url),
+);
+const Fastify = requireFromApiWorkspace('fastify') as typeof import('fastify');
+const multipart = requireFromApiWorkspace('@fastify/multipart') as typeof import('@fastify/multipart');
+const cookie = requireFromApiWorkspace('@fastify/cookie') as import('fastify').FastifyPluginAsync;
 
 interface StepResult {
   id: string;
@@ -25,51 +28,16 @@ interface StepResult {
 }
 
 function config(dataDir: string): AppConfig {
-  return {
+  return createScriptAppConfig({
     dataDir,
-    openapiYamlPath: path.resolve('packages/openapi/skill-registry.openapi.yaml'),
     registryId: 'proposal-lifecycle-registry',
     registryName: 'Proposal Lifecycle Registry',
     publicApiBaseUrl: 'https://proposal.example.com/api',
-    apiHost: '127.0.0.1',
-    apiPort: 3040,
-    adminUser: 'admin',
-    adminPassword: 'admin',
-    adminPasswordHash: '',
     jwtSecret: 'proposal-lifecycle-secret',
-    sessionTtlSeconds: 3600,
-    judgerProvider: 'noop',
-    judgerAdapterPath: null,
-    vercelAiSdkModel: null,
-    vercelAiSdkTimeoutMs: 30000,
-    vercelAiSdkMaxTextChars: 12000,
-    vercelAiSdkMaxRetries: 0,
-    catalogProvider: 'sqlite',
-    searchProvider: 'sqlite',
-    mysqlHost: '127.0.0.1',
-    mysqlPort: 3306,
-    mysqlDatabase: 'managed_skill_hub',
-    mysqlUser: 'managed_skill_hub',
-    mysqlPassword: '',
-    mysqlSslMode: 'preferred',
-    mysqlConnectTimeoutMs: 10000,
-    mysqlQueryTimeoutMs: 30000,
     proposalMaxFiles: 5,
     proposalMaxFileSizeBytes: 1024 * 1024,
-    proposalDisallowedPaths: ['node_modules/', '.venv/', 'venv/'],
-    autoPublishOnGreen: false,
     autoPublishExcludedCategories: ['security', 'network'],
-    autoApproveWithoutJudger: false,
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
-    proposalAuthMode: 'none',
-    proposalBearerToken: null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
-  };
+  });
 }
 
 async function buildApp(dataDir: string) {

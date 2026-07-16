@@ -95,6 +95,7 @@ for script in \
   scripts/export-content-filesystem.ts \
   scripts/check-content-export.ts \
   scripts/check-provider-cutover.ts \
+  scripts/check-pinned-package-versions.mjs \
   scripts/check-public-release-hygiene.sh \
   scripts/check-judger-autopublish-matrix.ts \
   scripts/check-skill-package-downloads.ts \
@@ -108,8 +109,14 @@ for script in \
   fi
 done
 
+# Check deterministic dependency declarations before running package tooling.
+log_info "Checking pinned package versions ..."
+if ! node scripts/check-pinned-package-versions.mjs >".tmp/pinned-package-versions.check.log" 2>&1; then
+  log_error "Pinned package version check failed (see .tmp/pinned-package-versions.check.log)"
+fi
+
 # Check build tooling configuration files.
-for file in apps/api/vitest.config.ts apps/web/vitest.config.ts apps/web/vite.config.ts; do
+for file in apps/api/vitest.config.ts apps/web/vitest.config.ts apps/web/vite.config.ts scripts/tsconfig.json; do
   if [[ ! -f "$file" ]]; then
     log_error "Missing: $file"
   fi

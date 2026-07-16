@@ -161,6 +161,20 @@ check_no_output "no-tracked-private-release-files" bash -c 'git ls-files \
   "scripts/call-*judger.sh" \
   "scripts/prepare-deploy.sh"'
 check_no_output "no-tracked-ignored-files" git ls-files -ci --exclude-standard
+
+strict_mode="${PUBLIC_RELEASE_STRICT:-false}"
+untracked_release_files="$(git ls-files --others --exclude-standard)"
+if [ "$strict_mode" = "1" ] || [ "$strict_mode" = "true" ]; then
+  if [ -z "$untracked_release_files" ]; then
+    record_pass "no-untracked-release-files-in-strict-mode"
+  else
+    record_fail "no-untracked-release-files-in-strict-mode"
+    echo "$untracked_release_files" >>"$LOG"
+  fi
+else
+  record_pass "untracked-release-files-allowed-in-nonstrict-mode"
+fi
+
 check_no_output "no-public-provider-specific-custom-env" rg -n 'JUDGER_CUSTOM_(HOST|TOKEN|ALIAS|PROCEDURE|VERSION|ROUTE)' $(public_repository_files)
 check_no_output "no-public-internal-adapter-paths" rg -n -i 'JUDGER_ADAPTER_PATH[[:space:]]*=[^[:space:]]*internal/adapter|apps/api/src/internal/adapter/' $(public_repository_files)
 check_no_output "no-private-absolute-user-paths-in-docs" rg -n '/Users/frankrichter|/Users/[^/[:space:]]+/projects|/home/[^/[:space:]]+/projects' $(public_repository_files)

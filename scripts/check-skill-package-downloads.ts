@@ -5,6 +5,7 @@ import { registerApiErrorHandler } from '../apps/api/src/adapters/inbound/http/e
 import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/skill-read.controller';
 import type { AppConfig } from '../apps/api/src/infrastructure/config';
 import type { Container } from '../apps/api/src/infrastructure/container';
+import { createScriptAppConfig } from './script-app-config';
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
@@ -54,25 +55,13 @@ interface DownloadResult {
 }
 
 function config(): AppConfig {
-  return {
+  return createScriptAppConfig({
     registryId: 'package-proof-registry',
     registryName: 'Package Proof Registry',
     publicApiBaseUrl: 'https://package.example.com/api',
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
-    proposalAuthMode: 'none',
-    proposalBearerToken: null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
     openapiYamlPath: 'packages/openapi/skill-registry.openapi.yaml',
-    proposalMaxFiles: 30,
-    proposalMaxFileSizeBytes: 10 * 1024 * 1024,
     proposalDisallowedPaths: ['node_modules/'],
-    autoPublishOnGreen: false,
-  } as AppConfig;
+  });
 }
 
 function manifestFor(version: VersionFixture) {
@@ -189,7 +178,7 @@ async function main(): Promise<void> {
   assert(single.statusCode === 200, 'single file status');
   assert(String(single.headers['content-type']).includes('text/markdown'), 'single file content type');
   assert(String(single.headers['content-disposition']).includes('package-proof-skill-1.0.0-SKILL.md'), 'single file name');
-  assert(single.body.toString('utf8').includes('Single file'), 'single file content');
+  assert(responseBuffer(single).toString('utf8').includes('Single file'), 'single file content');
   results.push({
     id: 'single-file-explicit-version',
     statusCode: single.statusCode,

@@ -219,6 +219,7 @@ async function runCase(testCase: CaseDefinition) {
       enabled: testCase.enabled,
       excludedCategories: ['security', 'network'],
       autoApproveWithoutJudger: testCase.autoApproveWithoutJudger,
+      similarityThreshold: 0.5,
     },
     {
       getProposal: async () => null,

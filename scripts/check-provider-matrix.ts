@@ -6,8 +6,9 @@ import { buildContainer } from '../apps/api/src/infrastructure/container';
 import { AgentApiAuth } from '../apps/api/src/adapters/inbound/http/agent-api-auth';
 import { registerApiErrorHandler } from '../apps/api/src/adapters/inbound/http/error-response';
 import { registerSkillReadRoutes } from '../apps/api/src/adapters/inbound/http/skill-read.controller';
-import type { AppConfig, CatalogProvider, SearchProvider } from '../apps/api/src/infrastructure/config';
+import type { CatalogProvider, SearchProvider } from '../apps/api/src/infrastructure/config';
 import type { Container } from '../apps/api/src/infrastructure/container';
+import { createScriptAppConfig } from './script-app-config';
 
 const requireFromScript = createRequire(import.meta.url);
 const Fastify = requireFromScript('fastify') as typeof import('fastify');
@@ -45,27 +46,14 @@ function includeMysql(): boolean { return process.env.PROVIDER_MATRIX_INCLUDE_MY
 function selectedCases(): ProviderCase[] { return includeMysql() ? allCases : allCases.filter((candidate) => !candidate.requiresMysql); }
 function mysqlConfig() { return { host: process.env.MYSQL_HOST ?? '127.0.0.1', port: Number(process.env.MYSQL_PORT ?? 33307), database: process.env.MYSQL_DATABASE ?? 'managed_skill_hub', user: process.env.MYSQL_USER ?? 'managed_skill_hub', password: process.env.MYSQL_PASSWORD ?? 'valpass' }; }
 
-function config(providerCase: ProviderCase, dataDir: string): AppConfig {
+function config(providerCase: ProviderCase, dataDir: string) {
   const mysql = mysqlConfig();
-  return {
+  return createScriptAppConfig({
     dataDir,
-    openapiYamlPath: path.resolve('packages/openapi/skill-registry.openapi.yaml'),
     registryId: 'provider-matrix-registry',
     registryName: 'Provider Matrix Registry',
     publicApiBaseUrl: 'https://provider.example.com/api',
-    apiHost: '127.0.0.1',
-    apiPort: 3040,
-    adminUser: 'admin',
-    adminPassword: 'admin',
-    adminPasswordHash: '',
     jwtSecret: 'provider-matrix-secret',
-    sessionTtlSeconds: 3600,
-    judgerProvider: 'noop',
-    judgerAdapterPath: null,
-    vercelAiSdkModel: null,
-    vercelAiSdkTimeoutMs: 30000,
-    vercelAiSdkMaxTextChars: 12000,
-    vercelAiSdkMaxRetries: 0,
     catalogProvider: providerCase.catalogProvider,
     searchProvider: providerCase.searchProvider,
     mysqlHost: mysql.host,
@@ -74,23 +62,8 @@ function config(providerCase: ProviderCase, dataDir: string): AppConfig {
     mysqlUser: mysql.user,
     mysqlPassword: mysql.password,
     mysqlSslMode: 'disabled',
-    mysqlConnectTimeoutMs: 10000,
-    mysqlQueryTimeoutMs: 30000,
     proposalMaxFiles: 5,
     proposalMaxFileSizeBytes: 1024 * 1024,
-    proposalDisallowedPaths: ['node_modules/', '.venv/', 'venv/'],
-    autoPublishOnGreen: false,
-    autoPublishExcludedCategories: ['security', 'network'],
-    autoApproveWithoutJudger: false,
-    publicReadAuthMode: 'none',
-    publicReadBearerToken: null,
-    publicReadBearerActor: 'read-agent',
-    proposalAuthMode: 'none',
-    proposalBearerToken: null,
-    proposalBearerActor: 'proposal-agent',
-    discoveryAuthMode: 'none',
-    discoveryBearerToken: null,
-    discoveryBearerActor: 'discovery-agent',
     oidcAgentIssuer: 'https://auth.example.test/application/o/agent/',
     oidcAdminIssuer: 'https://auth.example.test/application/o/admin/',
     oidcAgentClientId: 'managedskillhub-agent-device',
@@ -103,11 +76,10 @@ function config(providerCase: ProviderCase, dataDir: string): AppConfig {
     oidcAdminGroups: ['managedskillhub-admins'],
     oidcReviewerGroups: ['managedskillhub-reviewers'],
     oidcPublisherGroups: ['managedskillhub-publishers'],
-    oidcMaxGroups: 100,
-  };
+  });
 }
 
-async function buildApp(container: Container): Promise<FastifyInstance> { const app = Fastify({ logger: false }); registerSkillReadRoutes(app, container, new AgentApiAuth(container.config)); registerApiErrorHandler(app); return app; }
+async function buildApp(container: Container): Promise<FastifyInstance> { const app = Fastify({ logger: { level: 'error' } }); registerSkillReadRoutes(app, container, new AgentApiAuth(container.config)); registerApiErrorHandler(app); return app; }
 function assert(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
 function parseJson(payload: string): any { return JSON.parse(payload); }
 function responseBuffer(response: { rawPayload?: Buffer; body: string | Buffer }): Buffer { if (Buffer.isBuffer(response.rawPayload)) return response.rawPayload; if (Buffer.isBuffer(response.body)) return response.body; return Buffer.from(response.body, 'binary'); }
