@@ -1,3 +1,11 @@
+# 2026-07-17: Sanitize public release documentation provenance
+
+- Removed a superseded research note from the public repository.
+- Replaced unrelated deployment provenance and a private-network example with
+  organization-neutral reverse-proxy and rollout guidance.
+- Corrected the documented admin password-hash helper path after the script
+  responsibility reorganization.
+
 # 2026-07-17: Make proposal execution recoverable and machine-gated
 
 - Enforced one active `in_upload` proposal per owner and upload intent. A

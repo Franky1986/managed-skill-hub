@@ -27,13 +27,13 @@ limit_conn_zone $binary_remote_addr zone=managed_skill_hub_connections:10m;
 
 ```nginx
 server {
-    listen 192.0.2.10:80;
+    listen 80;
     server_name managed-skill-hub.example.com;
     return 301 https://$host$request_uri;
 }
 
 server {
-    listen 192.0.2.10:443 ssl;
+    listen 443 ssl;
     http2 on;
     server_name managed-skill-hub.example.com;
 
