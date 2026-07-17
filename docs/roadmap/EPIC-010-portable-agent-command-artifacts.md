@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned
+In progress
 
 ## Objective
 
@@ -116,12 +116,35 @@ decisions:
 
 ## Proposal Upload Contract
 
+Before creating a proposal, the submitter agent must separate external
+services/capabilities from local portable artifacts:
+
+- Figma, Jira, MCP servers, remote APIs, credentials, remote service data, and
+  user-selected repositories remain external prerequisites and are not copied
+  into the skill package.
+- Outside-root local commands, references, templates, scripts, prompts,
+  fixtures, and assets require a user-facing proposal with the source,
+  necessity, recommended package-relative target, and portability impact.
+- The user chooses `include_portably`, `keep_external_prerequisite`, or
+  `remove_or_rewrite_dependency`. A general upload request does not authorize
+  the agent to choose silently.
+- Bare slash commands and other ambiguous dependency names trigger the same
+  decision gate. The agent must inspect plausible adjacent command locations
+  and ask instead of assuming that the dependency is only prose.
+- No `POST /proposals` or final-hash duplicate precheck may run until every
+  local or ambiguous outside-root dependency has an explicit decision.
+- Proposal creation and metadata patching persist those decisions as structured
+  `artifactDecisions`. Server validation blocks finalization when a detected
+  dependency has no matching decision or when an include/remove decision is
+  not reflected in the active package references.
+
 When a submitter package references runtime command paths outside the skill
 root:
 
 - If the command file exists outside the skill root and is relevant to the
-  skill, the submitter agent should copy it into `commands/` in the temporary
-  upload package.
+  skill, the submitter agent should recommend copying it into `commands/` and
+  do so in the temporary upload package only after the user chooses
+  `include_portably`.
 - The submitter agent should rewrite references from runtime-specific paths
   such as `.cursor/commands/foo.md` to package-relative references such as
   `commands/foo.md`.
@@ -211,8 +234,10 @@ Required contract updates:
 
 - `/howToPropose` should explicitly mention `commands/` as a meaningful package
   subfolder.
-- `/howToPropose` should tell agents to package relevant outside-root command
-  files instead of leaving runtime-specific references in prose.
+- `/howToPropose` should tell agents to propose package-relative destinations
+  for relevant outside-root command files and wait for the user's decision
+  instead of copying them silently or leaving runtime-specific references in
+  prose.
 - `/discover` or a future package metadata endpoint should document portable
   command support once implemented.
 - OpenAPI schemas should describe `commands/manifest.json` as an optional
@@ -275,8 +300,8 @@ to "recommend portable command packaging":
 - `packages/openapi/skill-registry.openapi.yaml`
 - `docs/product/AGENT_BOOTSTRAP.md`
 - `docs/product/AGENT_OPERATIONS.md`
-- `scripts/check-agent-contract.ts`
-- `scripts/check-skill-package-downloads.ts`
+- `scripts/checks/check-agent-contract.ts`
+- `scripts/checks/check-skill-package-downloads.ts`
 
 If consumer-side setup scripts are added, new scripts should be covered by
 deterministic checks under `scripts/`.
@@ -300,6 +325,9 @@ deterministic checks under `scripts/`.
 
 - Agent-facing proposal guidance describes `commands/` and portable command
   packaging.
+- Agent-facing guidance distinguishes non-packageable external services such as
+  Figma from local portable artifacts and requires an explicit user decision
+  for every local or ambiguous outside-root dependency before proposal writes.
 - If a submitted package already contains `commands/`, guidance requires agents
   to preserve and merge rather than overwrite existing command artifacts.
 - Proposal validation can identify runtime-specific command references and

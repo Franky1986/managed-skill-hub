@@ -17,7 +17,7 @@ must survive redeploys.
 - `/path/to/deploy-root/data/` contains skills, uploads, index, audit log,
   and backups, and remains untouched during redeploys.
 - Deployment follows a staged archive rollout pattern:
-  - Local: `scripts/create-deploy-archive.sh` creates a `tar.gz` archive from the committed tree.
+  - Local: `scripts/deployment/create-deploy-archive.sh` creates a `tar.gz` archive from the committed tree.
   - Server: the archive is validated and prepared in an isolated staging
     directory before `src/` is replaced; `data/` remains untouched.
   - Environment-specific wrappers may retain the previous release and restore
@@ -28,7 +28,7 @@ must survive redeploys.
   adapters, and real secrets remain outside the public repository.
 - Server preparation installs the committed lockfile graph and creates
   production artifacts before stopping the active release.
-- The stack starts in the background via `scripts/restart-server.sh`, with
+- The stack starts in the background via `scripts/deployment/restart-server.sh`, with
   separate verified API and frontend PID files.
 - Deployment startup uses built artifacts, waits for API and frontend HTTP
   health checks, and fails closed when either process is unhealthy.

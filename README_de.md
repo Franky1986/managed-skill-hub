@@ -186,7 +186,7 @@ npm --workspace=apps/web run dev
 ## Automatisierter Smoke Test
 
 ```bash
-bash scripts/smoke-test.sh
+bash scripts/development/smoke-test.sh
 ```
 
 Das Skript startet das Backend, prüft Health, öffentliche Lese-Endpunkte, Admin-Login,

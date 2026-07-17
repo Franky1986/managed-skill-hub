@@ -118,6 +118,15 @@ paths:
                       - Download the resolved version with GET <api-base-url>/skills/{skillId}/package?version=<published-version>.
                       proposalExecution: Use the same network-capable client for GET
                         /howToPropose and all proposal API calls.
+                      responseHandling:
+                        required: true
+                        rules:
+                        - Do not use curl -f for JSON workflow endpoints.
+                        - Capture the body and HTTP status separately before deciding whether to continue.
+                        - Do not combine the complete lifecycle in one shell chain.
+                        - Never print authorization values.
+                        shellPattern: BODY_FILE="$(mktemp)"; HTTP_STATUS="$(curl -sS -o "$BODY_FILE" -w "%{http_code}" <METHOD_AND_URL>)"; cat "$BODY_FILE"
+                        validationGate: Continue only when HTTP status is 2xx and valid=true, canFinalize=true, blockingFindingCount=0, and nextAction=finalize_upload.
                       authenticationDiagnosis:
                       - Evaluate authentication independently for discovery, public-read,
                         and proposal operations using the live discovery metadata.
@@ -140,18 +149,49 @@ paths:
                           instructions: Authentication is not required for proposal.
                       curlExamples:
                         discover:
-                          command: 'curl -fsSL "<api-base-url>/discover"'
+                          command: 'curl -sSL "<api-base-url>/discover"'
                           authArea: discovery
                           authorizationRequired: false
                         search:
-                          command: 'curl -fsSL --get --data-urlencode "q=<name-or-keywords>"
+                          command: 'curl -sSL --get --data-urlencode "q=<name-or-keywords>"
                             --data-urlencode "mode=keyword" "<api-base-url>/skills/search"'
                           authArea: public-read
                           authorizationRequired: false
                         download:
-                          command: 'curl -fSL -OJ "<api-base-url>/skills/{skillId}/package?version=<published-version>"'
+                          command: 'curl -sSL -OJ "<api-base-url>/skills/{skillId}/package?version=<published-version>"'
                           authArea: public-read
                           authorizationRequired: false
+                    proposalWorkflow:
+                      version: '1.0'
+                      executionMode: sequential_state_machine
+                      rules:
+                      - Execute one state-changing request at a time.
+                      - Persist and reuse the proposal id for recoverable corrections.
+                      - Inspect HTTP status and parsed JSON after every request.
+                      - Never continue from validation merely because it returned 2xx.
+                      steps:
+                      - id: discover
+                        method: GET
+                        path: /discover
+                        success: HTTP 2xx and structurally valid discovery response
+                        next: read_how_to_propose
+                      - id: validate_upload
+                        method: POST
+                        path: /proposals/{id}/validate-upload
+                        success: HTTP 2xx AND valid=true AND canFinalize=true AND blockingFindingCount=0 AND nextAction=finalize_upload
+                        next: finalize_upload
+                        recovery: Repair the same in_upload proposal and validate again.
+                      - id: finalize_upload
+                        method: POST
+                        path: /proposals/{id}/finalize-upload
+                        success: HTTP 2xx AND uploadFinalized=true
+                        next: poll_status
+                    categoryPolicy:
+                      policy: open
+                      customCategoriesAllowed: true
+                      listEndpoint: /categories
+                      listContains: Suggestions derived from published skills.
+                      instruction: Use a listed category when it fits; never treat GET /categories as an allowlist.
                     proposalIntentDecision:
                       requiredBeforePackagePreparation: true
                       outcomes:
@@ -184,6 +224,53 @@ paths:
                         SKILL.md.
                       - Command presence alone does not make a public proposal
                         worthwhile.
+                    externalArtifactDecision:
+                      requiredBeforeProposalCreation: true
+                      classifications:
+                      - id: external_service_or_capability
+                        examples:
+                        - Figma
+                        - Jira
+                        - MCP servers
+                        - external APIs
+                        action: Do not copy services, credentials, remote data,
+                          or tool installations into the package. Document the
+                          required capability and access as an external prerequisite.
+                      - id: local_portable_artifact
+                        examples:
+                        - command files
+                        - reference documents
+                        - templates
+                        - scripts
+                        - assets
+                        action: Propose a package-relative destination and ask
+                          the user how the artifact should be handled.
+                      - id: ambiguous_dependency
+                        examples:
+                        - bare slash commands
+                        - adjacent files with unclear ownership
+                        action: Stop and ask the user instead of silently classifying
+                          the dependency.
+                      decisionOptions:
+                      - id: include_portably
+                        action: Copy or merge the artifact into the temporary
+                          package and rewrite references package-relatively.
+                      - id: keep_external_prerequisite
+                        action: Keep it outside and document the prerequisite
+                          and portability limitation explicitly.
+                      - id: remove_or_rewrite_dependency
+                        action: Remove or rewrite the dependency so the package
+                          remains complete without it.
+                      requiredUserFacingProposal:
+                      - List every local or ambiguous outside-root dependency.
+                      - Show its source, purpose, and recommended package-relative
+                        destination.
+                      - Explain the portability impact of every option.
+                      - Recommend one option and wait for the user's choice.
+                      confirmationRule: Ask the user to choose how every local
+                        or ambiguous outside-root dependency is handled before
+                        POST /proposals. Known external services such as Figma,
+                        Jira, MCP servers, and remote APIs are not uploaded.
                     escalationRule: Do not proceed with proposal creation while the
                       user outcome or registry value is unresolved, the package is
                       structurally ambiguous, references are broken, sensitive
@@ -282,18 +369,32 @@ paths:
                         parent-directory references, absolute local paths, IDE/agent
                         workspace folders, command folders, generated-output folders,
                         or other project-root-relative paths
-                      - If an outside-root reference points to a required artifact,
-                        copy it into the temporary upload package and rewrite the
-                        reference to a package-relative path
-                      - If a runtime command reference points to .cursor/commands,
-                        .codex/commands, or .claude/commands and is relevant to using
-                        the skill, copy or merge it into commands/ and add commands/manifest.json
+                      - Inspect bare slash commands as possible references to adjacent
+                        runtime command files
+                      - Classify Figma, Jira, MCP servers, external APIs, remote data,
+                        and user-selected repositories as external services or capabilities
+                        that must not be copied into the package
+                      - Classify outside-root commands, references, templates, scripts,
+                        prompts, fixtures, and assets as local portable artifacts or
+                        ambiguous dependencies
                       - If the source package already contains commands/, preserve
                         existing command files, compare collisions, and do not silently
                         overwrite command artifacts
                       - Keep dependency manifests and lockfiles, but do not upload
                         installed package trees
                     - step: 5
+                      title: Resolve outside-root artifacts with the user
+                      checks:
+                      - Inventory every local or ambiguous outside-root dependency
+                      - For each local artifact, show its source, purpose, and concrete
+                        package-relative target such as commands/foo.md or references/foo.md
+                      - Offer include_portably, keep_external_prerequisite, and
+                        remove_or_rewrite_dependency with their portability impact
+                      - Recommend one option and wait for the user's explicit choice;
+                        the original upload request is not sufficient confirmation
+                      - Do not call POST /proposals or the final-hash duplicate precheck
+                        until all artifact decisions are explicit
+                    - step: 6
                       title: Normalize only when needed
                       checks:
                       - Final entrypoint must be SKILL.md in the package root
@@ -303,22 +404,24 @@ paths:
                         generated-output references to package-relative references
                         in the temporary upload copy
                       - Rewrite active runtime command references to commands/<name>.md
-                        when the command ships with the package
+                        only when the user chose to include the command portably
                       - Strip installed dependency folders from the temporary upload
                         package
-                    - step: 6
+                    - step: 7
                       title: Prefer English proposal metadata
                       checks:
                       - Prefer English for title, description, category, tags and
                         capabilities
                       - Uploaded content files may be in any language
-                    - step: 7
+                    - step: 8
                       title: Validate self-contained and safe content
                       checks:
                       - No required artifact reference may still resolve outside the
                         temporary upload package root
+                      - Every required local artifact is either included by explicit
+                        user choice or truthfully documented as an external prerequisite
                       - Broken references, credentials or PII must block the upload
-                    - step: 8
+                    - step: 9
                       title: Build and prove the final upload package before network
                         upload
                       checks:
@@ -330,19 +433,19 @@ paths:
                         paths, Markdown links, Markdown inline-code file paths, and
                         JSON path/source fields
                       - Verify every required package reference exists, runtime output
-                        examples use placeholders, and relevant command shortcuts
-                        are packaged under commands/
+                        examples use placeholders, and explicitly approved portable
+                        command shortcuts are packaged under commands/
                       - Compute sha256 values from the final temporary upload package
                         after normalization
                       - Do not call POST /proposals until this local package proof
                         is complete
-                    - step: 9
+                    - step: 10
                       title: Search the public catalog exploratively
                       checks:
                       - GET /skills/search?q=<title>&mode=keyword
                       - GET /skills/search?q=<short description keywords>&mode=keyword
                       - Inspect matching descriptions and public files when relevant
-                    - step: 10
+                    - step: 11
                       title: Run duplicate precheck
                       checks:
                       - POST /proposals/check-duplicate
@@ -355,7 +458,7 @@ paths:
                       - Only after proposal intent remains confirmed, show the duplicate
                         candidate, overlap, intended resolution, and concise metadata/file-fingerprint
                         diff before asking
-                    - step: 11
+                    - step: 12
                       title: Create proposal only after confirmation
                       checks:
                       - Final temporary upload package is complete, locally scanned,
@@ -939,6 +1042,19 @@ paths:
       - agentSession: []
       - agentOidc:
         - managedskillhub:proposals
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: Stable 8-200 character key for safely retrying proposal creation.
+          Persist the returned proposal id and reuse the exact same key and body after
+          an uncertain response. Reuse with different content returns 409. Creating
+          another matching upload while one is already in_upload returns
+          PROPOSAL_UPLOAD_ALREADY_OPEN with the existing proposal id and recovery paths.
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 200
       requestBody:
         required: true
         content:
@@ -954,6 +1070,15 @@ paths:
                 $ref: '#/components/schemas/ProposalSubmissionResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          description: The idempotency key conflicts with prior content or a matching
+            upload is already open for this submitter. For
+            PROPOSAL_UPLOAD_ALREADY_OPEN, resume details.proposalId instead of creating
+            another proposal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/ValidationError'
   /proposals/notice:
@@ -2881,6 +3006,7 @@ components:
       - proposalAuthRequired
       - discoveryAuthRequired
       - agentHttpGuidance
+      - proposalWorkflow
       - documentation
       - capabilities
       - entrypoints
@@ -2907,6 +3033,8 @@ components:
             $ref: '#/components/schemas/RuntimeAuthScheme'
         agentHttpGuidance:
           $ref: '#/components/schemas/AgentHttpGuidance'
+        proposalWorkflow:
+          $ref: '#/components/schemas/ProposalWorkflow'
         workflowNotes:
           type: object
           properties:
@@ -3050,7 +3178,10 @@ components:
       - summary
       - description
       - agentHttpGuidance
+      - proposalWorkflow
+      - categoryPolicy
       - proposalIntentDecision
+      - externalArtifactDecision
       - requiredSteps
       - escalationRule
       - duplicateConfirmationRule
@@ -3073,6 +3204,29 @@ components:
           type: string
         agentHttpGuidance:
           $ref: '#/components/schemas/AgentHttpGuidance'
+        proposalWorkflow:
+          $ref: '#/components/schemas/ProposalWorkflow'
+        categoryPolicy:
+          type: object
+          required:
+          - policy
+          - customCategoriesAllowed
+          - listEndpoint
+          - listContains
+          - instruction
+          properties:
+            policy:
+              type: string
+              enum:
+              - open
+            customCategoriesAllowed:
+              type: boolean
+            listEndpoint:
+              type: string
+            listContains:
+              type: string
+            instruction:
+              type: string
         proposalIntentDecision:
           type: object
           required:
@@ -3102,6 +3256,60 @@ components:
               type: array
               items:
                 type: string
+        externalArtifactDecision:
+          type: object
+          required:
+          - requiredBeforeProposalCreation
+          - classifications
+          - decisionOptions
+          - requiredUserFacingProposal
+          - confirmationRule
+          properties:
+            requiredBeforeProposalCreation:
+              type: boolean
+            classifications:
+              type: array
+              items:
+                type: object
+                required:
+                - id
+                - examples
+                - action
+                properties:
+                  id:
+                    type: string
+                    enum:
+                    - external_service_or_capability
+                    - local_portable_artifact
+                    - ambiguous_dependency
+                  examples:
+                    type: array
+                    items:
+                      type: string
+                  action:
+                    type: string
+            decisionOptions:
+              type: array
+              items:
+                type: object
+                required:
+                - id
+                - action
+                properties:
+                  id:
+                    type: string
+                    enum:
+                    - include_portably
+                    - keep_external_prerequisite
+                    - remove_or_rewrite_dependency
+                  action:
+                    type: string
+            requiredUserFacingProposal:
+              type: array
+              items:
+                type: string
+            confirmationRule:
+              type: string
         requiredSteps:
           type: array
           items:
@@ -3244,6 +3452,55 @@ components:
               type: string
             checkDuplicateNote:
               type: string
+    ProposalWorkflow:
+      type: object
+      required:
+      - version
+      - executionMode
+      - rules
+      - steps
+      properties:
+        version:
+          type: string
+        executionMode:
+          type: string
+          enum:
+          - sequential_state_machine
+        rules:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - method
+            - path
+            - success
+            - next
+            properties:
+              id:
+                type: string
+              method:
+                type: string
+                enum:
+                - GET
+                - POST
+                - LOCAL
+              path:
+                type:
+                - string
+                - 'null'
+              success:
+                type: string
+              next:
+                type:
+                - string
+                - 'null'
+              recovery:
+                type: string
     AgentHttpGuidance:
       type: object
       required:
@@ -3251,6 +3508,7 @@ components:
       - toolSelection
       - retrievalSequence
       - proposalExecution
+      - responseHandling
       - authenticationDiagnosis
       - authorization
       - curlExamples
@@ -3266,6 +3524,24 @@ components:
             type: string
         proposalExecution:
           type: string
+        responseHandling:
+          type: object
+          required:
+          - required
+          - rules
+          - shellPattern
+          - validationGate
+          properties:
+            required:
+              type: boolean
+            rules:
+              type: array
+              items:
+                type: string
+            shellPattern:
+              type: string
+            validationGate:
+              type: string
         authenticationDiagnosis:
           type: array
           minItems: 4
@@ -3776,6 +4052,50 @@ components:
             type: string
         entrypoint:
           type: string
+        artifactDecisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalArtifactDecision'
+    ProposalArtifactDecision:
+      type: object
+      required:
+      - reference
+      - classification
+      - decision
+      - confirmation
+      - source
+      - target
+      - rationale
+      properties:
+        reference:
+          type: string
+        classification:
+          type: string
+          enum:
+          - external_service_or_capability
+          - local_portable_artifact
+          - ambiguous_dependency
+        decision:
+          type: string
+          enum:
+          - include_portably
+          - keep_external_prerequisite
+          - remove_or_rewrite_dependency
+        confirmation:
+          type: string
+          enum:
+          - explicit_user_choice
+          - policy_default
+        source:
+          type:
+          - string
+          - 'null'
+        target:
+          type:
+          - string
+          - 'null'
+        rationale:
+          type: string
     ProposalReview:
       type: object
       required:
@@ -3822,6 +4142,7 @@ components:
       - category
       - tags
       - capabilities
+      - artifactDecisions
       - status
       - createdAt
       - files
@@ -3867,6 +4188,10 @@ components:
         entrypoint:
           type: string
           nullable: true
+        artifactDecisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalArtifactDecision'
         status:
           type: string
           enum:
@@ -4317,27 +4642,55 @@ components:
       type: object
       required:
       - id
+      - status
+      - uploadFinalized
       - message
       - statusUrl
       - checkUrl
+      - validateUploadUrl
       - finalizeUploadUrl
+      - nextAction
+      - recoveryRule
       properties:
         id:
           type: string
+        status:
+          type: string
+          enum:
+          - in_upload
+          - submitted
+          - judged
+          - approved
+          - rejected
+          - converted
+        uploadFinalized:
+          type: boolean
         message:
           type: string
-          description: Human-readable confirmation that the upload was opened and
-            must still be finalized by the submitter.
+          description: Human-readable state and continuation guidance. The returned
+            proposal id remains the only active upload id for recoverable corrections.
         statusUrl:
           type: string
           description: Absolute or prefix-aware URL to poll the public proposal status.
         checkUrl:
           type: string
           description: Alias for statusUrl, provided for convenience.
+        validateUploadUrl:
+          type: string
+          description: Prefix-aware URL for checking the active upload package before
+            finalization and after uncertain intermediate operations.
         finalizeUploadUrl:
           type: string
           description: Absolute or prefix-aware URL to explicitly finalize the upload
             after all files were attached.
+        nextAction:
+          type: string
+          enum:
+          - upload_or_replace_files
+          - poll_status
+        recoveryRule:
+          type: string
+          description: Required recovery behavior for ambiguous responses and retries.
     ProposalMetadataUpdateRequest:
       type: object
       minProperties: 1
@@ -4359,6 +4712,10 @@ components:
         entrypoint:
           type: string
           nullable: true
+        artifactDecisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalArtifactDecision'
     ProposalMetadataUpdateResponse:
       type: object
       required:
@@ -4370,6 +4727,7 @@ components:
       - tags
       - capabilities
       - entrypoint
+      - artifactDecisions
       properties:
         id:
           type: string
@@ -4394,6 +4752,10 @@ components:
         entrypoint:
           type: string
           nullable: true
+        artifactDecisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalArtifactDecision'
     ProposalFinalizeUploadResponse:
       type: object
       required:
@@ -4590,6 +4952,9 @@ components:
       - proposalId
       - status
       - valid
+      - canFinalize
+      - blockingFindingCount
+      - nextAction
       - fileCount
       - checkedTextFileCount
       - findings
@@ -4602,6 +4967,18 @@ components:
           - in_upload
         valid:
           type: boolean
+        canFinalize:
+          type: boolean
+          description: True only when finalize-upload may be called immediately.
+        blockingFindingCount:
+          type: integer
+          minimum: 0
+        nextAction:
+          type: string
+          enum:
+          - upload_files
+          - repair_package
+          - finalize_upload
         fileCount:
           type: integer
         checkedTextFileCount:
@@ -4637,6 +5014,8 @@ components:
           - portable_command_manifest_missing
           - portable_command_missing
           - portable_command_reference
+          - artifact_decision_missing
+          - artifact_decision_not_applied
         severity:
           type: string
           enum:
@@ -4746,11 +5125,30 @@ components:
       type: object
       required:
       - items
+      - policy
+      - itemsAreSuggestions
+      - customCategoriesAllowed
+      - source
+      - instruction
       properties:
         items:
           type: array
           items:
             type: string
+        policy:
+          type: string
+          enum:
+          - open
+        itemsAreSuggestions:
+          type: boolean
+        customCategoriesAllowed:
+          type: boolean
+        source:
+          type: string
+          enum:
+          - published_skills
+        instruction:
+          type: string
     TagListResponse:
       type: object
       required:

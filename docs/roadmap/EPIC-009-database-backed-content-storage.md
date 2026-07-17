@@ -49,7 +49,7 @@ Database-backed content storage would make MySQL deployments easier to operate a
 - `apps/api/src/adapters/outbound/audit/filesystem/file-system.audit.ts` stores audit entries in JSONL files and mirrors them into the catalog projection.
 - `apps/api/src/adapters/outbound/observability/file-backed.observability.ts` stores observability snapshots on disk.
 - Before EPIC-009, catalog adapters read `data/skills/**/.meta.json` to resolve version `updatedAt`; database mode now bridges metadata from content tables.
-- `scripts/backup.sh` and `scripts/restore.sh` back up and restore filesystem-side `DATA_DIR` content, with a fail-fast guard for MySQL database-content mode.
+- `scripts/operations/backup.sh` and `scripts/operations/restore.sh` back up and restore filesystem-side `DATA_DIR` content, with a fail-fast guard for MySQL database-content mode.
 - `docs/setup/BACKUP_AND_RESTORE.md`, `docs/setup/DEPLOYMENT.md`, `docs/setup/ENVIRONMENT.md`, `docs/architecture/SYSTEM_OVERVIEW.md`, `docs/decisions/ADR-005-filebased-storage.md`, and `docs/decisions/ADR-013-sqlite-metadata-truth.md` describe the filesystem as the physical source for artifacts.
 
 ### Current Runtime Flow
@@ -84,8 +84,8 @@ The recommended implementation path is:
 1. Keep configuration minimal with `CONTENT_STORAGE_PROVIDER=filesystem|database` and no separate `CONTENT_DATABASE_PROVIDER` in the first implementation. In `database` mode, content storage follows `CATALOG_PROVIDER`. For example, `CATALOG_PROVIDER=mysql` plus `CONTENT_STORAGE_PROVIDER=database` means managed content is stored in MySQL.
 2. Treat audit history as managed registry content. In database content mode, `AuditLogPort` should be database-backed so review, publish, reject, judgement, and rebuild history is not left on the filesystem.
 3. Do not treat observability snapshots as managed content for this epic. Observability is operational telemetry and may remain file-backed initially. If needed later, add a separate `OBSERVABILITY_PROVIDER=file|database` decision.
-4. In MySQL database-content mode, make `scripts/backup.sh` fail fast with explicit instructions instead of silently producing an incomplete `DATA_DIR` backup. Add a separate MySQL backup path later, for example `scripts/backup-mysql.sh`, once dump/restore semantics are explicit and tested.
-5. Add a database-to-filesystem export command after database storage works. A command such as `scripts/export-content-filesystem.ts` should recreate a human-readable `data/skills/` and `data/proposals/` tree for debugging, portability, and vendor-lock-in avoidance.
+4. In MySQL database-content mode, make `scripts/operations/backup.sh` fail fast with explicit instructions instead of silently producing an incomplete `DATA_DIR` backup. Add a separate MySQL backup path later, for example `scripts/backup-mysql.sh`, once dump/restore semantics are explicit and tested.
+5. Add a database-to-filesystem export command after database storage works. A command such as `scripts/content/export-content-filesystem.ts` should recreate a human-readable `data/skills/` and `data/proposals/` tree for debugging, portability, and vendor-lock-in avoidance.
 6. Keep the existing upload/file-size limits for the first database-backed implementation and store content as database BLOBs. The port boundaries must remain clean enough to add object storage later without changing use cases or HTTP contracts.
 
 Recommended implementation order:
@@ -109,15 +109,15 @@ The implemented target behavior is:
 - Server users who want database durability set `CONTENT_STORAGE_PROVIDER=database`. The concrete database follows `CATALOG_PROVIDER` for now, so SQLite stores content in the local SQLite database and MySQL stores content in MySQL content tables.
 - No API, frontend, OpenAPI, agent, package-download, or proposal workflow changes are allowed because of this setting. Storage mode is an operator concern only.
 - Migration must be copy-only and idempotent. Filesystem source data must stay untouched until the operator has run parity checks and made a separate cutover decision.
-- Export back to filesystem is available through `scripts/export-content-filesystem.ts`. This keeps database mode inspectable, debuggable, portable, and reversible.
-- MySQL database-content deployments must not rely on `DATA_DIR` archives alone. `scripts/backup.sh` fails fast in this mode so incomplete backups cannot be mistaken as complete. Operators must pair filesystem-side operational backups with a tested MySQL dump/restore workflow.
+- Export back to filesystem is available through `scripts/content/export-content-filesystem.ts`. This keeps database mode inspectable, debuggable, portable, and reversible.
+- MySQL database-content deployments must not rely on `DATA_DIR` archives alone. `scripts/operations/backup.sh` fails fast in this mode so incomplete backups cannot be mistaken as complete. Operators must pair filesystem-side operational backups with a tested MySQL dump/restore workflow.
 
 Implemented lifecycle commands and proofs:
 
-1. `scripts/check-content-storage-matrix.ts` proves filesystem/database runtime parity for SQLite in `./scripts/check.sh` and for MySQL in `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh`.
-2. `scripts/migrate-content-to-database.ts` copies filesystem content into database mode and `scripts/check-content-migration.ts` proves skills, proposals, files, extracts, scoped audits, global audits, and source preservation.
-3. `scripts/export-content-filesystem.ts` exports database content back to a separate filesystem `DATA_DIR` and `scripts/check-content-export.ts` proves skills, proposals, nested files, extracts, scoped audits, and global audits.
-4. `scripts/check-backup-restore.ts` proves filesystem backup/restore behavior and the MySQL database-content fail-fast backup guard.
+1. `scripts/checks/check-content-storage-matrix.ts` proves filesystem/database runtime parity for SQLite in `./scripts/check.sh` and for MySQL in `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh`.
+2. `scripts/content/migrate-content-to-database.ts` copies filesystem content into database mode and `scripts/checks/check-content-migration.ts` proves skills, proposals, files, extracts, scoped audits, global audits, and source preservation.
+3. `scripts/content/export-content-filesystem.ts` exports database content back to a separate filesystem `DATA_DIR` and `scripts/checks/check-content-export.ts` proves skills, proposals, nested files, extracts, scoped audits, and global audits.
+4. `scripts/checks/check-backup-restore.ts` proves filesystem backup/restore behavior and the MySQL database-content fail-fast backup guard.
 5. MySQL database dump/restore automation is intentionally not implemented in this epic; the current contract is explicit guard plus documentation because the repo cannot safely infer each operator's production dump policy.
 
 ### Cutover Guidance
@@ -233,14 +233,14 @@ These should remain mostly unchanged, but package downloads, proposal uploads, a
 
 ### Scripts And Operations
 
-- `scripts/check-provider-matrix.ts`
-- `scripts/check-provider-cutover.ts`
-- `scripts/check-backup-restore.ts`
+- `scripts/checks/check-provider-matrix.ts`
+- `scripts/checks/check-provider-cutover.ts`
+- `scripts/checks/check-backup-restore.ts`
 - `scripts/full-check.sh`
-- `scripts/backup.sh`
-- `scripts/restore.sh`
-- `scripts/start-mysql-stack.sh`
-- `scripts/restart-all.sh`
+- `scripts/operations/backup.sh`
+- `scripts/operations/restore.sh`
+- `scripts/development/start-mysql-stack.sh`
+- `scripts/development/restart-all.sh`
 
 Backup/restore semantics need special attention because `DATA_DIR` backup alone is no longer sufficient for MySQL database-backed content.
 
@@ -286,7 +286,7 @@ Backup/restore semantics need special attention because `DATA_DIR` backup alone 
 
 ### Phase 5: Migration And Cutover
 
-1. Add a deterministic migration command such as `scripts/migrate-content-to-database.ts`.
+1. Add a deterministic migration command such as `scripts/content/migrate-content-to-database.ts`.
 2. Migration must copy skills, proposals, files, extracts, audit entries, and metadata from filesystem mode into database mode.
 3. Migration must be idempotent and produce a JSON proof report.
 4. Add rollback guidance: keep filesystem data untouched until validation passes.
@@ -295,13 +295,13 @@ Backup/restore semantics need special attention because `DATA_DIR` backup alone 
 ### Phase 6: Backup/Restore And Deployment
 
 1. Update backup docs for filesystem, SQLite database-content, and MySQL database-content modes.
-2. Make `scripts/backup.sh` fail fast in MySQL database-content mode with explicit instructions that a database dump is required; add a dedicated MySQL backup script only after dump/restore semantics are implemented and tested.
+2. Make `scripts/operations/backup.sh` fail fast in MySQL database-content mode with explicit instructions that a database dump is required; add a dedicated MySQL backup script only after dump/restore semantics are implemented and tested.
 3. Update deployment docs so server users know when `DATA_DIR` remains required only for logs, SQLite files, backups, or temporary work.
 
 ### Phase 7: Deterministic Proofs
 
 1. Extend provider matrix to include content storage modes.
-2. Add a content-storage matrix proof: `scripts/check-content-storage-matrix.ts`.
+2. Add a content-storage matrix proof: `scripts/checks/check-content-storage-matrix.ts`.
 3. Prove proposal submit, upload, finalize, admin convert, publish, package download, extracted content, reindex, projection rebuild, and backup behavior in both `filesystem` and `database` modes.
 4. Add MySQL full-gate coverage through `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh`.
 
@@ -348,9 +348,9 @@ Backup/restore semantics need special attention because `DATA_DIR` backup alone 
 - Skill files, proposal files, extracts, aggregate state, audit entries, and package downloads work without reading `data/skills/` or `data/proposals/`.
 - Projection rebuild and search reindex work in database mode.
 - Migration from filesystem mode to database mode is deterministic and idempotent. *(Implemented as copy-only migration with proof coverage for skill/proposal content and global audit entries.)*
-- Database-to-filesystem export is deterministic and refuses unsafe target directories. *(Implemented through `scripts/export-content-filesystem.ts` and `scripts/check-content-export.ts`.)*
+- Database-to-filesystem export is deterministic and refuses unsafe target directories. *(Implemented through `scripts/content/export-content-filesystem.ts` and `scripts/checks/check-content-export.ts`.)*
 - Backup/restore documentation and scripts clearly distinguish filesystem, SQLite database, and MySQL database content modes. *(Implemented; MySQL database-content mode fails fast for `DATA_DIR`-only backup.)*
-- `./scripts/check.sh` covers filesystem mode plus SQLite database-content mode without Docker. *(Implemented through `scripts/check-content-storage-matrix.ts`.)*
+- `./scripts/check.sh` covers filesystem mode plus SQLite database-content mode without Docker. *(Implemented through `scripts/checks/check-content-storage-matrix.ts`.)*
 - `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` covers MySQL database-content mode. *(Implemented through `CONTENT_STORAGE_MATRIX_INCLUDE_MYSQL=true`.)*
 - Relevant specs, setup docs, progress docs, and OpenAPI-adjacent agent guidance are updated.
 

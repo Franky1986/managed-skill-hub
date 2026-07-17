@@ -85,7 +85,7 @@ Use non-sensitive aliases for test identities:
       ```
 
 - [ ] For an existing installation, run
-      `./node_modules/.bin/tsx scripts/migrate-env-layout.ts --check`; use
+      `./node_modules/.bin/tsx scripts/content/migrate-env-layout.ts --check`; use
       `--write` once when migration is required.
 - [ ] Confirm `.env` contains no `_PASSWORD`, `_PASSWORD_HASH`, `_SECRET`,
       `_TOKEN`, or `_API_KEY` assignments and `.env.secrets` is Git-ignored.
@@ -122,7 +122,7 @@ artifacts are not evidence and must never be captured.
 RUN_ID='auth-2026-07-14-02-AUTH-01'
 RUN_DIR=".tmp/auth-acceptance/$RUN_ID"
 mkdir -p "$RUN_DIR"
-bash scripts/restart-all.sh restart | tee "$RUN_DIR/start.log"
+bash scripts/development/restart-all.sh restart | tee "$RUN_DIR/start.log"
 ```
 
 Allowed evidence:

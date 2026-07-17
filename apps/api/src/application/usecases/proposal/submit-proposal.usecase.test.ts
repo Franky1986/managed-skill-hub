@@ -13,6 +13,7 @@ import {
   ProposalDisallowedPathError,
   ProposalFileLimitExceededError,
   ProposalFileSizeLimitExceededError,
+  ProposalUploadAlreadyOpenError,
   ProposalUploadValidationError,
   ValidationError,
 } from '../../../domain/errors';
@@ -21,6 +22,112 @@ import { Skill } from '../../../domain/skill/Skill';
 import { JudgementRisk } from '../../../domain/judgement/Judgement';
 
 describe('SubmitProposalUseCase', () => {
+  it('reuses proposal creation with the same idempotency key and rejects changed content', async () => {
+    const repo = new InMemorySkillRepository();
+    const useCase = new SubmitProposalUseCase(
+      repo,
+      new InMemoryStorage(),
+      new InMemoryAuditLog(),
+      { judge: vi.fn() } as unknown as SkillJudgerPort,
+      new StubScanner()
+    );
+    const draft = {
+      title: 'Retry-safe proposal',
+      description: 'The same create request must not open duplicate uploads.',
+      category: 'automation',
+      idempotencyKey: 'upload-run-12345678',
+    };
+
+    const first = await useCase.submitProposal(draft, 'agent');
+    const replay = await useCase.submitProposal(draft, 'agent');
+
+    expect(replay.id).toBe(first.id);
+    expect((await repo.findProposals()).total).toBe(1);
+    await expect(useCase.submitProposal({
+      ...draft,
+      title: 'Changed retry content',
+    }, 'agent')).rejects.toMatchObject({
+      constructor: ProposalUploadAlreadyOpenError,
+      proposalId: first.id,
+      reason: 'idempotency_content_changed',
+    });
+  });
+
+  it('blocks a second matching upload and points the owner back to the active proposal', async () => {
+    const repo = new InMemorySkillRepository();
+    const useCase = new SubmitProposalUseCase(
+      repo,
+      new InMemoryStorage(),
+      new InMemoryAuditLog(),
+      { judge: vi.fn() } as unknown as SkillJudgerPort,
+      new StubScanner()
+    );
+    const owner = {
+      label: 'Owner',
+      principalId: 'principal-owner',
+      clientId: 'agent-session-1',
+    };
+    const first = await useCase.submitProposal({
+      skillId: 'product-concept-validation',
+      title: 'Product Concept Validation',
+      description: 'Initial package metadata.',
+      category: 'product-management',
+    }, owner);
+    await useCase.attachFile(first.id, {
+      path: 'SKILL.md',
+      content: Buffer.from('# Initial'),
+      mimeType: 'text/markdown',
+    }, owner);
+
+    await expect(useCase.submitProposal({
+      skillId: 'product-concept-validation',
+      title: 'Product Concept Validation revised',
+      description: 'Corrected package metadata.',
+      category: 'product-management',
+      idempotencyKey: 'a-new-key-must-not-bypass-resume',
+    }, {
+      label: 'Renamed owner',
+      principalId: 'principal-owner',
+      clientId: 'agent-session-2',
+    })).rejects.toMatchObject({
+      constructor: ProposalUploadAlreadyOpenError,
+      proposalId: first.id,
+      skillId: 'product-concept-validation',
+      fileCount: 1,
+      reason: 'matching_open_upload',
+    });
+    expect((await repo.findProposals()).total).toBe(1);
+  });
+
+  it('does not expose another principal upload as a resumable owner upload', async () => {
+    const repo = new InMemorySkillRepository();
+    const useCase = new SubmitProposalUseCase(
+      repo,
+      new InMemoryStorage(),
+      new InMemoryAuditLog(),
+      { judge: vi.fn() } as unknown as SkillJudgerPort,
+      new StubScanner()
+    );
+    const draft = {
+      skillId: 'shared-skill-intent',
+      title: 'Shared Skill Intent',
+      description: 'Two humans may prepare independent proposals.',
+      category: 'tooling',
+    };
+
+    await useCase.submitProposal(draft, {
+      label: 'First human',
+      principalId: 'principal-one',
+      clientId: 'agent-one',
+    });
+    await expect(useCase.submitProposal(draft, {
+      label: 'Second human',
+      principalId: 'principal-two',
+      clientId: 'agent-two',
+    })).resolves.toMatchObject({ skillId: 'shared-skill-intent' });
+    expect((await repo.findProposals()).total).toBe(2);
+  });
+
   it('uses stable OIDC principal ownership across agent sessions and rejects another human', async () => {
     const repo = new InMemorySkillRepository();
     const audit = new InMemoryAuditLog();
@@ -464,6 +571,15 @@ describe('SubmitProposalUseCase', () => {
         title: 'Outside root reference',
         description: 'Documentation-only external artifacts should warn without blocking upload.',
         category: 'product-research',
+        artifactDecisions: [{
+          reference: 'CursorProjects/example-project/benchmarks/example/output.pptx',
+          classification: 'ambiguous_dependency',
+          decision: 'keep_external_prerequisite',
+          confirmation: 'explicit_user_choice',
+          source: 'CursorProjects/example-project/benchmarks/example/output.pptx',
+          target: null,
+          rationale: 'The submitter confirmed that this legacy example remains an external prerequisite.',
+        }],
       },
       'agent'
     );
@@ -579,6 +695,26 @@ describe('SubmitProposalUseCase', () => {
         description: 'Legacy references should not hard-block finalization.',
         category: 'automation',
         entrypoint: 'SKILL.md',
+        artifactDecisions: [
+          {
+            reference: 'CursorProjects/example-project/scripts/',
+            classification: 'ambiguous_dependency',
+            decision: 'keep_external_prerequisite',
+            confirmation: 'explicit_user_choice',
+            source: 'CursorProjects/example-project/scripts/',
+            target: null,
+            rationale: 'The submitter explicitly retained the legacy documentation reference.',
+          },
+          {
+            reference: '.cursor/commands/benchmark-deck.md',
+            classification: 'local_portable_artifact',
+            decision: 'keep_external_prerequisite',
+            confirmation: 'explicit_user_choice',
+            source: '.cursor/commands/benchmark-deck.md',
+            target: null,
+            rationale: 'The submitter explicitly chose not to package this optional runtime command.',
+          },
+        ],
       },
       'agent'
     );
@@ -632,6 +768,15 @@ describe('SubmitProposalUseCase', () => {
         description: 'Runtime command paths should point to packaged commands.',
         category: 'automation',
         entrypoint: 'SKILL.md',
+        artifactDecisions: [{
+          reference: '.cursor/commands/benchmark-deck.md',
+          classification: 'local_portable_artifact',
+          decision: 'include_portably',
+          confirmation: 'explicit_user_choice',
+          source: '.cursor/commands/benchmark-deck.md',
+          target: 'commands/benchmark-deck.md',
+          rationale: 'The submitter chose to package and reference the portable command.',
+        }],
       },
       'agent'
     );
@@ -657,7 +802,7 @@ describe('SubmitProposalUseCase', () => {
 
     const validation = await useCase.validateUpload(proposal.id, 'agent');
 
-    expect(validation.valid).toBe(true);
+    expect(validation.valid).toBe(false);
     expect(validation.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: 'portable_command_manifest_missing',
@@ -673,8 +818,68 @@ describe('SubmitProposalUseCase', () => {
         candidate: '.cursor/commands/benchmark-deck.md',
         suggestedReplacement: 'commands/benchmark-deck.md',
       }),
+      expect.objectContaining({
+        kind: 'artifact_decision_not_applied',
+        blocksFinalize: true,
+      }),
     ]));
+    await useCase.attachFile(
+      proposal.id,
+      {
+        path: 'SKILL.md',
+        content: Buffer.from('Run the optional shortcut from `commands/benchmark-deck.md`.'),
+        mimeType: 'text/markdown',
+      },
+      'agent'
+    );
+    expect((await useCase.validateUpload(proposal.id, 'agent')).canFinalize).toBe(true);
     await expect(useCase.finalizeUpload(proposal.id, 'agent')).resolves.toBeTruthy();
+  });
+
+  it('blocks unresolved bare slash commands without treating capitalized prose sections as package paths', async () => {
+    const repo = new InMemorySkillRepository();
+    const useCase = new SubmitProposalUseCase(
+      repo,
+      new InMemoryStorage(),
+      new InMemoryAuditLog(),
+      { judge: vi.fn() } as unknown as SkillJudgerPort,
+      new StubScanner()
+    );
+    const proposal = await useCase.submitProposal({
+      title: 'Product concept validation',
+      description: 'Uses a local command after reviewing acceptance criteria.',
+      category: 'product-management',
+      entrypoint: 'SKILL.md',
+    }, 'agent');
+    await useCase.attachFile(proposal.id, {
+      path: 'SKILL.md',
+      content: Buffer.from('Run /konzept-validieren after reviewing Tests/Stories and Figma evidence.'),
+      mimeType: 'text/markdown',
+    }, 'agent');
+
+    const validation = await useCase.validateUpload(proposal.id, 'agent');
+
+    expect(validation).toMatchObject({
+      valid: false,
+      canFinalize: false,
+      blockingFindingCount: 1,
+      nextAction: 'repair_package',
+    });
+    expect(validation.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'portable_command_missing',
+        candidate: '/konzept-validieren',
+        suggestedReplacement: 'commands/konzept-validieren.md',
+      }),
+      expect.objectContaining({
+        kind: 'artifact_decision_missing',
+        candidate: '/konzept-validieren',
+        blocksFinalize: true,
+      }),
+    ]));
+    expect(validation.findings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ candidate: 'Tests/Stories' }),
+    ]));
   });
 
   it('does not warn about a missing portable command manifest when commands/manifest.json exists', async () => {

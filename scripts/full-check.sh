@@ -27,10 +27,10 @@ run_step() {
 }
 
 run_step "baseline check" ".tmp/full-check-baseline.log" env RUN_MYSQL_FULL_CHECK=false ./scripts/check.sh
-run_step "backup/restore proof" ".tmp/full-check-backup-restore.log" ./node_modules/.bin/tsx scripts/check-backup-restore.ts
+run_step "backup/restore proof" ".tmp/full-check-backup-restore.log" ./node_modules/.bin/tsx scripts/checks/check-backup-restore.ts
 
 if [ "${RUN_SMOKE_TEST:-false}" = "true" ]; then
-  run_step "API smoke test" ".tmp/full-check-smoke.log" bash scripts/smoke-test.sh
+  run_step "API smoke test" ".tmp/full-check-smoke.log" bash scripts/development/smoke-test.sh
 else
   log_info "Skipping API smoke test (set RUN_SMOKE_TEST=true to enable)."
 fi
@@ -39,21 +39,21 @@ if [ "${RUN_MYSQL_FULL_CHECK:-false}" = "true" ]; then
   if [ "${SKIP_MYSQL_STACK_START:-false}" = "true" ]; then
     log_info "Using pre-provisioned MySQL; skipping local stack startup."
   else
-    run_step "MySQL stack startup" ".tmp/full-check-mysql-stack.log" bash scripts/start-mysql-stack.sh up
+    run_step "MySQL stack startup" ".tmp/full-check-mysql-stack.log" bash scripts/development/start-mysql-stack.sh up
   fi
-  if [ -x scripts/check-provider-matrix.ts ]; then
-    run_step "provider matrix" ".tmp/full-check-provider-matrix.log" env PROVIDER_MATRIX_INCLUDE_MYSQL=true ./node_modules/.bin/tsx scripts/check-provider-matrix.ts
+  if [ -x scripts/checks/check-provider-matrix.ts ]; then
+    run_step "provider matrix" ".tmp/full-check-provider-matrix.log" env PROVIDER_MATRIX_INCLUDE_MYSQL=true ./node_modules/.bin/tsx scripts/checks/check-provider-matrix.ts
   else
     log_error "Provider matrix script is required by EPIC-008 but missing."
   fi
-  if [ -x scripts/check-provider-cutover.ts ]; then
-    run_step "provider cutover" ".tmp/full-check-provider-cutover.log" ./node_modules/.bin/tsx scripts/check-provider-cutover.ts
+  if [ -x scripts/checks/check-provider-cutover.ts ]; then
+    run_step "provider cutover" ".tmp/full-check-provider-cutover.log" ./node_modules/.bin/tsx scripts/checks/check-provider-cutover.ts
   else
     log_error "Provider cutover script is required by EPIC-008 but missing."
   fi
 
-  if [ -x scripts/check-content-storage-matrix.ts ]; then
-    run_step "content storage matrix" ".tmp/full-check-content-storage-matrix.log" env CONTENT_STORAGE_MATRIX_INCLUDE_MYSQL=true ./node_modules/.bin/tsx scripts/check-content-storage-matrix.ts
+  if [ -x scripts/checks/check-content-storage-matrix.ts ]; then
+    run_step "content storage matrix" ".tmp/full-check-content-storage-matrix.log" env CONTENT_STORAGE_MATRIX_INCLUDE_MYSQL=true ./node_modules/.bin/tsx scripts/checks/check-content-storage-matrix.ts
   else
     log_error "Content storage matrix script is required by EPIC-009 but missing."
   fi
@@ -62,7 +62,7 @@ else
 fi
 
 if [ "${RUN_AUTHENTIK_STAGING_CHECK:-false}" = "true" ]; then
-  run_step "real Authentik staging gate" ".tmp/full-check-authentik-staging.log" ./node_modules/.bin/tsx scripts/check-authentik-staging.ts
+  run_step "real Authentik staging gate" ".tmp/full-check-authentik-staging.log" ./node_modules/.bin/tsx scripts/checks/check-authentik-staging.ts
 else
   log_info "Skipping real Authentik staging gate (set RUN_AUTHENTIK_STAGING_CHECK=true with a staging profile, token, and evidence file to enable)."
 fi

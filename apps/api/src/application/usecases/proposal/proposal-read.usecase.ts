@@ -7,6 +7,7 @@ import { SkillFileStoragePort } from '../../ports/outbound/file-storage.port';
 import { AuditLogPort } from '../../ports/outbound/audit.port';
 import { NotFoundError } from '../../../domain/errors';
 import { AuditEntry } from '../../../domain/audit/AuditEntry';
+import { ProposalArtifactDecision } from '../../../domain/proposal/Proposal';
 import { AutoPublishBlockedReason } from './auto-publish-proposal.usecase';
 import {
   ExtractProposalFileContentUseCase,
@@ -32,6 +33,28 @@ function adminOnlyNextStepsFor(status: ProposalStatus): string[] {
     case ProposalStatus.CONVERTED:
       return [];
   }
+}
+
+function artifactDecisionsFromAudit(auditEntries: AuditEntry[]): ProposalArtifactDecision[] {
+  for (const entry of [...auditEntries].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())) {
+    const candidate = entry.after?.artifactDecisions;
+    if (Array.isArray(candidate)) {
+      return candidate.filter(isProposalArtifactDecision);
+    }
+  }
+  return [];
+}
+
+function isProposalArtifactDecision(value: unknown): value is ProposalArtifactDecision {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const decision = value as Partial<ProposalArtifactDecision>;
+  return typeof decision.reference === 'string'
+    && typeof decision.classification === 'string'
+    && typeof decision.decision === 'string'
+    && typeof decision.confirmation === 'string'
+    && typeof decision.rationale === 'string';
 }
 
 export interface ProposalNoticeDto {
@@ -299,6 +322,7 @@ export class ProposalReadUseCase {
             submittedBy: proposal.submittedBy,
           }, auditEntries),
           {
+            artifactDecisions: artifactDecisionsFromAudit(auditEntries),
             uploadFinalized: proposal.status !== ProposalStatus.IN_UPLOAD,
             fileCount: files.length,
             maxFiles: this.proposalMaxFiles,
@@ -333,6 +357,7 @@ export class ProposalReadUseCase {
         submittedBy: proposal.submittedBy,
       }, auditEntries),
       {
+        artifactDecisions: proposal.artifactDecisions,
         uploadFinalized: proposal.status !== ProposalStatus.IN_UPLOAD,
         fileCount: proposal.files.length,
         maxFiles: this.proposalMaxFiles,

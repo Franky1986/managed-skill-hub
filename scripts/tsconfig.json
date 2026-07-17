@@ -12,7 +12,7 @@
     ]
   },
   "include": [
-    "./*.ts",
+    "./**/*.ts",
     "../apps/api/src/server.ts"
   ],
   "exclude": [

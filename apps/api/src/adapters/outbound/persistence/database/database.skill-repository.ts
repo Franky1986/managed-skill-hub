@@ -1,5 +1,9 @@
 import { StorageError } from '../../../../domain/errors';
-import { Proposal, ProposalFile } from '../../../../domain/proposal/Proposal';
+import {
+  Proposal,
+  ProposalArtifactDecision,
+  ProposalFile,
+} from '../../../../domain/proposal/Proposal';
 import { ProposalStatus } from '../../../../domain/proposal/ProposalStatus';
 import { Judgement, JudgementDimension, JudgementOverallRisk, JudgementTargetType } from '../../../../domain/judgement/Judgement';
 import { SkillRepositoryPort } from '../../../../application/ports/outbound/skill-repository.port';
@@ -77,6 +81,8 @@ interface SerializedProposal {
   submittedBy: string;
   submittedByPrincipalId?: string | null;
   submittedViaClientId?: string | null;
+  artifactDecisions?: ProposalArtifactDecision[];
+  idempotencyKeyHash?: string | null;
   createdAt: string;
   rejectionReason: string | null;
   contentDigest: string | null;
@@ -327,6 +333,8 @@ function serializeProposal(proposal: Proposal): SerializedProposal {
     submittedBy: proposal.submittedBy,
     submittedByPrincipalId: proposal.submittedByPrincipalId,
     submittedViaClientId: proposal.submittedViaClientId,
+    artifactDecisions: proposal.artifactDecisions,
+    idempotencyKeyHash: proposal.idempotencyKeyHash,
     createdAt: proposal.createdAt.toISOString(),
     rejectionReason: proposal.rejectionReason,
     contentDigest: proposal.contentDigest,
@@ -365,6 +373,8 @@ function deserializeProposal(payload: SerializedProposal): Proposal {
     submittedBy: payload.submittedBy,
     submittedByPrincipalId: payload.submittedByPrincipalId ?? null,
     submittedViaClientId: payload.submittedViaClientId ?? null,
+    artifactDecisions: payload.artifactDecisions ?? [],
+    idempotencyKeyHash: payload.idempotencyKeyHash ?? null,
     createdAt: new Date(payload.createdAt),
     rejectionReason: payload.rejectionReason,
     contentDigest: payload.contentDigest,

@@ -9,7 +9,7 @@ import { registerApiErrorHandler } from './error-response';
 import { AdminAuth } from './admin-auth';
 import { AuthenticatedPrincipal, PrincipalRole } from '../../../application/security/authenticated-principal';
 import { AppConfig } from '../../../infrastructure/config';
-import { createScriptAppConfig } from '../../../../../../scripts/script-app-config';
+import { createScriptAppConfig } from '../../../../../../scripts/lib/script-app-config';
 import { Manifest } from '../../../domain/skill/Manifest';
 import { SkillStatus } from '../../../domain/skill/SkillStatus';
 
@@ -139,19 +139,36 @@ describe('SkillReadController /discover', () => {
     expect(payload.capabilities.length).toBeGreaterThan(0);
     expect(payload.workflowNotes.conversationLanguage).toContain('language the user is currently using');
     expect(payload.workflowNotes.proposalPath).toContain('Prefer English for proposal metadata');
+    expect(payload.workflowNotes.proposalPath).toContain('Figma');
+    expect(payload.workflowNotes.proposalPath).toContain('include_portably');
+    expect(payload.workflowNotes.proposalPath).toContain('before any proposal write');
     expect(payload.agentHttpGuidance.discoveryPurpose).toContain('does not return skill search results');
     expect(payload.agentHttpGuidance.toolSelection).toContain('network context, not curl itself');
     expect(payload.agentHttpGuidance.retrievalSequence.join(' ')).toContain('/skills/search');
     expect(payload.agentHttpGuidance.retrievalSequence.join(' ')).toContain('/skills/{skillId}/package');
     expect(payload.agentHttpGuidance.authenticationDiagnosis.join(' ')).toContain('/admin/session');
     expect(payload.agentHttpGuidance.authenticationDiagnosis.join(' ')).toContain('local network-capable HTTP client');
+    expect(payload.agentHttpGuidance.responseHandling.rules.join(' ')).toContain('Do not use curl -f');
+    expect(payload.agentHttpGuidance.responseHandling.rules.join(' ')).toContain('lost response is not a reason');
+    expect(payload.agentHttpGuidance.responseHandling.validationGate).toContain('canFinalize=true');
+    expect(payload.proposalWorkflow).toMatchObject({
+      version: '1.1',
+      executionMode: 'sequential_state_machine',
+      activeUploadInvariant: {
+        maximumActiveProposalIdsPerIntent: 1,
+        conflictCode: 'PROPOSAL_UPLOAD_ALREADY_OPEN',
+      },
+    });
+    expect(payload.workflowNotes.proposalPath).toContain('check whether this conversation');
+    expect(payload.workflowNotes.proposalPath).toContain('PROPOSAL_UPLOAD_ALREADY_OPEN');
+    expect(payload.agentHttpGuidance.proposalExecution).toContain('exactly one active proposal id');
     expect(payload.agentHttpGuidance.authorization).toMatchObject({
       discovery: { required: false },
       publicRead: { required: false },
       proposal: { required: false },
     });
     expect(payload.agentHttpGuidance.curlExamples.download).toMatchObject({
-      command: expect.stringContaining('curl -fSL -OJ'),
+      command: expect.stringContaining('curl -sSL -OJ'),
       authArea: 'public-read',
       authorizationRequired: false,
     });
@@ -311,7 +328,12 @@ describe('SkillReadController /discover', () => {
 
     expect(missing.statusCode).toBe(401);
     expect(valid.statusCode).toBe(200);
-    expect(JSON.parse(valid.payload)).toEqual({ items: ['automation'] });
+    expect(JSON.parse(valid.payload)).toMatchObject({
+      items: ['automation'],
+      policy: 'open',
+      itemsAreSuggestions: true,
+      customCategoriesAllowed: true,
+    });
   });
 
   it('accepts a reader-capable admin session as alternative public read authentication', async () => {
@@ -359,6 +381,20 @@ describe('SkillReadController /discover', () => {
     expect(JSON.parse(response.payload)).toEqual({ items: ['ffmpeg', 'video'] });
   });
 
+  it('describes published categories as suggestions under an open category policy', async () => {
+    const app = await buildApp();
+    const response = await app.inject({ method: 'GET', url: '/categories' });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.payload)).toMatchObject({
+      policy: 'open',
+      itemsAreSuggestions: true,
+      customCategoriesAllowed: true,
+      source: 'published_skills',
+      instruction: expect.stringContaining('not an allowlist'),
+    });
+  });
+
   it('returns proposal guidance on /howToPropose', async () => {
     const app = await buildApp();
     const response = await app.inject({ method: 'GET', url: '/howToPropose' });
@@ -372,6 +408,21 @@ describe('SkillReadController /discover', () => {
     expect(payload.agentHttpGuidance.toolSelection).toContain('VPN-restricted');
     expect(payload.agentHttpGuidance.proposalExecution).toContain('GET /howToPropose');
     expect(payload.agentHttpGuidance.authenticationDiagnosis.join(' ')).toContain('exact requested endpoint');
+    expect(payload.agentHttpGuidance.responseHandling.shellPattern).toContain('%{http_code}');
+    expect(payload.proposalWorkflow.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'create_proposal', recovery: expect.stringContaining('PROPOSAL_UPLOAD_ALREADY_OPEN') }),
+      expect.objectContaining({ id: 'validate_upload', success: expect.stringContaining('canFinalize=true') }),
+      expect.objectContaining({ id: 'finalize_upload' }),
+    ]));
+    expect(payload.proposalWorkflow.activeUploadInvariant).toMatchObject({
+      maximumActiveProposalIdsPerIntent: 1,
+      conflictCode: 'PROPOSAL_UPLOAD_ALREADY_OPEN',
+    });
+    expect(payload.categoryPolicy).toMatchObject({
+      policy: 'open',
+      customCategoriesAllowed: true,
+      instruction: expect.stringContaining('never treat GET /categories as an allowlist'),
+    });
     expect(Array.isArray(requiredSteps)).toBe(true);
     expect(requiredSteps.length).toBeGreaterThan(0);
     expect(requiredSteps.some((step) => step.title === 'Use the user conversation language')).toBe(true);
@@ -400,6 +451,22 @@ describe('SkillReadController /discover', () => {
       decisionRules: expect.arrayContaining([expect.stringContaining('Do not infer proposal intent')]),
       commandRules: expect.arrayContaining([expect.stringContaining('separate decisions')]),
     });
+    expect(payload.externalArtifactDecision).toMatchObject({
+      requiredBeforeProposalCreation: true,
+      classifications: expect.arrayContaining([
+        expect.objectContaining({ id: 'external_service_or_capability', action: expect.stringContaining('Do not copy') }),
+        expect.objectContaining({ id: 'local_portable_artifact', action: expect.stringContaining('ask the user') }),
+        expect.objectContaining({ id: 'ambiguous_dependency', action: expect.stringContaining('Stop and ask') }),
+      ]),
+      decisionOptions: expect.arrayContaining([
+        expect.objectContaining({ id: 'include_portably' }),
+        expect.objectContaining({ id: 'keep_external_prerequisite' }),
+        expect.objectContaining({ id: 'remove_or_rewrite_dependency' }),
+      ]),
+    });
+    expect(payload.externalArtifactDecision.confirmationRule).toContain('before POST /proposals');
+    expect(payload.externalArtifactDecision.confirmationRule).toContain('Figma');
+    expect(payload.externalArtifactDecision.requiredUserFacingProposal.join(' ')).toContain('package-relative destination');
     expect(payload.duplicateConfirmationRule.confirmationRequired).toContain('Do not call POST /proposals');
     expect(payload.duplicateConfirmationRule.confirmationRequired).toContain('proposal outcome');
     expect(payload.duplicateConfirmationRule.strongSimilarityThreshold).toBe(0.5);
@@ -426,6 +493,17 @@ describe('SkillReadController /discover', () => {
       finalizeEndpoint: 'POST /proposals/{id}/finalize-upload',
     });
     const normalizeStep = requireProposalGuidanceStep(requiredSteps, 'Normalize only when needed');
+    const artifactDecisionStep = requireProposalGuidanceStep(
+      requiredSteps,
+      'Resolve outside-root artifacts with the user'
+    );
+    expect(inspectStep.step).toBeLessThan(artifactDecisionStep.step);
+    expect(artifactDecisionStep.step).toBeLessThan(normalizeStep.step);
+    expect(artifactDecisionStep.checks.join(' ')).toContain('Figma');
+    expect(artifactDecisionStep.checks.join(' ')).toContain('commands/foo.md');
+    expect(artifactDecisionStep.checks.join(' ')).toContain('include_portably');
+    expect(artifactDecisionStep.checks.join(' ')).toContain('original upload request');
+    expect(artifactDecisionStep.checks.join(' ')).toContain('Do not call POST /proposals');
     expect(normalizeStep.checks.join(' ')).toContain('commands/');
     expect(normalizeStep.checks.join(' ')).toContain('scripts/');
     expect(normalizeStep.checks.join(' ')).toContain('Adjust relative references');
@@ -441,6 +519,8 @@ describe('SkillReadController /discover', () => {
       scanAllReadableFiles: true,
       finalPackageHashSource: 'temporary upload package after all normalization',
     });
+    expect(payload.preUploadPackageProof.requiredLocalChecks.join(' ')).toContain('explicit user decision');
+    expect(payload.preUploadPackageProof.requiredLocalChecks.join(' ')).toContain('Figma');
     expect(payload.preUploadPackageProof.forbiddenBeforeProof).toEqual(expect.arrayContaining(['POST /proposals']));
     const createStep = requireProposalGuidanceStep(
       requiredSteps,
@@ -448,6 +528,9 @@ describe('SkillReadController /discover', () => {
     );
     expect(createStep.checks.join(' ')).toContain('final temporary upload package');
     expect(createStep.checks.join(' ')).toContain('multipart path=<relative package path>');
+    expect(createStep.checks.join(' ')).toContain('exactly one active proposal id');
+    expect(createStep.checks.join(' ')).toContain('details.proposalId');
+    expect(createStep.checks.join(' ')).toContain('Re-uploading all intended files');
     const downloadStep = requireProposalGuidanceStep(
       requiredSteps,
       'Download published skill packages per version'

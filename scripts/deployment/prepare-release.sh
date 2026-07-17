@@ -60,7 +60,7 @@ if is_enabled "${DEPLOY_RUN_BUILD:-true}"; then
 fi
 
 rm -f "$ARCHIVE_PATH" "$ARCHIVE_SHA_PATH" "$SERVICE_PATH" "$SERVICE_CONFIG_EXAMPLE_PATH"
-bash scripts/create-deploy-archive.sh "$ARCHIVE_PATH"
+bash scripts/deployment/create-deploy-archive.sh "$ARCHIVE_PATH"
 
 hash="$(calculate_sha256 "$ARCHIVE_PATH")"
 printf '%s  %s\n' "$hash" "$(basename "$ARCHIVE_PATH")" > "$ARCHIVE_SHA_PATH"

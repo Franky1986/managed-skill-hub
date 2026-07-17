@@ -1,4 +1,5 @@
-import { Proposal } from '../../../domain/proposal/Proposal';
+import { createHash } from 'crypto';
+import { Proposal, ProposalArtifactDecision } from '../../../domain/proposal/Proposal';
 import {
   FinalizeProposalUploadResult,
   ProposalCommandPort,
@@ -17,10 +18,12 @@ import { AuditEntry } from '../../../domain/audit/AuditEntry';
 import { SkillId } from '../../../domain/skill/SkillId';
 import {
   ForbiddenError,
+  ConflictError,
   ProposalDisallowedPathError,
   ProposalFileLimitExceededError,
   ProposalFileSizeLimitExceededError,
   ProposalUploadNotFinalizableError,
+  ProposalUploadAlreadyOpenError,
   ProposalUploadNotOpenError,
   ProposalUploadValidationError,
   ValidationError,
@@ -66,7 +69,50 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       }
     }
 
-    let proposal = Proposal.create({
+    const idempotencyKey = draft.idempotencyKey?.trim();
+    if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 200)) {
+      throw new ValidationError('Idempotency-Key must contain between 8 and 200 characters');
+    }
+    const idempotencyKeyHash = idempotencyKey
+      ? createHash('sha256').update(idempotencyKey).digest('hex')
+      : null;
+    const deterministicProposalId = idempotencyKey
+      ? buildIdempotentProposalId(actorContext, idempotencyKey)
+      : undefined;
+    if (deterministicProposalId) {
+      const existing = await this.loadProposal(deterministicProposalId);
+      if (existing) {
+        if (!matchesIdempotentDraft(existing, draft, normalizedSkillId, actorContext, idempotencyKeyHash)) {
+          if (existing.status === 'in_upload') {
+            throw new ProposalUploadAlreadyOpenError(
+              existing.id,
+              existing.skillId,
+              existing.files.length,
+              'idempotency_content_changed'
+            );
+          }
+          throw new ConflictError('Idempotency-Key was already used with different proposal content');
+        }
+        return existing;
+      }
+    }
+
+    const matchingOpenUpload = await this.findMatchingOpenUpload(
+      normalizedSkillId,
+      draft.title,
+      actorContext
+    );
+    if (matchingOpenUpload) {
+      throw new ProposalUploadAlreadyOpenError(
+        matchingOpenUpload.id,
+        matchingOpenUpload.skillId,
+        matchingOpenUpload.files.length,
+        'matching_open_upload'
+      );
+    }
+
+    const proposal = Proposal.create({
+      id: deterministicProposalId,
       skillId: normalizedSkillId,
       title: draft.title,
       description: draft.description,
@@ -74,6 +120,8 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       tags: draft.tags,
       capabilities: draft.capabilities,
       entrypoint: draft.entrypoint ?? null,
+      artifactDecisions: draft.artifactDecisions,
+      idempotencyKeyHash,
       submittedBy: actorContext.label,
       submittedByPrincipalId: actorContext.principalId,
       submittedViaClientId: actorContext.clientId,
@@ -86,7 +134,12 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
         proposalId: proposal.id,
         action: 'submit_proposal',
         ...auditActor(actorContext),
-        after: { id: proposal.id, title: proposal.title, status: proposal.status },
+        after: {
+          id: proposal.id,
+          title: proposal.title,
+          status: proposal.status,
+          artifactDecisions: proposal.artifactDecisions,
+        },
       })
     );
 
@@ -121,6 +174,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           tags: proposal.tags,
           capabilities: proposal.capabilities,
           entrypoint: proposal.entrypoint,
+          artifactDecisions: proposal.artifactDecisions,
         },
         after: {
           title: updated.title,
@@ -129,6 +183,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           tags: updated.tags,
           capabilities: updated.capabilities,
           entrypoint: updated.entrypoint,
+          artifactDecisions: updated.artifactDecisions,
         },
       })
     );
@@ -254,26 +309,36 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
     if (proposal.files.length === 0) {
+      const findings = [createUploadFinding({
+        kind: 'empty_upload',
+        severity: 'error',
+        blocksFinalize: true,
+        message: 'Proposal upload cannot be finalized without at least one file.',
+      })];
       return {
         proposalId,
         status: proposal.status,
         valid: false,
+        canFinalize: false,
+        blockingFindingCount: 1,
+        nextAction: 'upload_files',
         fileCount: 0,
         checkedTextFileCount: 0,
-        findings: [createUploadFinding({
-          kind: 'empty_upload',
-          severity: 'error',
-          blocksFinalize: true,
-          message: 'Proposal upload cannot be finalized without at least one file.',
-        })],
+        findings,
       };
     }
 
     const referenceValidation = await this.validateProposalReferences(proposal);
+    const blockingFindingCount = referenceValidation.findings.filter(
+      (finding) => finding.blocksFinalize
+    ).length;
     return {
       proposalId,
       status: proposal.status,
-      valid: !referenceValidation.findings.some((finding) => finding.blocksFinalize),
+      valid: blockingFindingCount === 0,
+      canFinalize: blockingFindingCount === 0,
+      blockingFindingCount,
+      nextAction: blockingFindingCount === 0 ? 'finalize_upload' : 'repair_package',
       fileCount: proposal.files.length,
       checkedTextFileCount: referenceValidation.checkedTextFileCount,
       findings: referenceValidation.findings,
@@ -317,14 +382,27 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     return null;
   }
 
+  private async findMatchingOpenUpload(
+    skillId: string | null,
+    title: string,
+    actor: ReturnType<typeof normalizeProposalActor>
+  ): Promise<Proposal | null> {
+    const result = await this.repo.findProposals({
+      skillId: skillId ?? undefined,
+      status: 'in_upload',
+    });
+    const normalizedTitle = title.trim().toLowerCase();
+    return result.items.find((proposal) =>
+      proposalOwnedBy(proposal, actor)
+      && (skillId !== null || proposal.title.trim().toLowerCase() === normalizedTitle)
+    ) ?? null;
+  }
+
   private assertProposalOwner(
     proposal: Proposal,
     actor: ReturnType<typeof normalizeProposalActor>
   ): void {
-    const ownerMatches = proposal.submittedByPrincipalId
-      ? actor.principalId === proposal.submittedByPrincipalId
-      : proposal.submittedBy === actor.label;
-    if (!ownerMatches) {
+    if (!proposalOwnedBy(proposal, actor)) {
       throw new ForbiddenError(`Proposal ${proposal.id} can only be changed by its submitting actor.`);
     }
   }
@@ -558,7 +636,14 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       }
     }
 
-    return { checkedTextFileCount, findings: [...findings.values()] };
+    return {
+      checkedTextFileCount,
+      findings: enforceArtifactDecisions(
+        [...findings.values()],
+        proposal.artifactDecisions,
+        knownFiles
+      ),
+    };
   }
 
   private async validatePortableCommandManifest(proposalId: string, knownFiles: Set<string>): Promise<ProposalUploadFinding[]> {
@@ -672,6 +757,15 @@ function normalizeProposalActor(actor: ProposalActor): {
     : { label: actor.label, principalId: actor.principalId, clientId: actor.clientId };
 }
 
+function proposalOwnedBy(
+  proposal: Proposal,
+  actor: ReturnType<typeof normalizeProposalActor>
+): boolean {
+  return proposal.submittedByPrincipalId
+    ? actor.principalId === proposal.submittedByPrincipalId
+    : proposal.submittedBy === actor.label;
+}
+
 function auditActor(actor: ReturnType<typeof normalizeProposalActor>) {
   return {
     actor: actor.label,
@@ -717,6 +811,119 @@ function uploadFindingKey(finding: ProposalUploadFinding): string {
   ].join('|');
 }
 
+function enforceArtifactDecisions(
+  findings: ProposalUploadFinding[],
+  decisions: ProposalArtifactDecision[],
+  knownFiles: Set<string>
+): ProposalUploadFinding[] {
+  const decisionByReference = new Map(
+    decisions.map((decision) => [canonicalDecisionReference(decision.reference), decision])
+  );
+  const result: ProposalUploadFinding[] = [];
+  const decisionRequiredKinds = new Set<ProposalUploadFinding['kind']>([
+    'external_reference',
+    'missing_package_reference',
+    'outside_root_reference',
+    'portable_command_missing',
+    'portable_command_reference',
+  ]);
+
+  for (const finding of findings) {
+    if (!finding.candidate || !decisionRequiredKinds.has(finding.kind)) {
+      result.push(finding);
+      continue;
+    }
+    const decision = decisionByReference.get(canonicalDecisionReference(finding.candidate));
+    if (!decision) {
+      result.push(finding);
+      result.push(createUploadFinding({
+        kind: 'artifact_decision_missing',
+        severity: 'error',
+        blocksFinalize: true,
+        file: finding.file,
+        line: finding.line,
+        candidate: finding.candidate,
+        suggestedReplacement: finding.suggestedReplacement,
+        message: `Artifact reference "${finding.candidate}" requires a persisted submitter decision before finalization.`,
+      }));
+      continue;
+    }
+
+    if (decision.decision === 'keep_external_prerequisite') {
+      result.push({
+        ...finding,
+        severity: 'warning',
+        blocksFinalize: false,
+        message: `${finding.message} The submitter explicitly chose to keep this as an external prerequisite: ${decision.rationale}`,
+      });
+      continue;
+    }
+
+    const targetExists = decision.target ? knownFiles.has(decision.target) : false;
+    result.push(finding);
+    result.push(createUploadFinding({
+      kind: 'artifact_decision_not_applied',
+      severity: 'error',
+      blocksFinalize: true,
+      file: finding.file,
+      line: finding.line,
+      candidate: finding.candidate,
+      suggestedReplacement: decision.target ?? finding.suggestedReplacement,
+      message: decision.decision === 'include_portably'
+        ? `The submitter chose include_portably for "${finding.candidate}", but the active reference was not rewritten${targetExists ? '' : ' and the selected target is not uploaded'}.`
+        : `The submitter chose remove_or_rewrite_dependency for "${finding.candidate}", but the active reference remains in the package.`,
+    }));
+  }
+
+  return result;
+}
+
+function canonicalDecisionReference(reference: string): string {
+  return reference.trim().replace(/\\/g, '/').replace(/\/+$/, '').replace(/^\.((?:cursor|codex|claude)\/)/i, '$1').toLowerCase();
+}
+
+function buildIdempotentProposalId(
+  actor: ReturnType<typeof normalizeProposalActor>,
+  idempotencyKey: string
+): string {
+  const scope = actor.principalId ?? `${actor.label}:${actor.clientId ?? ''}`;
+  const digest = createHash('sha256').update(`${scope}\0${idempotencyKey}`).digest('hex');
+  return `prop-idem-${digest.slice(0, 24)}`;
+}
+
+function matchesIdempotentDraft(
+  proposal: Proposal,
+  draft: SubmitProposalDraft,
+  normalizedSkillId: string | null,
+  actor: ReturnType<typeof normalizeProposalActor>,
+  idempotencyKeyHash: string | null
+): boolean {
+  const normalizeList = (values: string[] | undefined) =>
+    (values ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const expectedDecisions = (draft.artifactDecisions ?? []).map((decision) => ({
+    reference: decision.reference.trim(),
+    classification: decision.classification,
+    decision: decision.decision,
+    confirmation: decision.confirmation,
+    source: decision.source?.trim() || null,
+    target: decision.target?.trim().replace(/\\/g, '/') || null,
+    rationale: decision.rationale.trim(),
+  }));
+  const ownerMatches = proposal.submittedByPrincipalId
+    ? proposal.submittedByPrincipalId === actor.principalId
+    : proposal.submittedBy === actor.label;
+  return ownerMatches
+    && proposal.idempotencyKeyHash === idempotencyKeyHash
+    && proposal.skillId === normalizedSkillId
+    && proposal.title === draft.title.trim()
+    && proposal.description === draft.description.trim()
+    && proposal.category === draft.category.trim().toLowerCase()
+    && JSON.stringify(proposal.tags) === JSON.stringify(normalizeList(draft.tags))
+    && JSON.stringify(proposal.capabilities) === JSON.stringify(normalizeList(draft.capabilities))
+    && proposal.entrypoint === (draft.entrypoint?.trim() ?? null)
+    && JSON.stringify(proposal.artifactDecisions) === JSON.stringify(expectedDecisions);
+}
+
 function classifyExternalReference(candidate: string, file: string, line: number, knownFiles: Set<string>): ProposalUploadFinding | null {
   const normalized = candidate.replace(/\\/g, '/');
   if (/^CursorProjects\//.test(normalized)) {
@@ -744,7 +951,7 @@ function classifyExternalReference(candidate: string, file: string, line: number
       suggestedReplacement: portableCommand,
       message: commandExists
         ? `Agent command reference "${candidate}" points to a runtime-specific location. Reference the packaged portable command artifact "${portableCommand}" instead.`
-        : `Agent command reference "${candidate}" is outside the package. If the skill should ship this shortcut, copy it into "${portableCommand}" and add commands/manifest.json; otherwise document it as historical or external.`,
+        : `Agent command reference "${candidate}" is outside the package. Before proposal creation, ask the submitter whether to include it portably as "${portableCommand}" with commands/manifest.json, keep it as a documented external prerequisite, or remove/rewrite the dependency.`,
     });
   }
   return null;
@@ -755,6 +962,10 @@ function isPortableCommandFile(filePath: string): boolean {
 }
 
 function toPortableCommandPath(candidate: string): string | null {
+  const bareCommand = candidate.match(/^\/([a-z0-9]+(?:-[a-z0-9]+)+)$/i);
+  if (bareCommand?.[1]) {
+    return `commands/${bareCommand[1]}.md`;
+  }
   const match = candidate.match(/^\.?(?:cursor|codex|claude)\/commands\/(.+)$/i);
   if (!match?.[1]) {
     return null;
@@ -795,13 +1006,14 @@ function collectReferenceCandidates(content: string): ReferenceCandidate[] {
     /`([^`\n]*\/[^`\n]*)`/g,
     /\b(?:\.cursor|\.codex|\.claude|CursorProjects)[^\s'"`)]*/g,
     /\b(?:\.{1,2}\/)?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_.-]+)?\/?\b/g,
+    /(?:^|[\s("'`])\/(?:[a-z0-9]+-)+[a-z0-9]+(?=$|[\s),.;:"'`])/gim,
   ];
 
   for (const pattern of patterns) {
     for (const match of content.matchAll(pattern)) {
       const raw = (match[1] ?? match[0] ?? '').trim();
       const normalized = raw.replace(/^[("'`]+|[)"'`,.;:!?]+$/g, '');
-      if (!normalized || normalized.startsWith('http://') || normalized.startsWith('https://') || normalized.startsWith('~/') || normalized.startsWith('/')) {
+      if (!normalized || normalized.startsWith('http://') || normalized.startsWith('https://') || normalized.startsWith('~/')) {
         continue;
       }
       const line = lineNumberAt(content, match.index ?? 0);
@@ -816,7 +1028,10 @@ function collectReferenceCandidates(content: string): ReferenceCandidate[] {
 }
 
 function canonicalReferenceCandidateKey(candidate: string): string {
-  return candidate.replace(/^\.?((?:cursor|codex|claude)\/(?:skills|commands)\/)/i, '$1');
+  return candidate
+    .replace(/\/+$/, '')
+    .replace(/^\.?((?:cursor|codex|claude)\/(?:skills|commands)\/)/i, '$1')
+    .toLowerCase();
 }
 
 function lineNumberAt(content: string, index: number): number {
@@ -856,7 +1071,7 @@ function looksLikePackageArtifactReference(candidate: string): boolean {
   if (/^(?:\.{1,2}\/)/.test(normalized)) {
     return true;
   }
-  if (/^(?:agents|assets|docs|examples|fixtures|images|prompts|references|scripts|templates|tests)\//i.test(normalized)) {
+  if (/^(?:agents|assets|docs|examples|fixtures|images|prompts|references|scripts|templates|tests)\//.test(normalized)) {
     return true;
   }
   return /\.[A-Za-z0-9]{1,12}(?:[#?][^/]*)?$/.test(normalized.split('/').at(-1) ?? '');

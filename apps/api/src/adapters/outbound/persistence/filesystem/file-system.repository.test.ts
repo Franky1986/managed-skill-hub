@@ -29,6 +29,16 @@ describe('FileSystemSkillRepository', () => {
       description: 'Checks judgement rehydration',
       category: 'automation',
       submittedBy: 'tester',
+      idempotencyKeyHash: 'idempotency-hash',
+      artifactDecisions: [{
+        reference: '/portable-command',
+        classification: 'ambiguous_dependency',
+        decision: 'keep_external_prerequisite',
+        confirmation: 'explicit_user_choice',
+        source: '/portable-command',
+        target: null,
+        rationale: 'The submitter explicitly kept the command external.',
+      }],
     });
     proposal = proposal.addFile(
       ProposalFile.create({
@@ -65,6 +75,14 @@ describe('FileSystemSkillRepository', () => {
     expect(loaded?.judgements).toHaveLength(1);
     expect(loaded?.judgements[0]?.summary).toBe('Stored judgement');
     expect(loaded?.judgements[0]?.dimensions.promptInjection.risk).toBe(JudgementRisk.MEDIUM);
+    expect(loaded?.idempotencyKeyHash).toBe('idempotency-hash');
+    expect(loaded?.artifactDecisions).toEqual([
+      expect.objectContaining({
+        reference: '/portable-command',
+        decision: 'keep_external_prerequisite',
+        confirmation: 'explicit_user_choice',
+      }),
+    ]);
   });
 
   it('restores the latest published version when loading a skill from disk', async () => {

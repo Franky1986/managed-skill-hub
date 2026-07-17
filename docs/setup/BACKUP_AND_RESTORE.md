@@ -6,7 +6,7 @@ A backup stores the complete `data/` directory as a `tar.gz` archive under
 `data/backups/`.
 
 ```bash
-bash scripts/backup.sh
+bash scripts/operations/backup.sh
 ```
 
 Output:
@@ -38,16 +38,16 @@ Backup completeness depends on `CONTENT_STORAGE_PROVIDER` and `CATALOG_PROVIDER`
 
 | Mode | Durable managed content location | Current backup behavior |
 |------|----------------------------------|-------------------------|
-| `CONTENT_STORAGE_PROVIDER=filesystem` | `DATA_DIR/skills`, `DATA_DIR/proposals`, `DATA_DIR/audit`, and index files | `scripts/backup.sh` archives `DATA_DIR` and is complete for managed content. |
-| `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=sqlite` | SQLite database under `DATA_DIR/index/search.db` plus operational files under `DATA_DIR` | `scripts/backup.sh` archives `DATA_DIR`; this includes the SQLite content database. Stop writes before backup for a consistent archive. |
-| `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=mysql` | MySQL content tables plus operational files under `DATA_DIR` | `scripts/backup.sh` intentionally fails fast because a `DATA_DIR` archive alone is incomplete. Use a tested MySQL dump/restore workflow until dedicated automation exists. |
+| `CONTENT_STORAGE_PROVIDER=filesystem` | `DATA_DIR/skills`, `DATA_DIR/proposals`, `DATA_DIR/audit`, and index files | `scripts/operations/backup.sh` archives `DATA_DIR` and is complete for managed content. |
+| `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=sqlite` | SQLite database under `DATA_DIR/index/search.db` plus operational files under `DATA_DIR` | `scripts/operations/backup.sh` archives `DATA_DIR`; this includes the SQLite content database. Stop writes before backup for a consistent archive. |
+| `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=mysql` | MySQL content tables plus operational files under `DATA_DIR` | `scripts/operations/backup.sh` intentionally fails fast because a `DATA_DIR` archive alone is incomplete. Use a tested MySQL dump/restore workflow until dedicated automation exists. |
 
-EPIC-009 keeps database content storage operationally conservative: database mode includes copy-only migration, database-to-filesystem export, and backup-mode guards. Use `scripts/export-content-filesystem.ts` when a database-backed registry must be inspected, rolled back, or moved back to filesystem storage.
+EPIC-009 keeps database content storage operationally conservative: database mode includes copy-only migration, database-to-filesystem export, and backup-mode guards. Use `scripts/content/export-content-filesystem.ts` when a database-backed registry must be inspected, rolled back, or moved back to filesystem storage.
 
 ## Restore
 
 ```bash
-bash scripts/restore.sh data/backups/managed-skill-hub-data-20260701-120000.tar.gz
+bash scripts/operations/restore.sh data/backups/managed-skill-hub-data-20260701-120000.tar.gz
 ```
 
 Workflow:
@@ -59,14 +59,14 @@ Workflow:
 4. Extract the backup to `data/`.
 5. Restart the stack when ready:
    ```bash
-   bash scripts/restart-server.sh
+   bash scripts/deployment/restart-server.sh
    ```
 
 ## Notes
 
-- `scripts/restore.sh` does not delete the current `data/` directory; it moves
+- `scripts/operations/restore.sh` does not delete the current `data/` directory; it moves
   it aside.
-- `scripts/restore.sh` rejects unsafe tar members before moving the current
+- `scripts/operations/restore.sh` rejects unsafe tar members before moving the current
   `data/` directory.
 - After a restore, check whether `data/index/` is consistent and reindex if
   needed.

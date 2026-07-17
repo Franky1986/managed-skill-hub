@@ -116,7 +116,14 @@ export const skillsApi = {
         params.set('q', q);
         return apiClient.get('/skills/search', { params });
     },
-    listCategories: () => apiClient.get<{ items: string[] }>('/categories'),
+    listCategories: () => apiClient.get<{
+        items: string[];
+        policy: 'open';
+        itemsAreSuggestions: boolean;
+        customCategoriesAllowed: boolean;
+        source: 'published_skills';
+        instruction: string;
+    }>('/categories'),
     listTags: () => apiClient.get<{ items: string[] }>('/tags'),
     get: (id: string) => apiClient.get<SkillDetail>(`/skills/${id}`),
     listVersions: (id: string) => apiClient.get<{ items: SkillVersionSummary[] }>(`/skills/${id}/versions`),

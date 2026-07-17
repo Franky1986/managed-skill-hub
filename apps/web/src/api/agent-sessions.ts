@@ -58,6 +58,21 @@ export interface DiscoveryResponse {
     discoveryAuthRequired: boolean;
     authSchemes: DiscoveryAuthScheme[];
     agentHttpGuidance: AgentHttpGuidance;
+    proposalWorkflow: ProposalWorkflow;
+}
+
+export interface ProposalWorkflow {
+    version: string;
+    executionMode: 'sequential_state_machine';
+    rules: string[];
+    steps: Array<{
+        id: string;
+        method: 'GET' | 'POST' | 'LOCAL';
+        path: string | null;
+        success: string;
+        next: string | null;
+        recovery?: string;
+    }>;
 }
 
 export interface AgentHttpGuidance {
@@ -65,6 +80,12 @@ export interface AgentHttpGuidance {
     toolSelection: string;
     retrievalSequence: string[];
     proposalExecution: string;
+    responseHandling: {
+        required: boolean;
+        rules: string[];
+        shellPattern: string;
+        validationGate: string;
+    };
     authenticationDiagnosis: string[];
     authorization: {
         discovery: AgentHttpAuthorizationGuidance;

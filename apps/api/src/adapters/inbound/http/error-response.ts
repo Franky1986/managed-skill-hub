@@ -15,6 +15,7 @@ import {
   ProposalFileLimitExceededError,
   ProposalFileSizeLimitExceededError,
   ProposalUploadNotFinalizableError,
+  ProposalUploadAlreadyOpenError,
   ProposalUploadNotOpenError,
   ProposalUploadValidationError,
   StorageError,
@@ -167,6 +168,39 @@ function mapApiError(error: unknown, options: { admin?: boolean }): ApiErrorDefi
     };
   }
 
+  if (error instanceof ProposalUploadAlreadyOpenError) {
+    const proposalPath = `/proposals/${error.proposalId}`;
+    return {
+      statusCode: 409,
+      code: 'PROPOSAL_UPLOAD_ALREADY_OPEN',
+      message: 'A matching proposal upload is already open for this submitter',
+      details: {
+        proposalId: error.proposalId,
+        skillId: error.skillId,
+        proposalStatus: 'in_upload',
+        fileCount: error.fileCount,
+        recoverable: true,
+        reason: error.reason,
+        nextAction: 'inspect_existing_upload',
+        pathsRelativeToApiBaseUrl: true,
+        statusPath: `${proposalPath}/status`,
+        metadataPath: proposalPath,
+        fileUploadPath: `${proposalPath}/files`,
+        validatePath: `${proposalPath}/validate-upload`,
+        finalizePath: `${proposalPath}/finalize-upload`,
+        abortPath: proposalPath,
+        recovery: [
+          'Do not call POST /proposals again.',
+          'GET the existing proposal status and keep this proposalId as the active upload.',
+          'PATCH metadata and re-upload files to the same relative paths when corrections are needed.',
+          'POST validate-upload again; finalize only when canFinalize=true and nextAction=finalize_upload.',
+          'DELETE the existing proposal only when the user intentionally abandons this upload.',
+        ],
+      },
+      logLevel: 'warn',
+    };
+  }
+
   if (error instanceof ProposalUploadNotFinalizableError) {
     return {
       statusCode: 409,
@@ -177,13 +211,20 @@ function mapApiError(error: unknown, options: { admin?: boolean }): ApiErrorDefi
   }
 
   if (error instanceof ProposalUploadValidationError) {
+    const findings = error.findings as Array<{ blocksFinalize?: boolean }>;
+    const blockingFindingCount = findings.filter((finding) => finding.blocksFinalize).length;
     return {
       statusCode: 422,
       code: 'PROPOSAL_UPLOAD_VALIDATION_FAILED',
       message: error.message,
       details: {
         proposalId: error.proposalId,
-        findings: error.findings,
+        proposalStatus: 'in_upload',
+        recoverable: true,
+        canFinalize: false,
+        blockingFindingCount,
+        nextAction: 'repair_package_and_validate_again',
+        findings,
       },
       logLevel: 'warn',
     };

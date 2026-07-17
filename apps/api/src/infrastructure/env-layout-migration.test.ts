@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planMigration } from '../../../../scripts/migrate-env-layout';
+import { planMigration } from '../../../../scripts/content/migrate-env-layout';
 
 describe('environment layout migration', () => {
   it('moves secrets without exposing them in config and appends missing config keys', () => {

@@ -72,7 +72,9 @@ wrapper around these public artifacts.
    chmod 600 .env .env.secrets
    # For local/dev-like setups, ADMIN_PASSWORD can be set in .env.secrets.
    # For server-like setups, prefer:
-   node -e "console.log(require('bcryptjs').hashSync('your-password', 10))"
+   ./scripts/security/generate-admin-password-hash.sh
+   # Generate JWT_SECRET with Node.js 20+:
+   node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
    # For single-host deploys, set API_PREFIX=/api and VITE_API_BASE_URL=/api in .env.
    # Keep FRONTEND_HOST=127.0.0.1 so nginx is the only external entry point.
    ```
@@ -87,7 +89,7 @@ wrapper around these public artifacts.
    ```bash
    ./scripts/check.sh
    npm run build:prod
-   bash scripts/create-deploy-archive.sh
+   bash scripts/deployment/create-deploy-archive.sh
    ```
 
    The script archives the committed Git tree to
@@ -115,7 +117,7 @@ mkdir -p /path/to/deploy-root/data/{skills,proposals,index,audit,backups,uploads
 ssh "${REMOTE_USER}@${REMOTE_HOST}"
 cd /path/to/deploy-root
 tar -xzf managed-skill-hub-deploy.tar.gz -C src
-bash src/scripts/install_and_start.sh
+bash src/scripts/deployment/install_and_start.sh
 ```
 
 `install_and_start.sh` runs on the server:
@@ -146,8 +148,8 @@ production artifacts.
 Preparation and startup can be split for a distinct cutover step:
 
 ```bash
-bash src/scripts/install_and_start.sh prepare
-bash src/scripts/install_and_start.sh start
+bash src/scripts/deployment/install_and_start.sh prepare
+bash src/scripts/deployment/install_and_start.sh start
 ```
 
 ## Restart/Stop

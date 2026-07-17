@@ -65,8 +65,8 @@ fi
 
 SOURCE_DIR="$(resolve_from_root "${MSH_SOURCE_DIR:-src}")"
 SECRETS_FILE="$(resolve_from_root "${MSH_SECRETS_FILE:-.env.secrets}")"
-START_SCRIPT="$(resolve_from_root "${MSH_START_SCRIPT:-src/scripts/install_and_start.sh}")"
-RUNTIME_SCRIPT="$(resolve_from_root "${MSH_RUNTIME_SCRIPT:-src/scripts/restart-server.sh}")"
+START_SCRIPT="$(resolve_from_root "${MSH_START_SCRIPT:-src/scripts/deployment/install_and_start.sh}")"
+RUNTIME_SCRIPT="$(resolve_from_root "${MSH_RUNTIME_SCRIPT:-src/scripts/deployment/restart-server.sh}")"
 LOG_FILE="$(resolve_from_root "${MSH_LOG_FILE:-src/.tmp/server.log}")"
 API_HEALTH_URL="${MSH_API_HEALTH_URL:-http://127.0.0.1:3040/api/health/ready}"
 FRONTEND_HEALTH_URL="${MSH_FRONTEND_HEALTH_URL:-http://127.0.0.1:3041/frontend/}"

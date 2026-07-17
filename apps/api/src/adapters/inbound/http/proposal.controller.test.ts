@@ -52,7 +52,7 @@ describe('registerProposalRoutes', () => {
   });
 
   it('guards proposal endpoints and derives actor from bearer auth', async () => {
-    const submitProposal = vi.fn().mockResolvedValue({ id: 'prop-1' });
+    const submitProposal = vi.fn().mockResolvedValue({ id: 'prop-1', status: 'in_upload' });
     const container = {
       config: {
         proposalAuthMode: 'bearer',
@@ -71,7 +71,11 @@ describe('registerProposalRoutes', () => {
     const valid = await app.inject({
       method: 'POST',
       url: '/proposals',
-      headers: { authorization: 'Bearer proposal-secret', 'x-actor': 'spoofed-agent' },
+      headers: {
+        authorization: 'Bearer proposal-secret',
+        'x-actor': 'spoofed-agent',
+        'idempotency-key': 'proposal-attempt-1234',
+      },
       payload: {
         title: 'Skill',
         description: 'Description',
@@ -81,7 +85,21 @@ describe('registerProposalRoutes', () => {
 
     expect(missing.statusCode).toBe(401);
     expect(valid.statusCode).toBe(201);
-    expect(submitProposal).toHaveBeenCalledWith(expect.any(Object), 'trusted-agent');
+    expect(valid.json()).toMatchObject({
+      id: 'prop-1',
+      status: 'in_upload',
+      uploadFinalized: false,
+      statusUrl: '/proposals/prop-1/status',
+      validateUploadUrl: '/proposals/prop-1/validate-upload',
+      finalizeUploadUrl: '/proposals/prop-1/finalize-upload',
+      nextAction: 'upload_or_replace_files',
+    });
+    expect(valid.json().message).toContain('reuse it for every correction');
+    expect(valid.json().recoveryRule).toContain('inspect statusUrl and validateUploadUrl');
+    expect(submitProposal).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'proposal-attempt-1234' }),
+      'trusted-agent'
+    );
   });
 
   it('maps stable OIDC ownership while allowing another accepted human to read status only', async () => {
@@ -451,6 +469,9 @@ describe('registerProposalRoutes', () => {
       proposalId: 'prop-1',
       status: 'in_upload',
       valid: false,
+      canFinalize: false,
+      blockingFindingCount: 1,
+      nextAction: 'repair_package',
       fileCount: 2,
       checkedTextFileCount: 1,
       findings: [{
@@ -484,6 +505,9 @@ describe('registerProposalRoutes', () => {
       proposalId: 'prop-1',
       status: 'in_upload',
       valid: false,
+      canFinalize: false,
+      blockingFindingCount: 1,
+      nextAction: 'repair_package',
       findings: [expect.objectContaining({
         kind: 'missing_package_reference',
         candidate: 'missing.json',

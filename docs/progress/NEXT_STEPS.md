@@ -16,6 +16,14 @@
 - [ ] Repeat the external hello-skill scenario and verify that the agent first
       recommends using the existing skill or keeping/installing the demo
       locally before offering proposal resolution options.
+- [x] Extend deterministic proposal validation to distinguish active bare slash
+      command dependencies from capitalized prose paths, and require persisted
+      submitter decisions before finalization.
+- [ ] Repeat the split-command package scenario with a real local agent and
+      verify sequential HTTP handling, explicit artifact questions, one active
+      proposal id, in-place repair, recovery from
+      `PROPOSAL_UPLOAD_ALREADY_OPEN`, and finalization only after
+      `canFinalize=true`.
 
 ## Test Type Safety
 

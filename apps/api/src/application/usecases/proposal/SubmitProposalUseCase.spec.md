@@ -41,6 +41,20 @@ unprocessed proposals, including explicit upload finalization.
 - Update proposal metadata while the upload is still `in_upload` so submitters
   can correct title, description, category, tags, capabilities, or entrypoint
   before finalization.
+- Persist artifact-boundary decisions with proposal metadata. Local and
+  ambiguous dependencies require `explicit_user_choice`; final validation
+  blocks when a decision is missing or not reflected by the uploaded package.
+- Make proposal creation retry-safe when an `Idempotency-Key` is supplied. The
+  same actor, key, and normalized draft return the existing proposal; reuse of
+  the key with different content fails with a conflict.
+- Enforce one active upload per submitter and upload intent. When the same owner
+  already has an `in_upload` proposal for the normalized `skillId` (or the same
+  normalized title when no `skillId` is supplied), reject another create with
+  `ProposalUploadAlreadyOpenError` and the existing proposal id. A changed or
+  newly generated idempotency key must not bypass this recovery guard.
+- Scope active-upload recovery to the stable proposal owner. Another OIDC
+  principal may prepare an independent proposal with the same skill intent and
+  must not receive the first owner's resumable proposal id.
 - Validate proposal package references while the upload is still `in_upload`
   without finalizing, extracting, judging, or mutating the proposal.
 - While a proposal is still `in_upload`, attaching a file with an already used
@@ -81,6 +95,8 @@ unprocessed proposals, including explicit upload finalization.
 - File larger than 5 MB -> `ValidationError`
 - Finalize-upload with inconsistent package references -> `ValidationError`
 - Delete on non-deletable status -> `ValidationError`
+- Matching owner upload already `in_upload` ->
+  `ProposalUploadAlreadyOpenError` with resumable proposal id
 - Judger/scanner error during automatic proposal or file judgement -> proposal
   remains stored and error is audited
 - Automatic judgement emits structured success/failure runtime events without
@@ -90,21 +106,30 @@ unprocessed proposals, including explicit upload finalization.
 
 - Submit persists proposal even when automatic proposal judgement fails; response
   contains UUID, `statusUrl`, and `checkUrl`.
+- A second matching create by the same owner does not persist another aggregate;
+  it points the caller back to the existing `in_upload` proposal.
 - File attachment remains stored even when automatic file judgement fails.
 - Metadata updates are rejected after upload finalization.
 - File attachment in `in_upload` is an upsert by relative path: same path
   replaces the previous file metadata/content, new paths still count toward the
   configured file-count limit.
-- Validate-upload returns all package-reference findings so agents can fix a
+- Validate-upload returns `canFinalize`, `blockingFindingCount`, and
+  `nextAction` together with all package-reference findings so agents can fix a
   temporary upload package before calling finalize-upload. Documentation-only
-  external references and portable command guidance are warnings; outside-root
-  package references and missing package references are blocking errors.
+  external references and portable command guidance remain warnings only after
+  a matching persisted submitter decision. Missing or unapplied artifact
+  decisions are blocking errors.
 - HTTP protocol version labels such as `HTTP/1.1`, `HTTP/2`, and `HTTP/3` are
   prose tokens rather than package artifact paths and must not produce missing-
   reference findings.
 - Runtime-specific command references such as `.cursor/commands/foo.md`,
   `.codex/commands/foo.md`, and `.claude/commands/foo.md` are reported as
   portable command findings with `commands/foo.md` as suggested replacement.
+- Bare hyphenated slash commands such as `/concept-validate` are treated as
+  ambiguous portable-command dependencies with
+  `commands/concept-validate.md` as suggested target. Capitalized prose such
+  as `Tests/Stories` is not treated as the canonical lower-case `tests/`
+  package directory.
 - Packages that already contain command files under `commands/` should preserve
   those files. Missing `commands/manifest.json` is reported as a non-blocking
   warning so agents can add portable runtime mapping metadata.

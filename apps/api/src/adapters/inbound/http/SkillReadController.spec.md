@@ -91,9 +91,30 @@ requests into inbound port calls and maps results back to JSON or file streams.
 - `GET /howToPropose` includes an auth setup flow telling agents to use the
   advertised `agent-session` URL or OIDC Device Authorization flow, and never to
   request tokens in chat.
+- `GET /howToPropose.externalArtifactDecision` is a mandatory pre-proposal
+  boundary decision. It distinguishes external services/capabilities, local
+  portable artifacts, and ambiguous dependencies.
+- Figma, Jira, MCP servers, remote APIs, credentials, and remote service data
+  remain external prerequisites and are never copied into proposal packages.
+- Outside-root local commands, references, templates, scripts, prompts,
+  fixtures, and assets require a concrete package-relative proposal and an
+  explicit user choice between portable inclusion, a truthfully documented
+  external prerequisite, or removing/rewriting the dependency.
+- Bare slash commands and other ambiguous dependency names require the same
+  user decision; a general request to upload the skill is not authorization to
+  choose silently. No proposal write may begin before every such dependency is
+  resolved.
 - `GET /howToPropose.agentHttpGuidance` repeats the same network-context,
   endpoint-isolation, and authentication-diagnosis rules so proposal agents do
   not depend on prior human documentation.
+- Discovery and `/howToPropose` expose proposal workflow version `1.1` and a
+  one-active-upload invariant. Agents must persist the first proposal id,
+  status-check and validate that id after ambiguous responses, patch metadata
+  and upsert files in place, and never create a new proposal merely because a
+  later scan finds another file or correction.
+- A create conflict with `PROPOSAL_UPLOAD_ALREADY_OPEN` is a recovery pointer,
+  not permission to retry with a different idempotency key. Agents must use
+  `details.proposalId` and the response's relative recovery paths.
 - `GET /howToPropose.packageHandling` tells agents to upload source artifacts
   and dependency manifests/lockfiles, never initialized package-manager
   outputs such as `node_modules/`, `.venv/`, `venv/`, `vendor/`,
@@ -110,6 +131,9 @@ requests into inbound port calls and maps results back to JSON or file streams.
   URLs.
 - Only `published` skills are reachable through the public read path.
 - Categories and tags are exposed for retrieval and proposal preparation.
+  Category values are an open vocabulary: `/categories` returns suggestions
+  derived from published skills and explicitly states that custom categories
+  are allowed and the list is not an allowlist.
 - `GET /skills` and `GET /skills/search` accept repeated `tag` query parameters
   and apply an AND filter across the latest published skill metadata.
 - Empty category lists from the SQLite catalog projection are valid responses.
@@ -175,6 +199,13 @@ requests into inbound port calls and maps results back to JSON or file streams.
   execution context and authentication. It must not claim that `curl` itself
   bypasses authentication; it explains that a local client may have network,
   DNS, or VPN access that a remote fetcher lacks.
+- Discovery and `/howToPropose` expose the same versioned, sequential proposal
+  state machine. It forbids one giant shell `&&` chain and permits finalization
+  only after the parsed validation body reports `canFinalize=true` with zero
+  blocking findings.
+- HTTP guidance tells clients to capture status and body separately and not to
+  use `curl -f` for JSON workflow endpoints, because structured non-2xx bodies
+  contain the recovery instructions.
 
 ## Tests / Checks
 

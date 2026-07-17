@@ -65,7 +65,7 @@ npm run typecheck
 npm run typecheck:scripts
 npm run test
 npm run build:prod
-node scripts/check-pinned-package-versions.mjs
+node scripts/checks/check-pinned-package-versions.mjs
 npm audit --audit-level=moderate --package-lock-only
 
 # Requires Docker/OrbStack and runs the full SQLite/MySQL parity path.
@@ -125,7 +125,7 @@ The build creates:
 
 4. Or everything with one command in dev mode:
    ```bash
-   ./scripts/restart-all.sh
+   ./scripts/development/restart-all.sh
    ```
 
    The script stops running processes, restarts API and frontend in the
@@ -134,9 +134,9 @@ The build creates:
 
    Additional actions:
    ```bash
-   ./scripts/restart-all.sh stop    # stop stack
-   ./scripts/restart-all.sh status  # check status
-   ./scripts/restart-all.sh restart # explicit restart
+   ./scripts/development/restart-all.sh stop    # stop stack
+   ./scripts/development/restart-all.sh status  # check status
+   ./scripts/development/restart-all.sh restart # explicit restart
    ```
 
 URLs:
@@ -149,7 +149,7 @@ URLs:
 
 ```bash
 # Fast smoke test: starts the server, tests endpoints, stops the server
-bash scripts/smoke-test.sh
+bash scripts/development/smoke-test.sh
 
 # Manual API tests with curl and UI tests
 # See docs/setup/TESTING.md
@@ -161,13 +161,13 @@ bash scripts/smoke-test.sh
 - Binding to `127.0.0.1:3040` can be blocked in restrictive sandboxes.
 - Starting locally on a developer machine or target server works without these
   restrictions.
-- `scripts/smoke-test.sh` can also fail in the sandbox because it must start
+- `scripts/development/smoke-test.sh` can also fail in the sandbox because it must start
   the server.
 
 ## Deployment
 
 ```bash
-bash scripts/create-deploy-archive.sh
+bash scripts/deployment/create-deploy-archive.sh
 # Then manually extract and start on the server.
 # See `docs/setup/DEPLOYMENT.md` and `docs/setup/NGINX.md`.
 ```

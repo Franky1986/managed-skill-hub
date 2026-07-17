@@ -628,8 +628,8 @@ IDs, client secret, cookies, full claims, or email addresses in routine logs.
 
 ### Proof and operations
 
-- `scripts/check-agent-auth-matrix.ts`
-- `scripts/check-agent-contract.ts`
+- `scripts/checks/check-agent-auth-matrix.ts`
+- `scripts/checks/check-agent-contract.ts`
 - new deterministic OIDC/JWKS proof script or fixture server
 - `scripts/full-check.sh`
 - setup, deployment, testing, agent, architecture, progress, and ADR docs

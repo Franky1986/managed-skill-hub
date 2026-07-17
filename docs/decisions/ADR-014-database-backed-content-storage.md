@@ -20,7 +20,7 @@ For server deployments, especially MySQL-backed deployments, operators need an o
 - Domain objects and use cases remain storage-provider-neutral through `SkillRepositoryPort`, `SkillFileStoragePort`, and `AuditLogPort`.
 - Public APIs, admin APIs, frontend behavior, OpenAPI contracts, agent guidance, package downloads, content digests, artifact IDs, and proposal lifecycle semantics must not change by storage provider.
 - Provide copy-only filesystem-to-database migration and database-to-filesystem export commands.
-- `scripts/backup.sh` must fail fast for `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=mysql`, because a `DATA_DIR` archive alone is incomplete in that mode.
+- `scripts/operations/backup.sh` must fail fast for `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=mysql`, because a `DATA_DIR` archive alone is incomplete in that mode.
 
 ## Consequences
 
@@ -34,10 +34,10 @@ For server deployments, especially MySQL-backed deployments, operators need an o
 
 ## Validation
 
-- `scripts/check-content-storage-matrix.ts` proves filesystem/database runtime parity for SQLite and, in the MySQL full gate, MySQL.
-- `scripts/check-content-migration.ts` proves copy-only filesystem-to-database migration including global audit entries.
-- `scripts/check-content-export.ts` proves database-to-filesystem export including files, extracts, proposal content, and global audit entries.
-- `scripts/check-backup-restore.ts` proves filesystem backup/restore behavior and the MySQL database-content backup guard.
+- `scripts/checks/check-content-storage-matrix.ts` proves filesystem/database runtime parity for SQLite and, in the MySQL full gate, MySQL.
+- `scripts/checks/check-content-migration.ts` proves copy-only filesystem-to-database migration including global audit entries.
+- `scripts/checks/check-content-export.ts` proves database-to-filesystem export including files, extracts, proposal content, and global audit entries.
+- `scripts/checks/check-backup-restore.ts` proves filesystem backup/restore behavior and the MySQL database-content backup guard.
 
 ## Open Points
 

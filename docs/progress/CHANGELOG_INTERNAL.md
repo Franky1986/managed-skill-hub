@@ -1,3 +1,60 @@
+# 2026-07-17: Make proposal execution recoverable and machine-gated
+
+- Enforced one active `in_upload` proposal per owner and upload intent. A
+  matching second create now returns `409 PROPOSAL_UPLOAD_ALREADY_OPEN` with
+  the existing proposal id, file count, and concrete in-place recovery paths.
+- Upgraded the advertised proposal workflow to version `1.1`: agents must
+  persist the first proposal id, inspect status and validation after ambiguous
+  responses, patch metadata and upsert files on that id, and treat newly found
+  artifacts as corrections rather than a reason for another submission.
+- Expanded create responses with current status, upload-finalized state,
+  validate URL, next action, and an explicit uncertainty recovery rule.
+- Added a shared versioned proposal state machine to `/discover` and
+  `/howToPropose`; agents must execute state changes sequentially and may
+  finalize only after the parsed validation gate is green.
+- Replaced `curl -f` guidance for JSON workflows with status/body-preserving
+  handling and documented retry-safe creation through `Idempotency-Key`.
+- Persisted artifact decisions in filesystem and database proposal aggregates,
+  exposed them to admins, and blocked finalization when local or ambiguous
+  dependencies lack a decision or the selected decision was not applied.
+- Added bare slash-command detection, avoided the `Tests/Stories` prose false
+  positive, and declared `/categories` an open suggestion vocabulary rather
+  than an allowlist.
+- Added OpenAPI, web-client, controller, use-case, agent-contract, and bootstrap
+  coverage for the complete behavior.
+
+# 2026-07-17: Require user decisions for outside-root skill artifacts
+
+- Added a machine-readable `/howToPropose.externalArtifactDecision` gate that
+  separates external services/capabilities from local portable artifacts and
+  ambiguous dependencies.
+- Kept Figma, Jira, MCP servers, remote APIs, credentials, and remote service
+  data outside proposal packages while requiring truthful prerequisite and
+  fallback documentation.
+- Required agents to inventory local commands, references, templates, scripts,
+  prompts, fixtures, and assets outside the skill root; propose concrete
+  package-relative targets; and wait for the user's include/external/remove
+  choice before proposal writes.
+- Added contract, OpenAPI, controller-test, bootstrap, and portable-command
+  documentation coverage for the decision gate.
+
+# 2026-07-17: Organize repository automation by responsibility
+
+- Kept only the baseline and extended validation orchestrators at the script
+  root and moved implementations into `checks`, `content`, `deployment`,
+  `development`, `lib`, `operations`, and `security` directories.
+- Moved co-located specs with their implementations and updated application,
+  CI, documentation, deployment-wrapper, and TypeScript references.
+- Preserved the public deployment service contract while updating runtime
+  defaults to the hierarchical paths.
+
+# 2026-07-17: Document local simple-auth secret generation
+
+- Promoted the interactive BCrypt helper to a public repository script that
+  keeps plaintext passwords out of process arguments and shell history.
+- Added adjacent generation instructions for `ADMIN_PASSWORD_HASH` and
+  `JWT_SECRET` to the canonical secret environment example.
+
 # 2026-07-16: Align proposal-guidance tests with strict TypeScript
 
 - Typed the `/howToPropose.requiredSteps` test payload instead of allowing
@@ -548,7 +605,7 @@ avoid sandbox background-process termination.
 - Recorded the result as AUTH-02 PASS in
   `docs/setup/AUTHENTICATION_ACCEPTANCE_CHECKLIST.md` with sanitized evidence
   under `.tmp/auth-acceptance/auth-2026-07-14-03-AUTH-02/`.
-- Fixed `scripts/check-public-release-hygiene.sh` to handle multiple matching
+- Fixed `scripts/checks/check-public-release-hygiene.sh` to handle multiple matching
   ignored files per glob, preventing false failures when several
   `docs/setup/*INTERNAL*.md` files exist.
 - Restored `.env` and `.env.secrets` to the previous local dev profile after the
@@ -883,9 +940,9 @@ avoid sandbox background-process termination.
 
 - Completed EPIC-009 lifecycle coverage with global audit enumeration, filesystem-to-database migration of global audits, database-to-filesystem export, export proof coverage, and MySQL database-content backup guard proof.
 - Documented the EPIC-009 completion recommendation, including two-way storage lifecycle, cutover/rollback guidance, and backup-mode responsibilities.
-- Added copy-only `scripts/migrate-content-to-database.ts` plus `scripts/check-content-migration.ts` to prove scoped filesystem-to-database migration for skills, proposals, files, extracts, and skill/proposal audit entries.
+- Added copy-only `scripts/content/migrate-content-to-database.ts` plus `scripts/checks/check-content-migration.ts` to prove scoped filesystem-to-database migration for skills, proposals, files, extracts, and skill/proposal audit entries.
 - Extended EPIC-009 database-backed content storage to MySQL provider mode and wired MySQL content-storage parity into `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh`.
-- Implemented first-stage EPIC-009 SQLite database-backed content storage with `CONTENT_STORAGE_PROVIDER`, database-backed repository/file/audit adapters, SQLite catalog metadata bridging, and `scripts/check-content-storage-matrix.ts` black-box parity proof.
+- Implemented first-stage EPIC-009 SQLite database-backed content storage with `CONTENT_STORAGE_PROVIDER`, database-backed repository/file/audit adapters, SQLite catalog metadata bridging, and `scripts/checks/check-content-storage-matrix.ts` black-box parity proof.
 - Documented EPIC-009 recommended decisions: content storage follows `CATALOG_PROVIDER`, audit is DB-backed in database mode, observability remains telemetry, MySQL `backup.sh` fails fast, filesystem export is required, and DB BLOBs stay within current limits initially.
 - Added `docs/roadmap/EPIC-009-database-backed-content-storage.md` with current-state analysis, affected files, risks, migration concerns, backup/restore implications, and deterministic proof expectations for `CONTENT_STORAGE_PROVIDER=database`.
 - Linked EPIC-009 from the master plan and documentation index.
@@ -899,54 +956,54 @@ avoid sandbox background-process termination.
 
 ## 2026-07-11: Admin UI Smoke Proof
 
-- Added `scripts/check-admin-ui-smoke.ts` and its co-located spec to prove public route exposure, admin route guarding, authenticated admin navigation, login/logout wiring, config-aware setup UI, not-judged display, and proposal review/draft reachability.
+- Added `scripts/checks/check-admin-ui-smoke.ts` and its co-located spec to prove public route exposure, admin route guarding, authenticated admin navigation, login/logout wiring, config-aware setup UI, not-judged display, and proposal review/draft reachability.
 - Wired the lightweight source-contract proof into `./scripts/check.sh` and documented `.tmp/admin-ui-smoke.*` artifacts.
 
 ## 2026-07-11: Provider Cutover Proof
 
-- Added `scripts/check-provider-cutover.ts` and its co-located spec to prove SQLite baseline creation, MySQL projection rebuild parity, post-cutover write visibility, and restart-script MySQL preflight behavior.
+- Added `scripts/checks/check-provider-cutover.ts` and its co-located spec to prove SQLite baseline creation, MySQL projection rebuild parity, post-cutover write visibility, and restart-script MySQL preflight behavior.
 - Wired the proof into the `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` path and documented `.tmp/provider-cutover.*` artifacts.
 
 ## 2026-07-11: Provider Matrix Proof
 
-- Added `scripts/check-provider-matrix.ts` and its co-located spec to prove public read parity for provider-backed catalog/search combinations.
+- Added `scripts/checks/check-provider-matrix.ts` and its co-located spec to prove public read parity for provider-backed catalog/search combinations.
 - Wired the infrastructure-free `sqlite/sqlite` subset into `./scripts/check.sh`; the full SQLite/MySQL matrix runs through `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh`.
 - The proof writes `.tmp/provider-matrix.*` artifacts and terminates after all selected provider cases pass.
 
 ## 2026-07-11: Backup And Restore Proof
 
-- Added `scripts/check-backup-restore.ts` and its co-located spec to prove backup archive creation, restore completion, restored skill/proposal/audit/projection data, and pre-restore safety copies against isolated data.
+- Added `scripts/checks/check-backup-restore.ts` and its co-located spec to prove backup archive creation, restore completion, restored skill/proposal/audit/projection data, and pre-restore safety copies against isolated data.
 - Hardened `backup.sh`/`restore.sh` for deterministic proof runs with `MSH_SKIP_ENV=true`; `restore.sh` also supports `MSH_SKIP_STOP=true` and preserves backup archives located under `DATA_DIR` before moving current data aside.
 - Wired the proof into `./scripts/full-check.sh` and documented the generated `.tmp/backup-restore.*` artifacts.
 
 ## 2026-07-11: Observability And Audit Proof
 
-- Expanded `scripts/check-observability-audit.ts` to cover admin proposal conversion, skill publish, proposal rejection, projection rebuild, and their file-backed audit entries.
-- Added `scripts/check-observability-audit.ts` and its co-located spec to prove deterministic observability counters, proposal-scoped recent requests, JSON/CSV exports, and file-backed audit entries.
+- Expanded `scripts/checks/check-observability-audit.ts` to cover admin proposal conversion, skill publish, proposal rejection, projection rebuild, and their file-backed audit entries.
+- Added `scripts/checks/check-observability-audit.ts` and its co-located spec to prove deterministic observability counters, proposal-scoped recent requests, JSON/CSV exports, and file-backed audit entries.
 - Wired the proof into `./scripts/check.sh` and documented the generated `.tmp/observability-audit.*` artifacts.
 
 ## 2026-07-11: Proposal Lifecycle Proof
 
-- Expanded `scripts/check-proposal-lifecycle.ts` to cover deterministic similar duplicate candidates, broken local-reference finalization blocking, proposal/file judgement creation, admin publish, admin rejection, and state-blocked delete behavior.
-- Added `scripts/check-proposal-lifecycle.ts` and its co-located spec to prove how-to guidance, duplicate precheck, proposal creation, blocked dependency uploads, upload finalization, public status, admin conversion, and draft non-public visibility against real Fastify routes and an isolated SQLite-backed `.tmp` data directory.
+- Expanded `scripts/checks/check-proposal-lifecycle.ts` to cover deterministic similar duplicate candidates, broken local-reference finalization blocking, proposal/file judgement creation, admin publish, admin rejection, and state-blocked delete behavior.
+- Added `scripts/checks/check-proposal-lifecycle.ts` and its co-located spec to prove how-to guidance, duplicate precheck, proposal creation, blocked dependency uploads, upload finalization, public status, admin conversion, and draft non-public visibility against real Fastify routes and an isolated SQLite-backed `.tmp` data directory.
 - Wired the proof into `./scripts/check.sh` and documented the generated `.tmp/proposal-lifecycle.*` artifacts.
 
 ## 2026-07-11: Concurrency And Abuse Proof
 
-- Expanded `scripts/check-concurrency-abuse.ts` to cover duplicate upload rejection, HTTP file count and file size boundaries, and concurrent projection rebuild stability.
+- Expanded `scripts/checks/check-concurrency-abuse.ts` to cover duplicate upload rejection, HTTP file count and file size boundaries, and concurrent projection rebuild stability.
 - Hardened proposal uploads so duplicate relative file paths return a clean validation error instead of surfacing as storage/projection failures.
-- Added `scripts/check-concurrency-abuse.ts` and its co-located spec to prove repeated proposal state transitions fail safely and malformed package paths are rejected.
+- Added `scripts/checks/check-concurrency-abuse.ts` and its co-located spec to prove repeated proposal state transitions fail safely and malformed package paths are rejected.
 - Hardened skill package downloads to normalize and reject unsafe package file paths before direct download or ZIP creation.
 - Wired the proof into `./scripts/check.sh` and documented the generated `.tmp/concurrency-abuse.*` artifacts.
 
 ## 2026-07-11: Skill Package Download Proof
 
-- Added `scripts/check-skill-package-downloads.ts` and its co-located spec to prove direct `SKILL.md` downloads, multi-file ZIP downloads, draft-version blocking, and unknown-skill 404 behavior for published skill package consumption.
+- Added `scripts/checks/check-skill-package-downloads.ts` and its co-located spec to prove direct `SKILL.md` downloads, multi-file ZIP downloads, draft-version blocking, and unknown-skill 404 behavior for published skill package consumption.
 - Wired the proof into `./scripts/check.sh` and documented the generated `.tmp/skill-package-downloads.*` artifacts.
 
 ## 2026-07-11: Judger Auto-Publish Matrix Proof
 
-- Added `scripts/check-judger-autopublish-matrix.ts` and its co-located spec to generate deterministic proof artifacts for noop, explicit auto-approval, real green, risky, classifier-blocked, classifier-failed, and missing-classifier auto-publish behavior.
+- Added `scripts/checks/check-judger-autopublish-matrix.ts` and its co-located spec to generate deterministic proof artifacts for noop, explicit auto-approval, real green, risky, classifier-blocked, classifier-failed, and missing-classifier auto-publish behavior.
 - Wired the proof into `./scripts/check.sh` and documented the generated `.tmp/judger-autopublish-matrix.*` artifacts.
 
 ## 2026-07-11: EPIC-008 Lightweight Proof Infrastructure
@@ -970,7 +1027,7 @@ avoid sandbox background-process termination.
 - Added automated matrix coverage for all `PUBLIC_READ_AUTH_MODE`, `PROPOSAL_AUTH_MODE`, and `DISCOVERY_AUTH_MODE` `none`/`bearer` permutations.
 - Added `docs/setup/AGENT_API_AUTH_TEST_MATRIX.md` with expected API, UI, 401, and setup-script behavior for each permutation.
 - Linked the matrix from the setup testing guide and docs index.
-- Added `scripts/check-agent-auth-matrix.ts` and `scripts/check-agent-auth-matrix.spec.md`; `./scripts/check.sh` now writes `.tmp/agent-auth-matrix.log` and `.tmp/agent-auth-matrix.json` as deterministic validation artifacts.
+- Added `scripts/checks/check-agent-auth-matrix.ts` and `scripts/checks/check-agent-auth-matrix.spec.md`; `./scripts/check.sh` now writes `.tmp/agent-auth-matrix.log` and `.tmp/agent-auth-matrix.json` as deterministic validation artifacts.
 
 ## 2026-07-11: EPIC-007 Static Bearer Auth Implementation
 
@@ -1020,9 +1077,9 @@ avoid sandbox background-process termination.
 
 ## 2026-07-10: Local MySQL Runbook And Startup Hardening
 
-- Added `scripts/start-mysql-stack.sh` readiness checks for TCP connectivity after
+- Added `scripts/development/start-mysql-stack.sh` readiness checks for TCP connectivity after
   compose start to reduce bootstrap race conditions.
-- Updated `scripts/restart-all.sh` to preflight local MySQL connectivity when
+- Updated `scripts/development/restart-all.sh` to preflight local MySQL connectivity when
   `CATALOG_PROVIDER=mysql` or `SEARCH_PROVIDER=mysql` is configured, so startup
   exits with actionable guidance instead of silent frontend `Network Error` fallout.
 - Revised `docs/product/AGENT_OPERATIONS.md` to document the repository compose

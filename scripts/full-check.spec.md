@@ -9,8 +9,8 @@
 The script runs:
 
 - `./scripts/check.sh` unconditionally.
-- `bash scripts/smoke-test.sh` when `RUN_SMOKE_TEST=true`.
-- `bash scripts/start-mysql-stack.sh up` and the provider matrix/cutover scripts
+- `bash scripts/development/smoke-test.sh` when `RUN_SMOKE_TEST=true`.
+- `bash scripts/development/start-mysql-stack.sh up` and the provider matrix/cutover scripts
   when `RUN_MYSQL_FULL_CHECK=true`.
 - The local MySQL stack startup is skipped when
   `SKIP_MYSQL_STACK_START=true`; this is the CI path when the runner

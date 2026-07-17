@@ -50,15 +50,15 @@ checklists in place; do not create a parallel source of truth.
 
 ## Known Operational Caveat
 
-An attempted `bash scripts/restart-all.sh restart` from a restricted agent
+An attempted `bash scripts/development/restart-all.sh restart` from a restricted agent
 sandbox could not access the local Docker socket while checking the configured
 MySQL instance. The script therefore exited before recreating its PID file. At
 the time of handoff, listeners were still observed on ports `3040` and `3041`,
 but the next operator must perform a clean restart from the normal host shell:
 
 ```bash
-bash scripts/restart-all.sh restart
-bash scripts/restart-all.sh status
+bash scripts/development/restart-all.sh restart
+bash scripts/development/restart-all.sh status
 tail -n 120 .tmp/restart-all.log
 ```
 
@@ -176,7 +176,7 @@ Do not infer acceptance from deterministic local tokens.
 
 - Verify discovery metadata, issuer, endpoints, JWKS origin, client ID, audience,
   redirect URI, logout behavior, and required scopes against the real tenant.
-- Run `scripts/check-authentik-staging.ts` with a genuine access/ID-token pair
+- Run `scripts/checks/check-authentik-staging.ts` with a genuine access/ID-token pair
   from one authorization. The ID token must be independently valid, match the
   access-token subject and authorization, and still be rejected by the API
   access-token verifier.

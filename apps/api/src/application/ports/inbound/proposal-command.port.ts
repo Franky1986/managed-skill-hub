@@ -1,4 +1,4 @@
-import { Proposal } from '../../../domain/proposal/Proposal';
+import { Proposal, ProposalArtifactDecision } from '../../../domain/proposal/Proposal';
 import { Skill } from '../../../domain/skill/Skill';
 import { AutoPublishEvaluation } from '../../usecases/proposal/auto-publish-proposal.usecase';
 
@@ -10,6 +10,8 @@ export interface SubmitProposalDraft {
   tags?: string[];
   capabilities?: string[];
   entrypoint?: string;
+  artifactDecisions?: ProposalArtifactDecision[];
+  idempotencyKey?: string;
 }
 
 export interface ProposalMetadataUpdate {
@@ -19,6 +21,7 @@ export interface ProposalMetadataUpdate {
   tags?: string[];
   capabilities?: string[];
   entrypoint?: string | null;
+  artifactDecisions?: ProposalArtifactDecision[];
 }
 
 export interface VerifiedProposalActor {
@@ -38,6 +41,9 @@ export interface ValidateProposalUploadResult {
   proposalId: string;
   status: string;
   valid: boolean;
+  canFinalize: boolean;
+  blockingFindingCount: number;
+  nextAction: 'upload_files' | 'repair_package' | 'finalize_upload';
   fileCount: number;
   checkedTextFileCount: number;
   findings: ProposalUploadFinding[];
@@ -51,7 +57,9 @@ export type ProposalUploadFindingKind =
   | 'portable_command_manifest_invalid'
   | 'portable_command_manifest_missing'
   | 'portable_command_missing'
-  | 'portable_command_reference';
+  | 'portable_command_reference'
+  | 'artifact_decision_missing'
+  | 'artifact_decision_not_applied';
 
 export type ProposalUploadFindingSeverity = 'error' | 'warning' | 'info';
 

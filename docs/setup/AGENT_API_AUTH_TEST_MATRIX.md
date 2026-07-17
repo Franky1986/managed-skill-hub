@@ -41,7 +41,7 @@ suite:
 The proof can also be executed directly:
 
 ```bash
-./node_modules/.bin/tsx scripts/check-agent-auth-matrix.ts
+./node_modules/.bin/tsx scripts/checks/check-agent-auth-matrix.ts
 ```
 
 Successful runs write stable artifacts for agent review:

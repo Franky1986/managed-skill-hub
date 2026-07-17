@@ -92,36 +92,36 @@ co-located `*.spec.md` files.
 |--------|---------|
 | [.github/workflows/validation.yml](../.github/workflows/validation.yml) | CI split for lightweight proof artifacts and scheduled/manual MySQL full validation |
 | [scripts/check.sh](../scripts/check.sh) | Structure checks, lint, typecheck, tests |
-| [scripts/check-agent-auth-matrix.ts](../scripts/check-agent-auth-matrix.ts) | Deterministic auth permutation proof with `.tmp` artifacts |
-| [scripts/migrate-env-layout.ts](../scripts/migrate-env-layout.ts) | Value-redacting migration from mixed `.env` to layered `.env`/`.env.secrets` |
-| [scripts/check-judger-autopublish-matrix.ts](../scripts/check-judger-autopublish-matrix.ts) | Deterministic judger and auto-publish safety proof |
+| [scripts/checks/check-agent-auth-matrix.ts](../scripts/checks/check-agent-auth-matrix.ts) | Deterministic auth permutation proof with `.tmp` artifacts |
+| [scripts/content/migrate-env-layout.ts](../scripts/content/migrate-env-layout.ts) | Value-redacting migration from mixed `.env` to layered `.env`/`.env.secrets` |
+| [scripts/checks/check-judger-autopublish-matrix.ts](../scripts/checks/check-judger-autopublish-matrix.ts) | Deterministic judger and auto-publish safety proof |
 | [scripts/full-check.sh](../scripts/full-check.sh) | Extended EPIC-008 validation entrypoint with optional smoke/MySQL gates |
-| [scripts/check-public-release-hygiene.sh](../scripts/check-public-release-hygiene.sh) | Public release hygiene proof for metadata, secrets, private files, and history |
-| [scripts/check-openapi-parity.ts](../scripts/check-openapi-parity.ts) | Deterministic OpenAPI parity proof for agent-facing routes |
-| [scripts/check-provider-matrix.ts](../scripts/check-provider-matrix.ts) | Deterministic provider parity proof for SQLite and optional MySQL combinations |
-| [scripts/check-content-storage-matrix.ts](../scripts/check-content-storage-matrix.ts) | Deterministic filesystem versus database content-storage parity proof |
-| [scripts/check-content-migration.ts](../scripts/check-content-migration.ts) | Deterministic filesystem-to-database content migration proof |
-| [scripts/check-content-export.ts](../scripts/check-content-export.ts) | Deterministic database-to-filesystem content export proof |
-| [scripts/check-provider-cutover.ts](../scripts/check-provider-cutover.ts) | Deterministic SQLite-to-MySQL provider cutover proof |
-| [scripts/check-skill-package-downloads.ts](../scripts/check-skill-package-downloads.ts) | Deterministic published skill package download proof |
-| [scripts/check-proposal-lifecycle.ts](../scripts/check-proposal-lifecycle.ts) | Deterministic proposal lifecycle proof |
-| [scripts/check-observability-audit.ts](../scripts/check-observability-audit.ts) | Deterministic observability export and audit evidence proof |
-| [scripts/check-backup-restore.ts](../scripts/check-backup-restore.ts) | Deterministic backup and restore proof with isolated data |
-| [scripts/check-concurrency-abuse.ts](../scripts/check-concurrency-abuse.ts) | Deterministic proposal state and unsafe path abuse proof |
-| [scripts/check-agent-contract.ts](../scripts/check-agent-contract.ts) | Deterministic discovery/how-to/setup-script contract proof |
-| [scripts/check-admin-ui-smoke.ts](../scripts/check-admin-ui-smoke.ts) | Lightweight admin/public UI source-contract smoke proof |
-| [scripts/smoke-test.sh](../scripts/smoke-test.sh) | Automated local API smoke tests |
-| [scripts/create-deploy-archive.sh](../scripts/create-deploy-archive.sh) | Create a deployment archive from committed files |
+| [scripts/checks/check-public-release-hygiene.sh](../scripts/checks/check-public-release-hygiene.sh) | Public release hygiene proof for metadata, secrets, private files, and history |
+| [scripts/checks/check-openapi-parity.ts](../scripts/checks/check-openapi-parity.ts) | Deterministic OpenAPI parity proof for agent-facing routes |
+| [scripts/checks/check-provider-matrix.ts](../scripts/checks/check-provider-matrix.ts) | Deterministic provider parity proof for SQLite and optional MySQL combinations |
+| [scripts/checks/check-content-storage-matrix.ts](../scripts/checks/check-content-storage-matrix.ts) | Deterministic filesystem versus database content-storage parity proof |
+| [scripts/checks/check-content-migration.ts](../scripts/checks/check-content-migration.ts) | Deterministic filesystem-to-database content migration proof |
+| [scripts/checks/check-content-export.ts](../scripts/checks/check-content-export.ts) | Deterministic database-to-filesystem content export proof |
+| [scripts/checks/check-provider-cutover.ts](../scripts/checks/check-provider-cutover.ts) | Deterministic SQLite-to-MySQL provider cutover proof |
+| [scripts/checks/check-skill-package-downloads.ts](../scripts/checks/check-skill-package-downloads.ts) | Deterministic published skill package download proof |
+| [scripts/checks/check-proposal-lifecycle.ts](../scripts/checks/check-proposal-lifecycle.ts) | Deterministic proposal lifecycle proof |
+| [scripts/checks/check-observability-audit.ts](../scripts/checks/check-observability-audit.ts) | Deterministic observability export and audit evidence proof |
+| [scripts/checks/check-backup-restore.ts](../scripts/checks/check-backup-restore.ts) | Deterministic backup and restore proof with isolated data |
+| [scripts/checks/check-concurrency-abuse.ts](../scripts/checks/check-concurrency-abuse.ts) | Deterministic proposal state and unsafe path abuse proof |
+| [scripts/checks/check-agent-contract.ts](../scripts/checks/check-agent-contract.ts) | Deterministic discovery/how-to/setup-script contract proof |
+| [scripts/checks/check-admin-ui-smoke.ts](../scripts/checks/check-admin-ui-smoke.ts) | Lightweight admin/public UI source-contract smoke proof |
+| [scripts/development/smoke-test.sh](../scripts/development/smoke-test.sh) | Automated local API smoke tests |
+| [scripts/deployment/create-deploy-archive.sh](../scripts/deployment/create-deploy-archive.sh) | Create a deployment archive from committed files |
 | [scripts/deployment/prepare-release.sh](../scripts/deployment/prepare-release.sh) | Create generic public deployment artifacts |
 | [scripts/deployment/upload.sh](../scripts/deployment/upload.sh) | Upload explicit artifacts through an operator-owned target profile |
 | [scripts/deployment/service.sh](../scripts/deployment/service.sh) | Generic deployment-root runtime controller |
-| [scripts/check-deployment-blueprint.sh](../scripts/check-deployment-blueprint.sh) | Deterministic generic deployment blueprint proof |
-| [scripts/install_and_start.sh](../scripts/install_and_start.sh) | Install and start on the server |
-| [scripts/restart-server.sh](../scripts/restart-server.sh) | Restart/stop stack |
-| [scripts/backup.sh](../scripts/backup.sh) | Create backup |
+| [scripts/checks/check-deployment-blueprint.sh](../scripts/checks/check-deployment-blueprint.sh) | Deterministic generic deployment blueprint proof |
+| [scripts/deployment/install_and_start.sh](../scripts/deployment/install_and_start.sh) | Install and start on the server |
+| [scripts/deployment/restart-server.sh](../scripts/deployment/restart-server.sh) | Restart/stop stack |
+| [scripts/operations/backup.sh](../scripts/operations/backup.sh) | Create backup |
 | [data/skills/registry-bootstrap/1.0.0/](../data/skills/registry-bootstrap/1.0.0/) | Published reference skill for agents; existing skill content is intentionally not translated by EPIC-003 |
 | [agents/registry-bootstrap/README.md](../agents/registry-bootstrap/README.md) | Legacy reference client; no longer recommended |
-| [scripts/restore.sh](../scripts/restore.sh) | Restore backup |
+| [scripts/operations/restore.sh](../scripts/operations/restore.sh) | Restore backup |
 
 ## Domain And Application Specs
 

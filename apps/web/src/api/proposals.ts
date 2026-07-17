@@ -1,6 +1,16 @@
 import { apiClient } from './client';
 import type { JudgementRecord } from './judgements';
-import type { AgentHttpGuidance } from './agent-sessions';
+import type { AgentHttpGuidance, ProposalWorkflow } from './agent-sessions';
+
+export interface ProposalArtifactDecision {
+    reference: string;
+    classification: 'external_service_or_capability' | 'local_portable_artifact' | 'ambiguous_dependency';
+    decision: 'include_portably' | 'keep_external_prerequisite' | 'remove_or_rewrite_dependency';
+    confirmation: 'explicit_user_choice' | 'policy_default';
+    source: string | null;
+    target: string | null;
+    rationale: string;
+}
 
 export interface ProposalSubmissionResponse {
     id: string;
@@ -37,6 +47,14 @@ export interface HowToProposeResponse {
     conversationLanguage: string;
     metadataLanguageGuidance: string;
     agentHttpGuidance: AgentHttpGuidance;
+    proposalWorkflow: ProposalWorkflow;
+    categoryPolicy: {
+        policy: 'open';
+        customCategoriesAllowed: boolean;
+        listEndpoint: string;
+        listContains: string;
+        instruction: string;
+    };
     proposalIntentDecision: {
         requiredBeforePackagePreparation: boolean;
         outcomes: Array<
@@ -49,6 +67,20 @@ export interface HowToProposeResponse {
         >;
         decisionRules: string[];
         commandRules: string[];
+    };
+    externalArtifactDecision: {
+        requiredBeforeProposalCreation: boolean;
+        classifications: Array<{
+            id: 'external_service_or_capability' | 'local_portable_artifact' | 'ambiguous_dependency';
+            examples: string[];
+            action: string;
+        }>;
+        decisionOptions: Array<{
+            id: 'include_portably' | 'keep_external_prerequisite' | 'remove_or_rewrite_dependency';
+            action: string;
+        }>;
+        requiredUserFacingProposal: string[];
+        confirmationRule: string;
     };
     requiredSteps: Array<{
         step: number;
@@ -159,6 +191,7 @@ export interface ProposalDetail {
     tags: string[];
     capabilities: string[];
     entrypoint: string | null;
+    artifactDecisions: ProposalArtifactDecision[];
     status: string;
     createdAt: string;
     submittedBy: string;
@@ -219,6 +252,7 @@ export interface ProposalUpdatePayload {
     tags?: string[];
     capabilities?: string[];
     entrypoint?: string | null;
+    artifactDecisions?: ProposalArtifactDecision[];
 }
 
 export interface DuplicateCheckResolutionOption {
@@ -277,7 +311,10 @@ export const proposalsApi = {
         tags?: string[];
         capabilities?: string[];
         entrypoint?: string;
-    }) => apiClient.post<ProposalSubmissionResponse>('/proposals', data),
+        artifactDecisions?: ProposalArtifactDecision[];
+    }, idempotencyKey?: string) => apiClient.post<ProposalSubmissionResponse>('/proposals', data, {
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    }),
     attachFile: (id: string, file: File) => {
         const form = new FormData();
         form.append('file', file);

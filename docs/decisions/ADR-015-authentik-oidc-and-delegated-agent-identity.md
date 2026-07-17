@@ -163,4 +163,4 @@ validation. These runtime requirements are implemented under
 Production activation is a separate environment gate. `.env.example.authentik`
 remains marked for staging until live Authentik Device Authorization, browser
 callback, two-human ownership, key rotation/outage, and rollback evidence pass
-through `scripts/check-authentik-staging.ts`.
+through `scripts/checks/check-authentik-staging.ts`.

@@ -41,8 +41,8 @@ secret assignments. A human operator or deployment secret manager owns
 `.env.secrets`; agents should not read it. Migrate an older mixed file with:
 
 ```bash
-./node_modules/.bin/tsx scripts/migrate-env-layout.ts --check
-./node_modules/.bin/tsx scripts/migrate-env-layout.ts --write
+./node_modules/.bin/tsx scripts/content/migrate-env-layout.ts --check
+./node_modules/.bin/tsx scripts/content/migrate-env-layout.ts --write
 ```
 
 The migration reports key names only, moves secrets atomically, and appends
@@ -247,10 +247,10 @@ proposal list and does not permit cross-owner mutation.
 Supported first-stage modes:
 
 - `CONTENT_STORAGE_PROVIDER=filesystem`: default mode; managed content is stored under `DATA_DIR/skills`, `DATA_DIR/proposals`, and `DATA_DIR/audit`.
-- `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=sqlite`: managed skill files, proposal files, extracts, aggregates, and audit entries are stored in SQLite content tables under `DATA_DIR/index/search.db`. This mode is covered by `scripts/check-content-storage-matrix.ts`.
+- `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=sqlite`: managed skill files, proposal files, extracts, aggregates, and audit entries are stored in SQLite content tables under `DATA_DIR/index/search.db`. This mode is covered by `scripts/checks/check-content-storage-matrix.ts`.
 - `CONTENT_STORAGE_PROVIDER=database` with `CATALOG_PROVIDER=mysql`: managed skill files, proposal files, extracts, aggregates, and audit entries are stored in MySQL content tables. This mode is covered by `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh`.
 
-Backup note: `scripts/backup.sh` intentionally fails fast for MySQL database-content mode because a `DATA_DIR` archive alone is incomplete. Use a tested MySQL dump/restore procedure until dedicated backup automation is implemented.
+Backup note: `scripts/operations/backup.sh` intentionally fails fast for MySQL database-content mode because a `DATA_DIR` archive alone is incomplete. Use a tested MySQL dump/restore procedure until dedicated backup automation is implemented.
 
 Cutover note: filesystem-to-database migration should be copy-only and run during a maintenance window. Keep the original filesystem data until database-mode parity checks and at least one complete backup/restore cycle have been validated. See [EPIC-009](../roadmap/EPIC-009-database-backed-content-storage.md) for cutover and rollback guidance.
 
@@ -296,13 +296,13 @@ Notes:
 | `FRONTEND_HOST` | no | Vite bind address. Keep `127.0.0.1` for nginx-fronted deployments; use an explicit non-loopback address only for intentional LAN development. | `127.0.0.1` |
 | `VITE_API_BASE_URL` | yes | Backend base URL. | `http://localhost:3040` |
 | `VITE_USE_API_PROXY` | no | Set `false` to bypass Vite proxy. | `true` |
-| `API_START_MODE` | no | API process mode used by `scripts/restart-server.sh`: `dev` runs the TSX watcher; `production` runs the compiled `apps/api/dist/server.js`. | `dev` |
-| `FRONTEND_START_MODE` | no | Frontend process mode used by `scripts/restart-server.sh`: `dev` for local development or `preview` to serve the already-built production bundle. | `dev` |
+| `API_START_MODE` | no | API process mode used by `scripts/deployment/restart-server.sh`: `dev` runs the TSX watcher; `production` runs the compiled `apps/api/dist/server.js`. | `dev` |
+| `FRONTEND_START_MODE` | no | Frontend process mode used by `scripts/deployment/restart-server.sh`: `dev` for local development or `preview` to serve the already-built production bundle. | `dev` |
 | `STARTUP_TIMEOUT_SECONDS` | no | Maximum seconds each API/frontend HTTP healthcheck may wait during restart. | `45` |
 | `API_HEALTH_URL` | no | Local API URL used by the restart helper after process start. | `http://127.0.0.1:3040/api/health/ready` |
 | `FRONTEND_HEALTH_URL` | no | Local frontend URL used by the restart helper after process start. | `http://127.0.0.1:3041/frontend/` |
 
-`scripts/install_and_start.sh` forces `NODE_ENV=production`,
+`scripts/deployment/install_and_start.sh` forces `NODE_ENV=production`,
 `API_START_MODE=production`, and `FRONTEND_START_MODE=preview` for deployed
 startup. Direct use of `restart-server.sh` keeps the configured modes.
 

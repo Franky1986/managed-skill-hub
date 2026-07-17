@@ -4,6 +4,7 @@ import { sendApiError, sendMappedApiError } from './error-response';
 import { AgentApiAuth, getAgentAuthContext } from './agent-api-auth';
 import { resolveArtifactMimeType } from '../../../domain/files/artifact-mime';
 import { ProposalActor } from '../../../application/ports/inbound/proposal-command.port';
+import { ProposalArtifactDecision } from '../../../domain/proposal/Proposal';
 import { deriveFinalizeJudgementStatus } from '../../../application/usecases/judgement/judgement-execution-status';
 
 export type ProposalRateLimiter = ReturnType<typeof createProposalRateLimiter>;
@@ -36,6 +37,7 @@ export function registerProposalRoutes(
         tags?: string[];
         capabilities?: string[];
         entrypoint?: string;
+        artifactDecisions?: ProposalArtifactDecision[];
       };
       const actor = resolveProposalActor(request);
       const proposal = await container.proposalCommand.submitProposal(
@@ -47,20 +49,31 @@ export function registerProposalRoutes(
           tags: body.tags,
           capabilities: body.capabilities,
           entrypoint: body.entrypoint,
+          artifactDecisions: body.artifactDecisions,
+          idempotencyKey: readSingleHeader(request.headers['idempotency-key']),
         },
         actor
       );
       const rawUrl = request.url ?? request.raw.url ?? '/proposals';
       const prefix = rawUrl.startsWith('/api/') ? '/api' : '';
       const statusPath = `${prefix}/proposals/${proposal.id}/status`;
+      const validateUploadPath = `${prefix}/proposals/${proposal.id}/validate-upload`;
       const finalizeUploadPath = `${prefix}/proposals/${proposal.id}/finalize-upload`;
+      const uploadFinalized = proposal.status !== 'in_upload';
       return reply.code(201).send({
         id: proposal.id,
-        message:
-          'Proposal upload opened. Attach all required files, then explicitly finalize the upload. Judgement and review start only after finalization.',
+        status: proposal.status,
+        uploadFinalized,
+        message: uploadFinalized
+          ? 'This idempotent request matched an existing finalized proposal. Do not upload files or create another proposal; poll its status.'
+          : 'Proposal upload is active. Persist this proposal id and reuse it for every correction. Attach or replace files, validate, and explicitly finalize this same upload. Do not create another proposal for recoverable changes.',
         statusUrl: statusPath,
         checkUrl: statusPath,
+        validateUploadUrl: validateUploadPath,
         finalizeUploadUrl: finalizeUploadPath,
+        nextAction: uploadFinalized ? 'poll_status' : 'upload_or_replace_files',
+        recoveryRule:
+          'When any request result is unclear, inspect statusUrl and validateUploadUrl for this proposal before retrying. Retry proposal creation only with the exact same Idempotency-Key and body.',
       });
     } catch (error) {
       return sendMappedApiError(reply, request, error);
@@ -138,6 +151,7 @@ export function registerProposalRoutes(
         tags?: string[];
         capabilities?: string[];
         entrypoint?: string | null;
+        artifactDecisions?: ProposalArtifactDecision[];
       };
       const proposal = await container.proposalCommand.updateProposalMetadata(
         proposalId,
@@ -148,6 +162,7 @@ export function registerProposalRoutes(
           tags: body.tags,
           capabilities: body.capabilities,
           entrypoint: body.entrypoint,
+          artifactDecisions: body.artifactDecisions,
         },
         actor
       );
@@ -160,6 +175,7 @@ export function registerProposalRoutes(
         tags: proposal.tags,
         capabilities: proposal.capabilities,
         entrypoint: proposal.entrypoint,
+        artifactDecisions: proposal.artifactDecisions,
       });
     } catch (error) {
       return sendMappedApiError(reply, request, error);
@@ -384,6 +400,12 @@ function readMultipartFieldValue(value: unknown): string | null {
     return trimmed.length > 0 ? trimmed : null;
   }
   return null;
+}
+
+function readSingleHeader(value: string | string[] | undefined): string | undefined {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  const trimmed = candidate?.trim();
+  return trimmed || undefined;
 }
 
 function resolveProposalActor(request: import('fastify').FastifyRequest): ProposalActor {

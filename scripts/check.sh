@@ -75,38 +75,58 @@ SPEC_COUNT=$(find . \
   | wc -l)
 log_info "Found .spec.md files: $SPEC_COUNT"
 
+# Keep tracked implementations out of the script root. Ignored operator-local
+# helpers are intentionally outside this public repository contract.
+while IFS= read -r root_script; do
+  [[ -e "$root_script" ]] || continue
+  case "$root_script" in
+    scripts/README.md|scripts/check.sh|scripts/full-check.sh|scripts/full-check.spec.md|scripts/tsconfig.json)
+      ;;
+    *)
+      log_error "Tracked script must be placed in a responsibility directory: $root_script"
+      ;;
+  esac
+done < <(git ls-files --cached --others --exclude-standard 'scripts/*' | awk -F/ 'NF == 2')
+
 # Check important scripts.
 for script in \
   scripts/deployment/prepare-release.sh \
   scripts/deployment/service.sh \
   scripts/deployment/upload.sh \
-  scripts/create-deploy-archive.sh \
-  scripts/install_and_start.sh \
-  scripts/restart-server.sh \
-  scripts/restart-all.sh \
-  scripts/backup.sh \
-  scripts/restore.sh \
-  scripts/check-agent-auth-matrix.ts \
-  scripts/check-authentik-staging.ts \
-  scripts/check-oidc-provider.ts \
-  scripts/check-agent-contract.ts \
-  scripts/check-admin-ui-smoke.ts \
-  scripts/check-openapi-parity.ts \
-  scripts/check-provider-matrix.ts \
-  scripts/check-content-storage-matrix.ts \
-  scripts/check-content-migration.ts \
-  scripts/export-content-filesystem.ts \
-  scripts/check-content-export.ts \
-  scripts/check-provider-cutover.ts \
-  scripts/check-deployment-blueprint.sh \
-  scripts/check-pinned-package-versions.mjs \
-  scripts/check-public-release-hygiene.sh \
-  scripts/check-judger-autopublish-matrix.ts \
-  scripts/check-skill-package-downloads.ts \
-  scripts/check-concurrency-abuse.ts \
-  scripts/check-proposal-lifecycle.ts \
-  scripts/check-backup-restore.ts \
-  scripts/check-observability-audit.ts \
+  scripts/deployment/create-deploy-archive.sh \
+  scripts/security/generate-admin-password-hash.sh \
+  scripts/deployment/install_and_start.sh \
+  scripts/deployment/restart-server.sh \
+  scripts/development/restart-all.sh \
+  scripts/development/smoke-test.sh \
+  scripts/development/start-mysql-stack.sh \
+  scripts/content/migrate-content-to-database.ts \
+  scripts/content/migrate-env-layout.ts \
+  scripts/operations/backup.sh \
+  scripts/operations/restore.sh \
+  scripts/lib/load-env.sh \
+  scripts/lib/run-with-env.sh \
+  scripts/checks/check-agent-auth-matrix.ts \
+  scripts/checks/check-authentik-staging.ts \
+  scripts/checks/check-oidc-provider.ts \
+  scripts/checks/check-agent-contract.ts \
+  scripts/checks/check-admin-ui-smoke.ts \
+  scripts/checks/check-openapi-parity.ts \
+  scripts/checks/check-provider-matrix.ts \
+  scripts/checks/check-content-storage-matrix.ts \
+  scripts/checks/check-content-migration.ts \
+  scripts/content/export-content-filesystem.ts \
+  scripts/checks/check-content-export.ts \
+  scripts/checks/check-provider-cutover.ts \
+  scripts/checks/check-deployment-blueprint.sh \
+  scripts/checks/check-pinned-package-versions.mjs \
+  scripts/checks/check-public-release-hygiene.sh \
+  scripts/checks/check-judger-autopublish-matrix.ts \
+  scripts/checks/check-skill-package-downloads.ts \
+  scripts/checks/check-concurrency-abuse.ts \
+  scripts/checks/check-proposal-lifecycle.ts \
+  scripts/checks/check-backup-restore.ts \
+  scripts/checks/check-observability-audit.ts \
   scripts/full-check.sh; do
   if [[ ! -x "$script" ]]; then
     log_error "Not executable or missing: $script"
@@ -115,12 +135,12 @@ done
 
 # Check deterministic dependency declarations before running package tooling.
 log_info "Checking pinned package versions ..."
-if ! node scripts/check-pinned-package-versions.mjs >".tmp/pinned-package-versions.check.log" 2>&1; then
+if ! node scripts/checks/check-pinned-package-versions.mjs >".tmp/pinned-package-versions.check.log" 2>&1; then
   log_error "Pinned package version check failed (see .tmp/pinned-package-versions.check.log)"
 fi
 
 log_info "Starting generic deployment blueprint proof ..."
-if ! bash scripts/check-deployment-blueprint.sh >".tmp/deployment-blueprint.check.log" 2>&1; then
+if ! bash scripts/checks/check-deployment-blueprint.sh >".tmp/deployment-blueprint.check.log" 2>&1; then
   log_error "Deployment blueprint proof failed (see .tmp/deployment-blueprint.check.log)"
 fi
 
@@ -154,77 +174,77 @@ if ! npm run test >".tmp/test.log" 2>&1; then
 fi
 
 log_info "Starting agent auth matrix ..."
-if ! ./node_modules/.bin/tsx scripts/check-agent-auth-matrix.ts >".tmp/agent-auth-matrix.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-agent-auth-matrix.ts >".tmp/agent-auth-matrix.check.log" 2>&1; then
   log_error "Agent auth matrix failed (see .tmp/agent-auth-matrix.check.log and .tmp/agent-auth-matrix.log)"
 fi
 
 log_info "Starting deterministic OIDC provider proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-oidc-provider.ts >".tmp/oidc-provider.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-oidc-provider.ts >".tmp/oidc-provider.check.log" 2>&1; then
   log_error "OIDC provider proof failed (see .tmp/oidc-provider.check.log and .tmp/oidc-provider.log)"
 fi
 
 log_info "Starting judger auto-publish matrix ..."
-if ! ./node_modules/.bin/tsx scripts/check-judger-autopublish-matrix.ts >".tmp/judger-autopublish-matrix.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-judger-autopublish-matrix.ts >".tmp/judger-autopublish-matrix.check.log" 2>&1; then
   log_error "Judger auto-publish matrix failed (see .tmp/judger-autopublish-matrix.check.log and .tmp/judger-autopublish-matrix.log)"
 fi
 
 log_info "Starting agent contract proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-agent-contract.ts >".tmp/agent-contract.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-agent-contract.ts >".tmp/agent-contract.check.log" 2>&1; then
   log_error "Agent contract proof failed (see .tmp/agent-contract.check.log and .tmp/agent-contract.log)"
 fi
 
 log_info "Starting admin UI smoke proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-admin-ui-smoke.ts >".tmp/admin-ui-smoke.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-admin-ui-smoke.ts >".tmp/admin-ui-smoke.check.log" 2>&1; then
   log_error "Admin UI smoke proof failed (see .tmp/admin-ui-smoke.check.log and .tmp/admin-ui-smoke.log)"
 fi
 
 log_info "Starting OpenAPI parity proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-openapi-parity.ts >".tmp/openapi-parity.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-openapi-parity.ts >".tmp/openapi-parity.check.log" 2>&1; then
   log_error "OpenAPI parity proof failed (see .tmp/openapi-parity.check.log and .tmp/openapi-parity.log)"
 fi
 
 log_info "Starting provider matrix proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-provider-matrix.ts >".tmp/provider-matrix.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-provider-matrix.ts >".tmp/provider-matrix.check.log" 2>&1; then
   log_error "Provider matrix proof failed (see .tmp/provider-matrix.check.log and .tmp/provider-matrix.log)"
 fi
 
 log_info "Starting content storage matrix proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-content-storage-matrix.ts >".tmp/content-storage-matrix.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-content-storage-matrix.ts >".tmp/content-storage-matrix.check.log" 2>&1; then
   log_error "Content storage matrix proof failed (see .tmp/content-storage-matrix.check.log and .tmp/content-storage-matrix.log)"
 fi
 
 log_info "Starting content migration proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-content-migration.ts >".tmp/content-migration.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-content-migration.ts >".tmp/content-migration.check.log" 2>&1; then
   log_error "Content migration proof failed (see .tmp/content-migration.check.log and .tmp/content-migration.log)"
 fi
 
 log_info "Starting content export proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-content-export.ts >".tmp/content-export.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-content-export.ts >".tmp/content-export.check.log" 2>&1; then
   log_error "Content export proof failed (see .tmp/content-export.check.log and .tmp/content-export.log)"
 fi
 
 log_info "Starting skill package downloads proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-skill-package-downloads.ts >".tmp/skill-package-downloads.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-skill-package-downloads.ts >".tmp/skill-package-downloads.check.log" 2>&1; then
   log_error "Skill package downloads proof failed (see .tmp/skill-package-downloads.check.log and .tmp/skill-package-downloads.log)"
 fi
 
 log_info "Starting proposal lifecycle proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-proposal-lifecycle.ts >".tmp/proposal-lifecycle.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-proposal-lifecycle.ts >".tmp/proposal-lifecycle.check.log" 2>&1; then
   log_error "Proposal lifecycle proof failed (see .tmp/proposal-lifecycle.check.log and .tmp/proposal-lifecycle.log)"
 fi
 
 log_info "Starting observability and audit proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-observability-audit.ts >".tmp/observability-audit.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-observability-audit.ts >".tmp/observability-audit.check.log" 2>&1; then
   log_error "Observability and audit proof failed (see .tmp/observability-audit.check.log and .tmp/observability-audit.log)"
 fi
 
 log_info "Starting concurrency and abuse proof ..."
-if ! ./node_modules/.bin/tsx scripts/check-concurrency-abuse.ts >".tmp/concurrency-abuse.check.log" 2>&1; then
+if ! ./node_modules/.bin/tsx scripts/checks/check-concurrency-abuse.ts >".tmp/concurrency-abuse.check.log" 2>&1; then
   log_error "Concurrency and abuse proof failed (see .tmp/concurrency-abuse.check.log and .tmp/concurrency-abuse.log)"
 fi
 
 log_info "Starting public release hygiene proof ..."
-if ! bash scripts/check-public-release-hygiene.sh >".tmp/public-release-hygiene.check.log" 2>&1; then
+if ! bash scripts/checks/check-public-release-hygiene.sh >".tmp/public-release-hygiene.check.log" 2>&1; then
   log_error "Public release hygiene proof failed (see .tmp/public-release-hygiene.check.log and .tmp/public-release-hygiene.log)"
 fi
 

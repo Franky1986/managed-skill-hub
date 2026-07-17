@@ -29,6 +29,28 @@ export class ProposalFile {
   }
 }
 
+export type ProposalArtifactClassification =
+  | 'external_service_or_capability'
+  | 'local_portable_artifact'
+  | 'ambiguous_dependency';
+
+export type ProposalArtifactDecisionKind =
+  | 'include_portably'
+  | 'keep_external_prerequisite'
+  | 'remove_or_rewrite_dependency';
+
+export type ProposalArtifactDecisionConfirmation = 'explicit_user_choice' | 'policy_default';
+
+export interface ProposalArtifactDecision {
+  reference: string;
+  classification: ProposalArtifactClassification;
+  decision: ProposalArtifactDecisionKind;
+  confirmation: ProposalArtifactDecisionConfirmation;
+  source: string | null;
+  target: string | null;
+  rationale: string;
+}
+
 export class Proposal {
   private constructor(
     readonly id: string,
@@ -47,7 +69,9 @@ export class Proposal {
     readonly rejectionReason: string | null,
     readonly contentDigest: string | null,
     readonly submittedByPrincipalId: string | null,
-    readonly submittedViaClientId: string | null
+    readonly submittedViaClientId: string | null,
+    readonly artifactDecisions: ProposalArtifactDecision[],
+    readonly idempotencyKeyHash: string | null
   ) {}
 
   static create(props: {
@@ -62,6 +86,8 @@ export class Proposal {
     submittedBy: string;
     submittedByPrincipalId?: string | null;
     submittedViaClientId?: string | null;
+    artifactDecisions?: ProposalArtifactDecision[];
+    idempotencyKeyHash?: string | null;
     createdAt?: Date;
   }): Proposal {
     if (!props.title || props.title.trim().length === 0) {
@@ -90,7 +116,9 @@ export class Proposal {
       null,
       null,
       props.submittedByPrincipalId ?? null,
-      props.submittedViaClientId ?? null
+      props.submittedViaClientId ?? null,
+      normalizeArtifactDecisions(props.artifactDecisions ?? []),
+      props.idempotencyKeyHash ?? null
     );
   }
 
@@ -112,6 +140,8 @@ export class Proposal {
     contentDigest?: string | null;
     submittedByPrincipalId?: string | null;
     submittedViaClientId?: string | null;
+    artifactDecisions?: ProposalArtifactDecision[];
+    idempotencyKeyHash?: string | null;
   }): Proposal {
     if (!props.title || props.title.trim().length === 0) {
       throw new ValidationError('Proposal title is required');
@@ -140,7 +170,9 @@ export class Proposal {
       props.rejectionReason?.trim() ?? null,
       props.contentDigest ?? null,
       props.submittedByPrincipalId ?? null,
-      props.submittedViaClientId ?? null
+      props.submittedViaClientId ?? null,
+      normalizeArtifactDecisions(props.artifactDecisions ?? []),
+      props.idempotencyKeyHash ?? null
     );
   }
 
@@ -179,7 +211,9 @@ export class Proposal {
       this.rejectionReason,
       digest,
       this.submittedByPrincipalId,
-      this.submittedViaClientId
+      this.submittedViaClientId,
+      this.artifactDecisions,
+      this.idempotencyKeyHash
     );
   }
 
@@ -190,6 +224,7 @@ export class Proposal {
     tags?: string[];
     capabilities?: string[];
     entrypoint?: string | null;
+    artifactDecisions?: ProposalArtifactDecision[];
   }): Proposal {
     if (this.status === ProposalStatus.REJECTED || this.status === ProposalStatus.CONVERTED) {
       throw new InvalidStateError(`Cannot update metadata for proposal in status ${this.status}`);
@@ -244,7 +279,11 @@ export class Proposal {
         files: this.files,
       }),
       this.submittedByPrincipalId,
-      this.submittedViaClientId
+      this.submittedViaClientId,
+      proposed.artifactDecisions === undefined
+        ? this.artifactDecisions
+        : normalizeArtifactDecisions(proposed.artifactDecisions),
+      this.idempotencyKeyHash
     );
   }
 
@@ -269,7 +308,9 @@ export class Proposal {
       this.rejectionReason,
       this.contentDigest,
       this.submittedByPrincipalId,
-      this.submittedViaClientId
+      this.submittedViaClientId,
+      this.artifactDecisions,
+      this.idempotencyKeyHash
     );
   }
 
@@ -294,7 +335,9 @@ export class Proposal {
       this.rejectionReason,
       this.contentDigest,
       this.submittedByPrincipalId,
-      this.submittedViaClientId
+      this.submittedViaClientId,
+      this.artifactDecisions,
+      this.idempotencyKeyHash
     );
   }
 
@@ -319,7 +362,9 @@ export class Proposal {
       null,
       this.contentDigest,
       this.submittedByPrincipalId,
-      this.submittedViaClientId
+      this.submittedViaClientId,
+      this.artifactDecisions,
+      this.idempotencyKeyHash
     );
   }
 
@@ -344,7 +389,9 @@ export class Proposal {
       reason?.trim() ?? null,
       this.contentDigest,
       this.submittedByPrincipalId,
-      this.submittedViaClientId
+      this.submittedViaClientId,
+      this.artifactDecisions,
+      this.idempotencyKeyHash
     );
   }
 
@@ -369,13 +416,69 @@ export class Proposal {
       this.rejectionReason,
       this.contentDigest,
       this.submittedByPrincipalId,
-      this.submittedViaClientId
+      this.submittedViaClientId,
+      this.artifactDecisions,
+      this.idempotencyKeyHash
     );
   }
 
   get groups(): string[] {
     return [this.category, ...this.tags];
   }
+}
+
+function normalizeArtifactDecisions(decisions: ProposalArtifactDecision[]): ProposalArtifactDecision[] {
+  const normalized = decisions.map((item, index) => {
+    const reference = item.reference?.trim();
+    const rationale = item.rationale?.trim();
+    const source = item.source?.trim() || null;
+    const target = item.target?.trim().replace(/\\/g, '/') || null;
+    if (!reference) {
+      throw new ValidationError(`Artifact decision ${index} requires a reference`);
+    }
+    if (!rationale) {
+      throw new ValidationError(`Artifact decision ${reference} requires a rationale`);
+    }
+    if (!['external_service_or_capability', 'local_portable_artifact', 'ambiguous_dependency'].includes(item.classification)) {
+      throw new ValidationError(`Artifact decision ${reference} has an invalid classification`);
+    }
+    if (!['include_portably', 'keep_external_prerequisite', 'remove_or_rewrite_dependency'].includes(item.decision)) {
+      throw new ValidationError(`Artifact decision ${reference} has an invalid decision`);
+    }
+    if (!['explicit_user_choice', 'policy_default'].includes(item.confirmation)) {
+      throw new ValidationError(`Artifact decision ${reference} has an invalid confirmation`);
+    }
+    if (item.classification !== 'external_service_or_capability' && item.confirmation !== 'explicit_user_choice') {
+      throw new ValidationError(`Artifact decision ${reference} requires explicit_user_choice confirmation`);
+    }
+    if (item.classification === 'external_service_or_capability' && item.decision !== 'keep_external_prerequisite') {
+      throw new ValidationError(`External service decision ${reference} must use keep_external_prerequisite`);
+    }
+    if (item.decision === 'include_portably' && !target) {
+      throw new ValidationError(`Artifact decision ${reference} requires a package-relative target`);
+    }
+    if (target && (target.startsWith('/') || target.startsWith('../') || target.includes('/../'))) {
+      throw new ValidationError(`Artifact decision ${reference} target must be package-relative`);
+    }
+    return {
+      reference,
+      classification: item.classification,
+      decision: item.decision,
+      confirmation: item.confirmation,
+      source,
+      target,
+      rationale,
+    };
+  });
+  const references = new Set<string>();
+  for (const decision of normalized) {
+    const key = decision.reference.replace(/\\/g, '/').toLowerCase();
+    if (references.has(key)) {
+      throw new ValidationError(`Duplicate artifact decision for ${decision.reference}`);
+    }
+    references.add(key);
+  }
+  return normalized;
 }
 
 function generateProposalId(): string {

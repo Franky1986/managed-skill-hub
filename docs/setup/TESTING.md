@@ -164,12 +164,12 @@ node apps/api/dist/server.js
 
 The frontend is served by the same `npm run dev`/start flow in local development.
 For a production-bundle preview after a build, set
-`FRONTEND_START_MODE=preview` before running `scripts/restart-server.sh`.
+`FRONTEND_START_MODE=preview` before running `scripts/deployment/restart-server.sh`.
 
 ## 5. Automated Smoke Test
 
 ```bash
-bash scripts/smoke-test.sh
+bash scripts/development/smoke-test.sh
 ```
 
 This script:
@@ -184,7 +184,7 @@ This script:
 To include a real non-noop judgement provider:
 
 ```bash
-EXPECT_REAL_JUDGER=true bash scripts/smoke-test.sh
+EXPECT_REAL_JUDGER=true bash scripts/development/smoke-test.sh
 ```
 
 Prerequisites:
@@ -199,19 +199,19 @@ The lightweight deterministic proof scripts run as part of `./scripts/check.sh` 
 
 | Script | Proof artifacts | Purpose |
 |---|---|---|
-| `scripts/check-agent-auth-matrix.ts` | `.tmp/agent-auth-matrix.log/json` | Auth route-group permutations |
-| `scripts/check-oidc-provider.ts` | `.tmp/oidc-provider.log/json` | Real local discovery/JWKS, access-token, rotation, and outage behavior |
-| `scripts/check-judger-autopublish-matrix.ts` | `.tmp/judger-autopublish-matrix.log/json` | Judger availability and auto-publish safety permutations |
-| `scripts/check-agent-contract.ts` | `.tmp/agent-contract.log/json` | Discovery, how-to-propose, setup-script contract consistency |
-| `scripts/check-admin-ui-smoke.ts` | `.tmp/admin-ui-smoke.log/json` | Lightweight source-contract proof for admin/public UI wiring |
-| `scripts/check-openapi-parity.ts` | `.tmp/openapi-parity.log/json` | Implemented agent-facing routes vs. OpenAPI |
-| `scripts/check-provider-matrix.ts` | `.tmp/provider-matrix.log/json` | SQLite provider subset by default; full SQLite/MySQL matrix in the MySQL full-check gate |
-| `scripts/check-provider-cutover.ts` | `.tmp/provider-cutover.log/json` | SQLite-to-MySQL cutover proof in the MySQL full-check gate |
-| `scripts/check-skill-package-downloads.ts` | `.tmp/skill-package-downloads.log/json` | Published skill package download behavior |
-| `scripts/check-proposal-lifecycle.ts` | `.tmp/proposal-lifecycle.log/json` | Agent proposal upload/finalize/admin conversion lifecycle |
-| `scripts/check-concurrency-abuse.ts` | `.tmp/concurrency-abuse.log/json` | Proposal state guards and malformed package path rejection |
-| `scripts/check-observability-audit.ts` | `.tmp/observability-audit.log/json` | Observability exports and audit evidence |
-| `scripts/check-public-release-hygiene.sh` | `.tmp/public-release-hygiene.log/json` | Public release metadata, secrets, private files, and history hygiene |
+| `scripts/checks/check-agent-auth-matrix.ts` | `.tmp/agent-auth-matrix.log/json` | Auth route-group permutations |
+| `scripts/checks/check-oidc-provider.ts` | `.tmp/oidc-provider.log/json` | Real local discovery/JWKS, access-token, rotation, and outage behavior |
+| `scripts/checks/check-judger-autopublish-matrix.ts` | `.tmp/judger-autopublish-matrix.log/json` | Judger availability and auto-publish safety permutations |
+| `scripts/checks/check-agent-contract.ts` | `.tmp/agent-contract.log/json` | Discovery, how-to-propose, setup-script contract consistency |
+| `scripts/checks/check-admin-ui-smoke.ts` | `.tmp/admin-ui-smoke.log/json` | Lightweight source-contract proof for admin/public UI wiring |
+| `scripts/checks/check-openapi-parity.ts` | `.tmp/openapi-parity.log/json` | Implemented agent-facing routes vs. OpenAPI |
+| `scripts/checks/check-provider-matrix.ts` | `.tmp/provider-matrix.log/json` | SQLite provider subset by default; full SQLite/MySQL matrix in the MySQL full-check gate |
+| `scripts/checks/check-provider-cutover.ts` | `.tmp/provider-cutover.log/json` | SQLite-to-MySQL cutover proof in the MySQL full-check gate |
+| `scripts/checks/check-skill-package-downloads.ts` | `.tmp/skill-package-downloads.log/json` | Published skill package download behavior |
+| `scripts/checks/check-proposal-lifecycle.ts` | `.tmp/proposal-lifecycle.log/json` | Agent proposal upload/finalize/admin conversion lifecycle |
+| `scripts/checks/check-concurrency-abuse.ts` | `.tmp/concurrency-abuse.log/json` | Proposal state guards and malformed package path rejection |
+| `scripts/checks/check-observability-audit.ts` | `.tmp/observability-audit.log/json` | Observability exports and audit evidence |
+| `scripts/checks/check-public-release-hygiene.sh` | `.tmp/public-release-hygiene.log/json` | Public release metadata, secrets, private files, and history hygiene |
 
 Extended checks are grouped under:
 
@@ -242,7 +242,7 @@ combinations and generate `.tmp/agent-auth-matrix.log` plus
 
 ### Deterministic And Real OIDC Proofs
 
-`scripts/check-oidc-provider.ts` binds a local loopback provider and runs the
+`scripts/checks/check-oidc-provider.ts` binds a local loopback provider and runs the
 production verifier against real `openid-client` discovery and `jose` remote
 JWKS behavior. It proves Authentik-shaped access tokens, independently validates
 a realistic `typ=JWT` ID token with `at_hash`, rejects that valid ID token as an
@@ -256,13 +256,13 @@ from one Token Endpoint response. See `docs/setup/AUTHENTIK.md`.
 
 ### Judger And Auto-Publish Matrix
 
-`./scripts/check.sh` also runs `scripts/check-judger-autopublish-matrix.ts`.
+`./scripts/check.sh` also runs `scripts/checks/check-judger-autopublish-matrix.ts`.
 It validates deterministic noop, green, risky, classifier-blocked, classifier-failed, and missing-classifier cases without external LLM calls.
 Successful runs generate `.tmp/judger-autopublish-matrix.log` and `.tmp/judger-autopublish-matrix.json`.
 
 ### Admin UI Smoke Proof
 
-`./scripts/check.sh` runs `scripts/check-admin-ui-smoke.ts` as a lightweight
+`./scripts/check.sh` runs `scripts/checks/check-admin-ui-smoke.ts` as a lightweight
 source-contract proof. It validates public routes outside the admin guard,
 simple/OIDC login wiring, session-expiry guidance, role routes and actions,
 authenticated-only navigation, config-aware setup UI, not-judged proposal
@@ -272,7 +272,7 @@ Successful runs generate `.tmp/admin-ui-smoke.log` and `.tmp/admin-ui-smoke.json
 #
 ## Content Migration
 
-`scripts/check-content-migration.ts` proves deterministic filesystem-to-database migration against an isolated `DATA_DIR`. It creates a filesystem-backed skill/proposal fixture, runs `scripts/migrate-content-to-database.ts`, reopens the same data directory in database-content mode, verifies migrated aggregates/files/audits, and verifies source filesystem artifacts were not deleted.
+`scripts/checks/check-content-migration.ts` proves deterministic filesystem-to-database migration against an isolated `DATA_DIR`. It creates a filesystem-backed skill/proposal fixture, runs `scripts/content/migrate-content-to-database.ts`, reopens the same data directory in database-content mode, verifies migrated aggregates/files/audits, and verifies source filesystem artifacts were not deleted.
 
 Artifacts:
 
@@ -285,7 +285,7 @@ This proof is part of `./scripts/check.sh`.
 
 ## Content Export
 
-`scripts/check-content-export.ts` proves deterministic database-to-filesystem export against isolated data directories. It creates a SQLite database-content source fixture, runs `scripts/export-content-filesystem.ts` into a separate target `DATA_DIR`, reopens the target in filesystem mode, and verifies skill/proposal aggregates, raw files, nested paths, extracted content, skill-scoped audit entries, and global audit entries.
+`scripts/checks/check-content-export.ts` proves deterministic database-to-filesystem export against isolated data directories. It creates a SQLite database-content source fixture, runs `scripts/content/export-content-filesystem.ts` into a separate target `DATA_DIR`, reopens the target in filesystem mode, and verifies skill/proposal aggregates, raw files, nested paths, extracted content, skill-scoped audit entries, and global audit entries.
 
 The export command requires `CONTENT_EXPORT_DATA_DIR`, refuses to write into the active `DATA_DIR`, and refuses to overwrite an existing target unless `CONTENT_EXPORT_OVERWRITE=true` is set.
 
@@ -300,7 +300,7 @@ This proof is part of `./scripts/check.sh`.
 
 ## Content Storage Matrix
 
-`scripts/check-content-storage-matrix.ts` proves that filesystem-backed content storage and SQLite database-backed content storage are black-box equivalent for the covered public API and download paths. It creates the same published skill fixture in both modes, compares scrubbed JSON responses, compares direct file bytes, compares package ZIP bytes, and verifies database mode does not create managed `data/skills` or `data/proposals` directories.
+`scripts/checks/check-content-storage-matrix.ts` proves that filesystem-backed content storage and SQLite database-backed content storage are black-box equivalent for the covered public API and download paths. It creates the same published skill fixture in both modes, compares scrubbed JSON responses, compares direct file bytes, compares package ZIP bytes, and verifies database mode does not create managed `data/skills` or `data/proposals` directories.
 
 Artifacts:
 
@@ -311,7 +311,7 @@ This proof is part of `./scripts/check.sh` for filesystem/sqlite versus database
 
 ## Provider Matrix
 
-`./scripts/check.sh` runs `scripts/check-provider-matrix.ts` in default mode and proves the `sqlite/sqlite` public read path without Docker.
+`./scripts/check.sh` runs `scripts/checks/check-provider-matrix.ts` in default mode and proves the `sqlite/sqlite` public read path without Docker.
 
 For the full local provider matrix, run:
 
@@ -325,29 +325,29 @@ Successful runs generate `.tmp/provider-matrix.log` and `.tmp/provider-matrix.js
 
 ### Skill Package Downloads
 
-`./scripts/check.sh` runs `scripts/check-skill-package-downloads.ts` to prove that agents can download published skill versions deterministically.
+`./scripts/check.sh` runs `scripts/checks/check-skill-package-downloads.ts` to prove that agents can download published skill versions deterministically.
 It validates direct single-file `SKILL.md` downloads, multi-file ZIP downloads, blocked draft versions, and unknown-skill 404 behavior.
 Successful runs generate `.tmp/skill-package-downloads.log` and `.tmp/skill-package-downloads.json`.
 
 ### Concurrency And Abuse Proof
 
-`./scripts/check.sh` runs `scripts/check-concurrency-abuse.ts` to prove that repeated proposal state transitions and malformed package paths fail safely.
+`./scripts/check.sh` runs `scripts/checks/check-concurrency-abuse.ts` to prove that repeated proposal state transitions and malformed package paths fail safely.
 It validates double-finalize, upload-after-finalize, double-convert, traversal path rejection, valid path normalization, duplicate upload rejection, HTTP file count and size limits, concurrent projection rebuild stability, and package-download validation errors for unsafe adapter paths.
 Successful runs generate `.tmp/concurrency-abuse.log` and `.tmp/concurrency-abuse.json`.
 
 ### Proposal Lifecycle Proof
 
-`./scripts/check.sh` runs `scripts/check-proposal-lifecycle.ts` against an isolated SQLite-backed `.tmp` data directory. It validates how-to guidance, deterministic similar duplicate candidates, proposal creation, blocked dependency uploads, broken local reference blocking, file upload, finalization, proposal/file judgement creation, public status, admin conversion, draft non-public visibility, admin publish, admin rejection, and state-blocked delete behavior.
+`./scripts/check.sh` runs `scripts/checks/check-proposal-lifecycle.ts` against an isolated SQLite-backed `.tmp` data directory. It validates how-to guidance, deterministic similar duplicate candidates, proposal creation, blocked dependency uploads, broken local reference blocking, file upload, finalization, proposal/file judgement creation, public status, admin conversion, draft non-public visibility, admin publish, admin rejection, and state-blocked delete behavior.
 
 ### Observability And Audit Proof
 
-`./scripts/check.sh` runs `scripts/check-observability-audit.ts` to prove that deterministic request observations and audit entries produce operator-visible evidence.
+`./scripts/check.sh` runs `scripts/checks/check-observability-audit.ts` to prove that deterministic request observations and audit entries produce operator-visible evidence.
 It validates retrieval, proposal, auth, review, publish, and observability evidence, proposal-scoped recent requests, JSON and CSV observability exports, and audit entries for submit, attach, finalize, convert, publish, reject, and projection rebuild actions.
 Successful runs generate `.tmp/observability-audit.log` and `.tmp/observability-audit.json`.
 
 ### Backup And Restore Proof
 
-`./scripts/full-check.sh` runs `scripts/check-backup-restore.ts` with `MSH_SKIP_ENV=true` and `MSH_SKIP_STOP=true` against `.tmp/backup-restore-proof/data`.
+`./scripts/full-check.sh` runs `scripts/checks/check-backup-restore.ts` with `MSH_SKIP_ENV=true` and `MSH_SKIP_STOP=true` against `.tmp/backup-restore-proof/data`.
 It validates archive creation, restore completion, restored skill/proposal/audit/projection data, and creation of a pre-restore safety copy.
 Successful runs generate `.tmp/backup-restore.log` and `.tmp/backup-restore.json`.
 
@@ -654,11 +654,11 @@ curl -s -X POST \
 
 ```bash
 # Create backup
-bash scripts/backup.sh
+bash scripts/operations/backup.sh
 
 # Run restore; replace <backup> with the generated path
 ls -1 data/backups/*.tar.gz | tail -n 1
-bash scripts/restore.sh data/backups/managed-skill-hub-data-...
+bash scripts/operations/restore.sh data/backups/managed-skill-hub-data-...
 ```
 
 ## 12. Troubleshooting

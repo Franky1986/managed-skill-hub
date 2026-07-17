@@ -144,7 +144,7 @@ Consumers may work with multiple ManagedSkillHub instances at the same time, for
 ## Typical agent read flow
 
 ```bash
-# 1. Categories
+# 1. Category suggestions and tags
 GET /api/categories
 GET /api/tags
 
@@ -161,6 +161,10 @@ GET /api/skills/<skill-id>
 # 5. Files
 GET /api/skills/<skill-id>/files
 ```
+
+`GET /categories` is not an allowlist. It returns category values currently
+used by published skills. Prefer a listed category when it fits, but a proposal
+may use a concise new category because the category policy is open.
 
 Use version-aware package download to get a deterministic local artifact:
 
@@ -214,44 +218,59 @@ Local proposal agents must do more than `check-duplicate`:
 12. Infer which local artifacts the skill actually depends on by reading
     `SKILL.md`, adjacent docs, scripts, examples, templates, assets, prompts,
     fixtures, and setup files together
-13. Upload those required local artifacts as part of the proposal package;
+13. Preserve required artifacts already inside the effective skill root as part
+    of the proposal package;
     examples include templates, example manifests, images, PDFs, PPTX files,
     prompt files, and fixture data when the skill depends on them
 14. Detect references that point outside the effective skill root, such as
     parent-directory references, absolute local paths, IDE/agent workspace
-    folders, command folders, generated-output folders, or other
-    project-root-relative paths. If such a reference points to a required
-    artifact, copy that artifact into the temporary upload package and rewrite
-    the reference to its package-relative path before creating the proposal.
-15. Do not treat a local artifact as proprietary, optional, or external unless
+    folders, command folders, generated-output folders, bare slash commands,
+    or other project-root-relative paths.
+15. Classify Figma, Jira, MCP servers, external APIs, remote service data, and
+    user-selected repositories as external services/capabilities. Do not copy
+    the service, credentials, data, or tool installation into the package;
+    document the required access and fallback behavior instead.
+16. For every outside-root local command, reference, template, script, prompt,
+    fixture, or asset, show the user its source, why it appears required or
+    optional, and a concrete package-relative target.
+17. Offer `include_portably`, `keep_external_prerequisite`, and
+    `remove_or_rewrite_dependency`, recommend one option, explain the
+    portability impact, and wait for the user's explicit choice. The original
+    upload request is not authorization to decide this boundary silently.
+18. Apply the selected decision only in the temporary upload package. Do not
+    call `POST /proposals` or final-hash duplicate precheck while any local or
+    ambiguous dependency remains unresolved.
+19. Do not treat a local artifact as proprietary, optional, or external unless
     the skill explicitly documents it as an external prerequisite and the
     uploaded package remains truthful and usable without it
-16. Verify that relative references still resolve after normalization
-17. Verify that no required artifact reference still resolves outside the
+20. Verify that relative references still resolve after normalization
+21. Verify that no required artifact reference still resolves outside the
     temporary upload package root.
-18. Verify that every required local artifact is either included or explicitly
+22. Verify that every required local artifact is either included or explicitly
     documented as an external prerequisite
-19. Scan readable files for credentials, tokens, private keys and obvious PII
-20. Build the final temporary upload package before any proposal network write
-21. Recursively scan every readable file in that final package, not only
+23. Scan readable files for credentials, tokens, private keys and obvious PII
+24. Build the final temporary upload package before any proposal network write
+25. Recursively scan every readable file in that final package, not only
     `SKILL.md`
-22. Compute SHA-256 values from the final temporary upload package after all
+26. Compute SHA-256 values from the final temporary upload package after all
     normalization
-23. Inspect `/tags` when choosing proposal metadata or discovery filters
-24. Search `/skills/search` exploratively by title and short description intent
-25. Run `POST /proposals/check-duplicate` using metadata and hashes from the
+27. Inspect `/tags` when choosing proposal metadata or discovery filters
+28. Search `/skills/search` exploratively by title and short description intent
+29. Run `POST /proposals/check-duplicate` using metadata and hashes from the
     final temporary upload package
-26. If a duplicate is found, revisit whether using the existing skill, keeping
+30. If a duplicate is found, revisit whether using the existing skill, keeping
     the artifact local, or installing it locally is more useful. Only present
     upload resolution options after proposal intent remains confirmed.
-27. Stop for explicit confirmation if duplicates, ambiguity, missing required
+31. Stop for explicit confirmation if duplicates, ambiguity, missing required
     artifacts, or sensitive content is detected
-28. Keep the package within the runtime upload limits returned by
+32. Keep the package within the runtime upload limits returned by
     `GET /howToPropose`
-29. After the last file upload, call `POST /proposals/{id}/validate-upload`,
-    fix every finding in the temporary upload package, upsert changed files,
-    and repeat until `valid=true`
-30. Then call `POST /proposals/{id}/finalize-upload` explicitly
+33. After the last file upload, call `POST /proposals/{id}/validate-upload`,
+    inspect the JSON body, fix every blocking finding in the temporary upload
+    package, upsert changed files, and repeat until `valid=true`,
+    `canFinalize=true`, `blockingFindingCount=0`, and
+    `nextAction=finalize_upload`
+34. Only then call `POST /proposals/{id}/finalize-upload` explicitly
 
 The temporary normalization step is conditional:
 
@@ -262,9 +281,10 @@ The temporary normalization step is conditional:
   are part of the usable skill package.
 - If a runtime command path such as `.cursor/commands/foo.md`,
   `.codex/commands/foo.md`, or `.claude/commands/foo.md` is relevant to using
-  the skill, copy or merge that command into `commands/foo.md`, rewrite active
-  references to the package-relative command path, and add or merge
-  `commands/manifest.json` with runtime target hints.
+  the skill and the user chooses `include_portably`, copy or merge that command
+  into `commands/foo.md`, rewrite active references to the package-relative
+  command path, and add or merge `commands/manifest.json` with runtime target
+  hints.
 - Portable commands remain optional artifacts of the same skill package. They
   do not create a separate skill identity or justify a separate proposal by
   themselves.
@@ -281,6 +301,24 @@ The temporary normalization step is conditional:
 - Never rewrite the user workspace in place; only the temporary upload package may be changed.
 - Do not call `POST /proposals` until the temporary upload package is final,
   recursively scanned, and hashed.
+- Send the resolved artifact decisions in `artifactDecisions` when creating the
+  proposal. Each entry records the reference, classification, selected action,
+  confirmation source, optional source/target, and rationale. Local or
+  ambiguous dependencies require `confirmation=explicit_user_choice`.
+- Generate one stable `Idempotency-Key` for proposal creation and reuse it only
+  when retrying the same normalized draft. Never generate a new proposal merely
+  because a response was interrupted.
+- Keep exactly one active proposal id for one upload intent. Persist the id as
+  soon as `POST /proposals` returns and retain it across local rescans, user
+  clarifications, metadata corrections, newly discovered package files, and
+  recoverable validation errors.
+- If a create or upload response is interrupted or otherwise unclear, stop
+  state-changing calls and inspect `GET /proposals/{id}/status`. When the
+  proposal remains `in_upload`, call `validate-upload`, patch metadata, and
+  replace or add files on that same id.
+- Treat `409 PROPOSAL_UPLOAD_ALREADY_OPEN` as a recovery response. Read
+  `details.proposalId` and its supplied relative paths, then resume that upload.
+  Do not retry with a different idempotency key.
 - Treat server-side `validate-upload` as a final server check after local
   package proof, not as the first path/reference scanner.
 - Before proposal creation, scan all readable files in the final package for at
@@ -291,6 +329,10 @@ The temporary normalization step is conditional:
 - If a required artifact is missing, an outside-root reference is unexplained,
   or a command collision is unresolved, stop before `POST /proposals` and ask
   the user.
+- The question must list each local or ambiguous outside-root dependency and
+  propose a concrete target such as `commands/foo.md`, `references/foo.md`,
+  `scripts/foo.py`, or `assets/foo.png`. Known external services such as Figma
+  stay external and are described as prerequisites rather than upload files.
 - The agent should tell the submitter what was normalized and what the final server-side package structure will be.
 - The agent should also tell the submitter which local artifacts were treated as
   required and why, especially when non-code files such as `.pptx`, `.pdf`,
@@ -310,17 +352,24 @@ The temporary normalization step is conditional:
   temporary upload package and re-upload the corrected file with the same
   multipart `path`; do not create another proposal just to replace an open
   upload file.
+- Re-uploading every intended package file to the same relative paths is safe
+  when local and server state are uncertain: existing paths are replaced and
+  newly discovered paths are added. Validate the same proposal afterwards.
 - Before finalization, call `POST /proposals/{id}/validate-upload`. It returns
   structured package-reference findings without extracting, judging,
   finalizing, or changing proposal status. Fix every finding where
   `blocksFinalize=true` in the temporary upload package, upsert changed files,
-  and run validate-upload again until `valid=true`.
+  and run validate-upload again until `valid=true`, `canFinalize=true`,
+  `blockingFindingCount=0`, and `nextAction=finalize_upload`. A successful HTTP
+  status by itself does not permit finalization.
 - Validate-upload findings include `kind`, `severity`, `blocksFinalize`,
   `file`, `line`, `candidate`, and `suggestedReplacement` so the temporary
   upload package can be edited surgically. Runtime-output examples that use
   variable placeholders such as `{output}/screenshots/{name}.png` and
   documentation-only external references are not hard-blocking package-file
-  references. Portable command findings such as
+  references after the corresponding submitter decision has been persisted.
+  Missing or unapplied decisions are blocking findings. Portable command
+  findings such as
   `portable_command_missing`, `portable_command_reference`,
   `portable_command_manifest_missing`, and
   `portable_command_manifest_invalid` are guidance for packaging optional
@@ -493,7 +542,30 @@ No standalone client is required. Agents use the API directly using the contract
 
 ## What if a proposal needs to be corrected?
 
-An agent **cannot** update or delete an existing proposal. If the submitted proposal is incomplete or wrong, the agent can simply submit a new proposal. Only an admin decides which proposal to convert. The public status URL always reflects the exact proposal that was submitted.
+While a proposal is `in_upload`, its owner can patch metadata and artifact
+decisions with `PATCH /proposals/{id}`, replace files by uploading the same
+relative path, validate again, or intentionally abort it with
+`DELETE /proposals/{id}`. Do not create a second proposal for a recoverable
+upload. After finalization, public mutation and deletion are blocked; an admin
+controls review and conversion.
+
+## Safe HTTP execution
+
+Use one state-changing request at a time. Do not combine proposal creation,
+file uploads, validation, and finalization in one shell `&&` chain. Preserve
+both the response body and HTTP status so a structured error can be repaired:
+
+```bash
+BODY_FILE="$(mktemp)"
+# Add the Authorization header only when /discover advertises it for proposals.
+HTTP_STATUS="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' \
+  -X POST "$API/proposals/$PROPOSAL_ID/validate-upload")"
+cat "$BODY_FILE"
+```
+
+Do not use `curl -f` for JSON workflow endpoints: it hides the body on 4xx/5xx
+responses. Parse the validation body and only continue when all four gate
+fields permit finalization. Keep authorization values out of output and logs.
 
 ## Duplicate names, categories or content
 

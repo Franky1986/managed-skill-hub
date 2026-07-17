@@ -225,10 +225,10 @@ Build a fully functional self-hosted skill registry that:
 
 **Deliverables:**
 
-- `scripts/create-deploy-archive.sh` tested
-- `scripts/install_and_start.sh` tested
-- `scripts/restart-server.sh` tested
-- `scripts/backup.sh` and `scripts/restore.sh` present
+- `scripts/deployment/create-deploy-archive.sh` tested
+- `scripts/deployment/install_and_start.sh` tested
+- `scripts/deployment/restart-server.sh` tested
+- `scripts/operations/backup.sh` and `scripts/operations/restore.sh` present
 - documentation current
 
 ## Epic Acceptance Criteria

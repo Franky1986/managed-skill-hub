@@ -49,12 +49,26 @@ HTTP adapter for proposal operations.
 - Expose only aggregated proposal notices publicly.
 - Do not deliver proposal details on public path.
 - Return proposal creation responses that clearly state the upload is still
-  incomplete until finalization.
+  incomplete until finalization, expose status/validate/finalize URLs, and tell
+  agents to retain the proposal id for in-place recovery.
+- Accept an optional `Idempotency-Key` header on proposal creation and pass it
+  to the command use case so clients can safely retry without opening another
+  upload.
+- Map an existing matching owner upload to
+  `409 PROPOSAL_UPLOAD_ALREADY_OPEN`. The response includes the existing
+  proposal id, current file count, status/patch/upload/validate/finalize/delete
+  paths relative to `apiBaseUrl`, and explicit instructions to inspect and
+  repair that upload rather than create another proposal.
 - Return validate-upload responses that expose structured package-reference
   findings without finalizing, extracting, judging, or changing proposal
   status. Findings include `kind`, `severity`, `blocksFinalize`, `file`,
   `line`, `candidate`, and `suggestedReplacement`, including portable command
   guidance findings for runtime-specific command references.
+- Validate-upload responses expose the machine gate `canFinalize`,
+  `blockingFindingCount`, and `nextAction`. HTTP 2xx alone is not permission to
+  call finalize-upload.
+- Validation failures from finalize-upload retain the full error body and mark
+  the proposal as recoverable `in_upload`, with the next repair action.
 - Allow submitters to abort and delete proposals while they are still
   `in_upload`; public deletion after finalization is blocked.
 - Forward explicit upload completion to the command use case through
@@ -87,6 +101,7 @@ HTTP adapter for proposal operations.
 - Proposal file count exceeded -> 422
 - Proposal upload path blocked -> 422
 - Upload finalized/not open -> 409
+- Matching submitter upload already open -> 409 with resumable proposal id
 - Proposal API rate limit exceeded -> 429
 - Not found -> 404
 - Public error responses do not contain internal original error message
@@ -95,6 +110,9 @@ HTTP adapter for proposal operations.
 
 - Proposal upload creates UUID.
 - Proposal upload starts in `in_upload` and is not judged immediately.
+- A matching second create for the same owner and active upload intent is
+  rejected with `PROPOSAL_UPLOAD_ALREADY_OPEN`; clients must continue the
+  returned proposal id.
 - Proposal metadata can be corrected while the upload is still `in_upload`.
 - Files are correctly assigned to proposal.
 - Relative subfolder paths such as `scripts/build.py` are preserved when the

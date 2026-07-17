@@ -202,13 +202,17 @@ function buildDiscoveryResponse(
   const proposalPath = [
     '1) Read GET /howToPropose first (required).',
     '2) Communicate with the user in the language they are currently using, unless they explicitly ask for another language.',
-    `3) Validate the local package, enforce the current hard limits (${container.config.proposalMaxFiles} files max, ${container.config.proposalMaxFileSizeBytes} bytes per file max), and only normalize it when needed.`,
-    '4) The final package must use SKILL.md as root entrypoint, keep references self-contained, and exclude installed dependency directories such as node_modules, .venv, venv, vendor, dist-packages, or site-packages.',
-    '5) Prefer English for proposal metadata such as title, description, category, tags and capabilities; uploaded content files may be in any language.',
-    '6) Search public catalog for similar intent: GET /skills/search?q=<title-or-keywords>&mode=keyword.',
-    '7) Run precheck: POST /proposals/check-duplicate with title, description, category and final file hashes.',
-    '8) If duplicates, unclear intent, credentials or PII are detected, stop and ask for explicit confirmation or cleanup before continuing; for duplicates, name the matching candidate, summarize the overlap, summarize what would change, and include a concise diff before asking.',
-    '9) Only then create proposal: POST /proposals, attach files, run POST /proposals/{id}/validate-upload until valid=true, explicitly finalize upload through POST /proposals/{id}/finalize-upload, and then poll GET /proposals/{id}/status.',
+    `3) Inspect the local package and enforce the current hard limits (${container.config.proposalMaxFiles} files max, ${container.config.proposalMaxFileSizeBytes} bytes per file max).`,
+    '4) Classify outside-root dependencies before normalization: external services such as Figma, Jira, MCP servers, and remote APIs stay external; local commands, references, templates, scripts, prompts, fixtures, and assets require an explicit user decision.',
+    '5) For every local or ambiguous outside-root artifact, show its source, purpose, concrete package-relative target, portability impact, and a recommendation. Ask the user to choose include_portably, keep_external_prerequisite, or remove_or_rewrite_dependency before any proposal write.',
+    '6) Only after those choices, normalize the temporary package when needed. It must use SKILL.md as root entrypoint, keep references truthful and self-contained, and exclude installed dependency directories such as node_modules, .venv, venv, vendor, dist-packages, or site-packages.',
+    '7) Prefer English for proposal metadata such as title, description, category, tags and capabilities; uploaded content files may be in any language.',
+    '8) Search the public catalog for similar intent: GET /skills/search?q=<title-or-keywords>&mode=keyword.',
+    '9) Run precheck: POST /proposals/check-duplicate with title, description, category and final file hashes.',
+    '10) If outside-root handling, duplicates, intent, credentials, or PII remain unresolved, stop and ask for explicit confirmation or cleanup before continuing.',
+    '11) Before POST /proposals, check whether this conversation or a previous uncertain request already produced a proposal id. If so, GET /proposals/{id}/status and continue that in_upload proposal; PATCH metadata and replace or add files on the same id.',
+    '12) Only when no upload exists, create the proposal once with a stable Idempotency-Key. Persist its id immediately. If creation is retried, reuse the exact same key and body. A 409 PROPOSAL_UPLOAD_ALREADY_OPEN means resume the proposalId in error.details, never submit another proposal.',
+    '13) Attach files one request at a time and run POST /proposals/{id}/validate-upload until valid=true, canFinalize=true, blockingFindingCount=0, and nextAction=finalize_upload. On uncertainty, check status and validate this same id before doing anything else. Only then finalize and poll GET /proposals/{id}/status.',
   ].join(' ');
 
   const authMetadata = agentAuth.metadata();
@@ -229,6 +233,7 @@ function buildDiscoveryResponse(
     discoveryAuthRequired: authMetadata.discoveryAuthRequired,
     authSchemes: authMetadata.authSchemes,
     agentHttpGuidance,
+    proposalWorkflow: buildProposalWorkflow(),
     documentation: {
       human: 'https://github.com/frankrichter/managed-skill-hub/blob/main/docs/product/AGENT_BOOTSTRAP.md',
       openapi: url('/openapi.yaml'),
@@ -452,12 +457,20 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
     title: 'Proposal workflow for agents',
     summary: 'Mandatory preflight before submit',
     description:
-      'Read this endpoint before every proposal upload. Agents must communicate with the user in the language the user is currently using, clarify whether the user wants to use an existing skill, keep or install an artifact locally, improve an existing skill, or publish reusable registry content, explain whether a proposal adds meaningful registry value, and only then prepare a confirmed proposal. Proposal preparation includes validating the local package, normalizing it only when needed, ensuring SKILL.md is the root entrypoint, keeping meaningful relative subfolders intact, excluding dependency installation artifacts, identifying every required local artifact, verifying self-contained references, scanning for credentials/PII, and completing duplicate prechecks before submission.',
+      'Read this endpoint before every proposal upload. Agents must communicate with the user in the language the user is currently using, clarify whether the user wants to use an existing skill, keep or install an artifact locally, improve an existing skill, or publish reusable registry content, explain whether a proposal adds meaningful registry value, and only then prepare a confirmed proposal. Proposal preparation includes validating the local package, classifying outside-root dependencies, asking the user how local or ambiguous commands and references should be handled, keeping external services such as Figma outside the package, normalizing only after those decisions, ensuring SKILL.md is the root entrypoint, keeping meaningful relative subfolders intact, excluding dependency installation artifacts, verifying self-contained references, scanning for credentials/PII, and completing duplicate prechecks before submission.',
     conversationLanguage:
       'When communicating with the user, use the language the user is currently using unless the user explicitly asks for another language.',
     metadataLanguageGuidance:
       'Proposal metadata should preferably be written in English: title, description, category, tags, capabilities, useWhen and doNotUseWhen. Uploaded content files may be in any language.',
     agentHttpGuidance,
+    proposalWorkflow: buildProposalWorkflow(),
+    categoryPolicy: {
+      policy: 'open',
+      customCategoriesAllowed: true,
+      listEndpoint: '/categories',
+      listContains: 'suggestions derived from categories currently used by published skills',
+      instruction: 'Use an existing category when it fits. Otherwise submit a concise new category; never treat GET /categories as an allowlist.',
+    },
     proposalIntentDecision: {
       requiredBeforePackagePreparation: true,
       outcomes: [
@@ -481,6 +494,54 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         'Ask before copying command files into Cursor, Codex, Claude Code, or another runtime folder. The skill must remain usable through SKILL.md when optional commands are not installed.',
         'The presence of a command file alone does not make a public proposal worthwhile.',
       ],
+    },
+    externalArtifactDecision: {
+      requiredBeforeProposalCreation: true,
+      classifications: [
+        {
+          id: 'external_service_or_capability',
+          examples: ['Figma', 'Jira', 'MCP servers', 'external APIs', 'user-selected source repositories'],
+          action:
+            'Do not copy the service, credentials, remote data, or tool installation into the skill package. Keep it outside the package and document the required capability, access, and fallback behavior as an external prerequisite.',
+        },
+        {
+          id: 'local_portable_artifact',
+          examples: ['command files', 'reference documents', 'templates', 'scripts', 'prompts', 'fixtures', 'images', 'PDF or PPTX assets'],
+          action:
+            'If the skill needs the local artifact, propose a package-relative destination and ask the user whether to include it portably, keep it as an explicit external prerequisite, or remove/rewrite the dependency.',
+        },
+        {
+          id: 'ambiguous_dependency',
+          examples: ['bare slash commands', 'runtime-specific names without a file path', 'adjacent files with unclear ownership', 'references whose necessity cannot be proven'],
+          action:
+            'Stop and ask the user. Do not silently classify the dependency as optional, historical, proprietary, or external.',
+        },
+      ],
+      decisionOptions: [
+        {
+          id: 'include_portably',
+          action:
+            'Copy or merge the required local artifact into the temporary package, preserve its contents, rewrite references package-relatively, and add or update package metadata such as commands/manifest.json when applicable.',
+        },
+        {
+          id: 'keep_external_prerequisite',
+          action:
+            'Do not copy the artifact. Rewrite the package so it truthfully names the external prerequisite, required access/location, portability limitation, and behavior when the prerequisite is unavailable.',
+        },
+        {
+          id: 'remove_or_rewrite_dependency',
+          action:
+            'Remove the dependency or rewrite the workflow so SKILL.md and its packaged resources remain complete without it.',
+        },
+      ],
+      requiredUserFacingProposal: [
+        'List every local or ambiguous outside-root dependency before upload, including bare slash commands that may map to adjacent command files.',
+        'For each dependency, state why it appears required or optional, its current source location when known, and the concrete package-relative destination you recommend.',
+        'Explain the effect of each decision option on portability and runtime behavior.',
+        'Recommend one option, but wait for the user to choose. A general request to upload the skill is not confirmation of how outside-root artifacts should be handled.',
+      ],
+      confirmationRule:
+        'When any local or ambiguous outside-root dependency exists, ask the user to choose include_portably, keep_external_prerequisite, or remove_or_rewrite_dependency before POST /proposals. Do not create a proposal, upload files, or silently rewrite away the dependency until the choice is explicit. Known external services such as Figma, Jira, MCP servers, and remote APIs are not uploaded; disclose them as external prerequisites and ask only when their role or necessity is ambiguous.',
     },
     requiredSteps: [
       ...authSetupStep,
@@ -527,8 +588,10 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
           'Inspect SKILL.md, adjacent docs, commands, scripts, examples, templates, assets, and setup files together to infer which local artifacts are actually required for the skill to work as described.',
           'Treat referenced local templates, example manifests, fixture files, prompts, images, PDFs, PPTX files, and other non-code assets as required proposal artifacts when the skill depends on them for execution, demonstration, or reproducible output.',
           'Detect references that point outside the effective skill root, for example parent-directory references, absolute local paths, IDE/agent workspace folders, command folders, generated-output folders, or other project-root-relative paths.',
-          'If an outside-root reference points to an artifact needed by the skill, build a temporary upload package that copies that artifact into the package and rewrites the reference to the new package-relative path before any POST /proposals call.',
-          'If a runtime-specific command reference such as .cursor/commands/foo.md, .codex/commands/foo.md, or .claude/commands/foo.md is relevant to using the skill, copy or merge it into commands/foo.md and add commands/manifest.json with runtime target hints.',
+          'Inspect bare slash commands such as /foo as possible references to adjacent runtime command files; do not assume that the absence of an explicit file path makes them self-contained.',
+          'Classify Figma, Jira, MCP servers, external APIs, remote data, and user-selected repositories as external services or capabilities. Never copy credentials, service data, or tool installations into the package.',
+          'Classify commands, references, templates, scripts, prompts, fixtures, and assets found outside the skill root as local portable artifacts or ambiguous dependencies.',
+          'For each plausible runtime command file, record a proposed package target such as commands/foo.md and whether commands/manifest.json would need a new or merged entry; do not apply that proposal before user confirmation.',
           'If the source package already contains commands/, preserve it. Merge command metadata when safe, compare colliding command filenames, and stop for user input instead of silently overwriting existing command artifacts.',
           'Keep dependency manifests and lockfiles when they document setup, but do not upload installed package trees.',
           'Do not classify a local runtime artifact as proprietary, optional, or external unless the skill explicitly documents that it is an external prerequisite and the uploaded package remains truthful and usable without it.',
@@ -538,6 +601,19 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
       },
       {
         step: 5 + stepOffset,
+        title: 'Resolve outside-root artifacts with the user',
+        purpose: 'The submitter decides what becomes portable package content and what remains an external prerequisite.',
+        checks: [
+          'Build an inventory of every local or ambiguous dependency outside the effective skill root before creating a proposal.',
+          'Do not propose uploading external services or capabilities such as Figma, Jira, MCP servers, remote APIs, credentials, or remote service data. Document the required access and fallback behavior instead.',
+          'For every local command, reference, template, script, prompt, fixture, or asset, show the source location, why it appears required or optional, and a concrete package-relative target such as commands/foo.md, references/foo.md, scripts/foo.py, or assets/foo.png.',
+          'Offer the choices include_portably, keep_external_prerequisite, and remove_or_rewrite_dependency, explain their portability impact, and recommend one choice.',
+          'Ask the user to choose. The original upload request does not authorize the agent to decide how outside-root artifacts are handled.',
+          'Do not call POST /proposals or POST /proposals/check-duplicate with final package hashes until all local or ambiguous dependencies have an explicit user decision.',
+        ],
+      },
+      {
+        step: 6 + stepOffset,
         title: 'Normalize only when needed',
         purpose: 'Every uploaded proposal package must arrive with SKILL.md in the root.',
         checks: [
@@ -552,7 +628,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 6 + stepOffset,
+        step: 7 + stepOffset,
         title: 'Prefer English proposal metadata',
         purpose: 'Keep registry discovery useful across teams and agents while allowing content files in any language.',
         checks: [
@@ -562,7 +638,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 7 + stepOffset,
+        step: 8 + stepOffset,
         title: 'Validate self-contained and safe content',
         purpose: 'The package must work on its own and must not leak secrets or personal data.',
         checks: [
@@ -575,7 +651,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 8 + stepOffset,
+        step: 9 + stepOffset,
         title: 'Build and prove the final upload package before network upload',
         purpose: 'Avoid server-driven repair loops by proving the exact temporary package before creating a proposal.',
         checks: [
@@ -584,14 +660,14 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
           'At minimum, scan for workspace and agent-runtime paths: .cursor/skills/, .cursor/commands/, .codex/commands/, .claude/commands/, CursorProjects/, /Users/, parent-directory references such as ../, and absolute paths.',
           'Extract Markdown inline-code paths, Markdown links, and JSON path/source fields that look like local files; verify every required package reference exists in the final package.',
           'For runtime output examples, prefer variable placeholders such as {output}/screenshots/{name}.png instead of concrete missing filenames.',
-          'For relevant outside-root command shortcuts, copy or merge command files into commands/ and add or merge commands/manifest.json before computing hashes.',
+          'For outside-root command shortcuts that the user explicitly chose to include portably, copy or merge command files into commands/ and add or merge commands/manifest.json before computing hashes.',
           'If any required artifact is missing, any outside-root reference is unexplained, or any command collision is unresolved, stop before POST /proposals and ask the user.',
           'Compute sha256 for the final temporary upload package after normalization. Use these final hashes for duplicate check and upload; do not compute duplicate-check hashes from the original source when a temp package exists.',
           'Do not call POST /proposals until this final package proof is complete.',
         ],
       },
       {
-        step: 9 + stepOffset,
+        step: 10 + stepOffset,
         title: 'Search the public catalog exploratively',
         purpose: 'Avoid duplicate public skills with the same title or intent.',
         checks: [
@@ -603,7 +679,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 10 + stepOffset,
+        step: 11 + stepOffset,
         title: 'Run duplicate precheck',
         purpose: 'Compare final metadata and file hashes with existing proposals and published skills.',
         checks: [
@@ -619,26 +695,32 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         ],
       },
       {
-        step: 11 + stepOffset,
+        step: 12 + stepOffset,
         title: 'Create proposal only after confirmation',
         purpose: 'Upload only when the final package is valid and no blocking ambiguity remains.',
         checks: [
           'Before this step, the final temporary upload package must already be complete, locally scanned, normalized, and hashed.',
+          'Maintain exactly one active proposal id for this upload intent. Before POST /proposals, inspect any proposal id already returned during the conversation with GET /proposals/{id}/status.',
           'POST /proposals',
+          'Send a stable Idempotency-Key derived from the upload intent and reuse the exact same key and request body after a timeout, connection loss, or unclear response.',
+          'Persist the returned proposal id immediately. Never discard it because a later local scan discovers another file or metadata correction.',
+          'If POST /proposals returns 409 PROPOSAL_UPLOAD_ALREADY_OPEN, read details.proposalId, GET its status, and resume it. Do not retry with a new key or create another proposal.',
           'If submitter-side post-checks require metadata corrections while the proposal is still in_upload, call PATCH /proposals/{id} instead of creating another proposal.',
           'Then POST /proposals/{id}/files for each file and send multipart path=<relative package path> whenever the file belongs in a subfolder.',
           'While the proposal is still in_upload, re-uploading the same relative path replaces that file; use this for post-check corrections instead of creating another proposal.',
           'Then POST /proposals/{id}/validate-upload and fix every returned finding with blocksFinalize=true in the temporary upload package before finalization.',
           'Validate-upload findings include kind, severity, blocksFinalize, file, line, candidate, and suggestedReplacement; variable placeholder runtime-output paths such as {output}/screenshots/{name}.png, documentation-only external references, and portable command guidance findings are not hard-blocking package references.',
           'Then POST /proposals/{id}/finalize-upload to mark the package complete and start proposal/file judgements.',
-          'Finalization is mandatory: always call finalize-upload, even if validate-upload reported findings or if judgements fail. Never leave a proposal in in_upload. If you cannot finalize, delete the proposal with DELETE /proposals/{id} instead of abandoning it.',
-          'Verify the next status response contains uploadFinalized: true. If it does not, retry finalize-upload once after a short delay or delete the proposal.',
+          'Call finalize-upload only after validate-upload returns valid=true, canFinalize=true, blockingFindingCount=0, and nextAction=finalize_upload. A 2xx validation response alone does not authorize finalization.',
+          'If validation reports repair_package or upload_files, keep the same in_upload proposal, patch metadata or decisions and replace/upload files, then validate again. Delete the proposal only when the upload is intentionally abandoned.',
+          'If the result of create, upload, patch, validation, or finalization is uncertain, stop mutation calls, GET /proposals/{id}/status, then POST /proposals/{id}/validate-upload when status is in_upload. Re-uploading all intended files to their same relative paths is safe and replaces them in place.',
+          'After a successful finalization response, verify uploadFinalized=true. Retrying the same finalize call is safe only when status confirms that the previous request did not complete.',
           'Tell the submitter which temporary normalizations were applied, which installed dependency folders were excluded, and what the final server-side structure looks like, including preserved subfolders.',
           'GET /proposals/{id}/status for review state. Distinguish proposal status (in_upload, submitted, judged, converted, rejected) from skill status (draft, in_review, approved, published). Converted means a skill draft was created; it is only public after the skill version is published.',
         ],
       },
       {
-        step: 12 + stepOffset,
+        step: 13 + stepOffset,
         title: 'Download published skill packages per version',
         purpose: 'Get deterministic artifacts for local consumption and validation.',
         checks: [
@@ -651,7 +733,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
       },
     ],
     escalationRule:
-      'Do not proceed with proposal creation while the user outcome or registry value is unresolved, the package is structurally ambiguous, referenced local artifacts are missing or unjustifiably omitted, references are broken, sensitive content is present, or duplicate intent is unconfirmed. Ask the submitter to choose an outcome, confirm the proposal value, or clean up first.',
+      'Do not proceed with proposal creation while the user outcome or registry value is unresolved, any local or ambiguous outside-root dependency lacks an explicit user decision, the package is structurally ambiguous, referenced local artifacts are missing or unjustifiably omitted, references are broken, sensitive content is present, or duplicate intent is unconfirmed. Ask the submitter to choose an outcome, resolve each artifact boundary, confirm the proposal value, or clean up first.',
     duplicateConfirmationRule: {
       strongSimilarityThreshold: container.config.autoPublishSimilarityThreshold,
       appliesWhen: [
@@ -709,6 +791,8 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         'SKILL.md exists in the final package root.',
         'Every required package-relative file reference exists in the final package.',
         'No required reference still points outside the final package root.',
+        'Every local or ambiguous outside-root dependency has an explicit user decision and the final package implements that choice.',
+        'External services such as Figma, Jira, MCP servers, and remote APIs are documented as prerequisites rather than copied into the package.',
         'Runtime output examples use placeholders instead of concrete missing files.',
         'Relevant runtime command shortcuts are copied or merged into commands/ with commands/manifest.json.',
         'Final sha256 values are computed from the temporary upload package after normalization.',
@@ -733,7 +817,7 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
       required: true,
       finalizeEndpoint: 'POST /proposals/{id}/finalize-upload',
       cleanupEndpoint: 'DELETE /proposals/{id}',
-      note: 'Finalization is mandatory and must not be skipped. If the upload cannot be completed, delete the proposal instead of leaving it in_upload.',
+      note: 'Finalization is mandatory for a completed upload, but it is permitted only after validate-upload returns canFinalize=true. Repair recoverable in_upload proposals in place; delete only when intentionally abandoning them.',
       statusFollowUp: container.config.autoPublishOnGreen
         ? 'After upload finalization, poll GET /proposals/{id}/status. If the proposal is fully green and not blocked, it will be converted into a skill and the skill version will be published automatically. If auto-publish is skipped or blocked, the proposal remains as a judged/converted draft awaiting a human admin decision.'
         : 'After upload finalization, poll GET /proposals/{id}/status. The proposal moves to submitted/judged and waits for a human admin to convert it into a skill draft, approve the version, and publish it. Only the status converted + a populated convertedSkillId means a draft exists; the skill is public only when a published version exists.',
@@ -775,6 +859,39 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
   };
 }
 
+function buildProposalWorkflow() {
+  return {
+    version: '1.1',
+    executionMode: 'sequential_state_machine',
+    activeUploadInvariant: {
+      maximumActiveProposalIdsPerIntent: 1,
+      instruction: 'Keep exactly one active proposal id per upload intent. Recover and modify it in place until it is finalized or intentionally deleted.',
+      uncertainStateRecovery: 'Stop creating proposals. GET the known proposal status; if it is in_upload, validate it, PATCH metadata as needed, and replace or add files on the same id.',
+      conflictCode: 'PROPOSAL_UPLOAD_ALREADY_OPEN',
+      conflictRecovery: 'Use details.proposalId from the 409 response as the active upload and follow the returned recovery paths.',
+    },
+    rules: [
+      'Execute one state-changing request at a time. Do not combine proposal creation, uploads, validation, and finalization into one shell && chain.',
+      'Persist the proposal id immediately after creation and reuse the same in_upload proposal for every recoverable correction, newly discovered package file, and metadata change.',
+      'Before creating, inspect any proposal id already returned in the current task. After an ambiguous response, status-check and validate the known proposal before any create retry.',
+      'Retry proposal creation only with the exact same Idempotency-Key and body. Never switch to a new key to escape an uncertain response or conflict.',
+      'Inspect both the HTTP status and parsed JSON body after every request.',
+      'Never continue from validation merely because the HTTP status is 2xx.',
+    ],
+    steps: [
+      { id: 'discover', method: 'GET', path: '/discover', success: 'HTTP 2xx and structurally valid discovery response', next: 'read_how_to_propose' },
+      { id: 'read_how_to_propose', method: 'GET', path: '/howToPropose', success: 'HTTP 2xx and proposalWorkflow.version is supported', next: 'resolve_artifacts' },
+      { id: 'resolve_artifacts', method: 'LOCAL', path: null, success: 'Every local or ambiguous outside-root dependency has an explicit persisted decision', next: 'duplicate_check' },
+      { id: 'duplicate_check', method: 'POST', path: '/proposals/check-duplicate', success: 'HTTP 2xx and duplicate policy is resolved with the user', next: 'create_proposal' },
+      { id: 'create_proposal', method: 'POST', path: '/proposals', success: 'HTTP 201 with proposal id persisted as the only active upload id', next: 'upload_files', recovery: 'On ambiguity, inspect the known id or retry the exact request with the same Idempotency-Key and body. On 409 PROPOSAL_UPLOAD_ALREADY_OPEN, resume details.proposalId; do not create another proposal.' },
+      { id: 'upload_files', method: 'POST', path: '/proposals/{id}/files', success: 'HTTP 2xx for every intended package file', next: 'validate_upload', recovery: 'Keep the same proposal id. Replace the same relative paths, add newly discovered files, and validate again.' },
+      { id: 'validate_upload', method: 'POST', path: '/proposals/{id}/validate-upload', success: 'HTTP 2xx AND valid=true AND canFinalize=true AND blockingFindingCount=0 AND nextAction=finalize_upload', next: 'finalize_upload', recovery: 'When nextAction is upload_files or repair_package, repair the same proposal and validate again.' },
+      { id: 'finalize_upload', method: 'POST', path: '/proposals/{id}/finalize-upload', success: 'HTTP 2xx AND uploadFinalized=true', next: 'poll_status', recovery: 'On a validation error, inspect details.findings and return to repair_package; never hide the response body.' },
+      { id: 'poll_status', method: 'GET', path: '/proposals/{id}/status', success: 'HTTP 2xx and uploadFinalized=true', next: null },
+    ],
+  };
+}
+
 function buildAgentHttpGuidance(authMetadata: ReturnType<AgentApiAuth['metadata']>) {
   const baseUrl = authMetadata.apiBaseUrl.replace(/\/+$/, '');
   const authorization = {
@@ -793,7 +910,21 @@ function buildAgentHttpGuidance(authMetadata: ReturnType<AgentApiAuth['metadata'
       `Download the resolved published package with GET ${baseUrl}/skills/{skillId}/package?version=<published-version>. Omit version only when the latest published version is intended.`,
     ],
     proposalExecution:
-      'Use the same network-capable client for GET /howToPropose and all proposal API calls. The frontend or an admin session is not part of the agent proposal workflow unless the live discovery contract explicitly advertises it.',
+      'Use the same network-capable client for GET /howToPropose and all proposal API calls. Maintain exactly one active proposal id per upload intent. On uncertainty or PROPOSAL_UPLOAD_ALREADY_OPEN, inspect and resume that id instead of creating another proposal. The frontend or an admin session is not part of the agent proposal workflow unless the live discovery contract explicitly advertises it.',
+    responseHandling: {
+      required: true,
+      rules: [
+        'Do not use curl -f for JSON workflow endpoints because it suppresses the structured error body agents need for recovery.',
+        'Capture the response body and HTTP status separately, parse the JSON body, and only then decide whether to continue.',
+        'Do not run the complete proposal lifecycle as one && chain. A partial failure must leave the proposal id and response body available for repair or cleanup.',
+        'Write the proposal id and Idempotency-Key to local task state immediately after creation. A newly discovered file, changed metadata, validation finding, timeout, or lost response is not a reason to call POST /proposals with a new key.',
+        'When state is unclear, stop mutations and inspect GET /proposals/{id}/status. If status is in_upload, call validate-upload, then PATCH metadata and replace or add files on the same id as required.',
+        'Treat 409 PROPOSAL_UPLOAD_ALREADY_OPEN as a successful recovery pointer: use details.proposalId and the supplied paths; do not create a parallel upload.',
+        'Redact Authorization values and never print credentials, bearer tokens, session codes, or secrets.',
+      ],
+      shellPattern: 'BODY_FILE="$(mktemp)"; HTTP_STATUS="$(curl -sS -o "$BODY_FILE" -w "%{http_code}" <METHOD_AND_URL>)"; cat "$BODY_FILE"; test "$HTTP_STATUS" -ge 200 && test "$HTTP_STATUS" -lt 300',
+      validationGate: 'Continue to finalize-upload only when HTTP status is 2xx and the JSON body has valid=true, canFinalize=true, blockingFindingCount=0, and nextAction=finalize_upload.',
+    },
     authenticationDiagnosis: [
       'Evaluate authentication independently for discovery, public-read, and proposal operations by using discoveryAuthRequired, readAuthRequired, proposalAuthRequired, and authSchemes.',
       'Do not infer public-read or proposal authentication from /admin/session, an admin UI login, a frontend response, a redirect, or the status of another endpoint.',
@@ -803,19 +934,19 @@ function buildAgentHttpGuidance(authMetadata: ReturnType<AgentApiAuth['metadata'
     authorization,
     curlExamples: {
       discover: {
-        command: `curl -fsSL "${baseUrl}/discover"`,
+        command: `curl -sSL "${baseUrl}/discover"`,
         authArea: 'discovery',
         authorizationRequired: authMetadata.discoveryAuthRequired,
       },
       search: {
         command:
-          `curl -fsSL --get --data-urlencode "q=<name-or-keywords>" --data-urlencode "mode=keyword" "${baseUrl}/skills/search"`,
+          `curl -sSL --get --data-urlencode "q=<name-or-keywords>" --data-urlencode "mode=keyword" "${baseUrl}/skills/search"`,
         authArea: 'public-read',
         authorizationRequired: authMetadata.readAuthRequired,
       },
       download: {
         command:
-          `curl -fSL -OJ "${baseUrl}/skills/{skillId}/package?version=<published-version>"`,
+          `curl -sSL -OJ "${baseUrl}/skills/{skillId}/package?version=<published-version>"`,
         authArea: 'public-read',
         authorizationRequired: authMetadata.readAuthRequired,
       },
@@ -972,7 +1103,14 @@ export function registerSkillReadRoutes(
 
   app.get('/categories', publicReadGuard, async (_request, reply) => {
     const items = await container.skillQuery.listCategories();
-    return reply.send({ items });
+    return reply.send({
+      items,
+      policy: 'open',
+      itemsAreSuggestions: true,
+      customCategoriesAllowed: true,
+      source: 'published_skills',
+      instruction: 'Use an existing category when it fits; otherwise submit a concise new category. This list is not an allowlist.',
+    });
   });
 
   app.get('/tags', publicReadGuard, async (_request, reply) => {

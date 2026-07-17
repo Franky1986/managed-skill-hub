@@ -62,6 +62,18 @@ export class ProposalDisallowedPathError extends DomainError {
     super(`Proposal file path ${filePath} is blocked by upload policy.`);
   }
 }
+export class ProposalUploadAlreadyOpenError extends ConflictError {
+  constructor(
+    public readonly proposalId: string,
+    public readonly skillId: string | null,
+    public readonly fileCount: number,
+    public readonly reason: 'matching_open_upload' | 'idempotency_content_changed'
+  ) {
+    super(
+      `Proposal ${proposalId} is already open for this submitter. Inspect and repair the existing upload instead of creating another proposal.`
+    );
+  }
+}
 export class ProposalUploadNotOpenError extends DomainError {
   constructor(
     public readonly proposalId: string,

@@ -12,6 +12,7 @@ import { AuditEntry } from '../../../../domain/audit/AuditEntry';
 import { deriveJudgementExecutionStatus } from '../../judgement/judgement-execution-status';
 
 interface ProposalReadAugmentation {
+  artifactDecisions: Proposal['artifactDecisions'];
   uploadFinalized: boolean;
   fileCount: number;
   maxFiles: number;
@@ -71,6 +72,7 @@ export function mapProposalToDetail(
     tags: proposal.tags,
     capabilities: proposal.capabilities,
     entrypoint: proposal.entrypoint,
+    artifactDecisions: augmentation.artifactDecisions,
     status: proposal.status,
     createdAt: proposal.createdAt,
     submittedBy: proposal.submittedBy,
@@ -178,6 +180,7 @@ export function mapCatalogProposalToDetail(
     tags: proposal.tags,
     capabilities: proposal.capabilities,
     entrypoint: proposal.entrypoint,
+    artifactDecisions: augmentation.artifactDecisions,
     status: proposal.status,
     createdAt: proposal.createdAt,
     submittedBy: proposal.submittedBy,

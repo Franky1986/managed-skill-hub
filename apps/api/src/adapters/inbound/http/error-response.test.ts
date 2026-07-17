@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { AgentAuthRequiredError, ConfigurationError, ForbiddenError, JudgerUnavailableError, ValidationError } from '../../../domain/errors';
+import {
+  AgentAuthRequiredError,
+  ConfigurationError,
+  ForbiddenError,
+  JudgerUnavailableError,
+  ProposalUploadAlreadyOpenError,
+  ValidationError,
+} from '../../../domain/errors';
 import { sendMappedApiError } from './error-response';
 
 function createReplyStub() {
@@ -59,6 +66,40 @@ describe('error-response', () => {
       code: 'FORBIDDEN',
       requestId: 'req-123',
     });
+  });
+
+  it('returns a machine-readable resume path for a matching open proposal upload', () => {
+    const request = createRequestStub({ url: '/proposals' });
+    const { reply, state } = createReplyStub();
+
+    sendMappedApiError(
+      reply,
+      request,
+      new ProposalUploadAlreadyOpenError(
+        'prop-existing',
+        'product-concept-validation',
+        5,
+        'matching_open_upload'
+      )
+    );
+
+    expect(state.statusCode).toBe(409);
+    expect(state.payload).toMatchObject({
+      code: 'PROPOSAL_UPLOAD_ALREADY_OPEN',
+      details: {
+        proposalId: 'prop-existing',
+        skillId: 'product-concept-validation',
+        proposalStatus: 'in_upload',
+        fileCount: 5,
+        recoverable: true,
+        nextAction: 'inspect_existing_upload',
+        statusPath: '/proposals/prop-existing/status',
+        validatePath: '/proposals/prop-existing/validate-upload',
+      },
+    });
+    expect(
+      ((state.payload as { details: { recovery: string[] } }).details.recovery).join(' ')
+    ).toContain('Do not call POST /proposals again');
   });
 
   it('hides original unexpected errors on public routes', () => {

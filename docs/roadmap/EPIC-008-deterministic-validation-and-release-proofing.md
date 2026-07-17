@@ -45,8 +45,8 @@ leaving auditable artifacts.
 
 The first deterministic proof exists for EPIC-007:
 
-- Script: `scripts/check-agent-auth-matrix.ts`
-- Spec: `scripts/check-agent-auth-matrix.spec.md`
+- Script: `scripts/checks/check-agent-auth-matrix.ts`
+- Spec: `scripts/checks/check-agent-auth-matrix.spec.md`
 - Artifacts: `.tmp/agent-auth-matrix.log`, `.tmp/agent-auth-matrix.json`
 - Covered by: `./scripts/check.sh`
 
@@ -90,19 +90,19 @@ Required fixture rules:
 
 The lightweight baseline currently includes:
 
-- `scripts/check-agent-auth-matrix.ts`: static bearer auth permutation proof.
-- `scripts/check-judger-autopublish-matrix.ts`: judger and auto-publish safety matrix proof.
-- `scripts/check-agent-contract.ts`: discovery/how-to/setup-script consistency proof.
-- `scripts/check-admin-ui-smoke.ts`: lightweight admin/public UI source-contract smoke proof.
-- `scripts/check-openapi-parity.ts`: implemented agent-facing route vs. OpenAPI proof.
-- `scripts/check-provider-matrix.ts`: provider matrix proof; SQLite subset runs in the lightweight check and MySQL combinations run through the optional full-check MySQL gate.
-- `scripts/check-provider-cutover.ts`: SQLite-to-MySQL cutover proof with post-cutover write validation.
-- `scripts/check-skill-package-downloads.ts`: published skill package download proof.
-- `scripts/check-proposal-lifecycle.ts`: proposal upload, finalization, status, admin conversion, and draft visibility proof.
-- `scripts/check-observability-audit.ts`: observability exports and file-backed audit proof.
-- `scripts/check-backup-restore.ts`: backup and restore script proof with isolated data.
-- `scripts/check-concurrency-abuse.ts`: proposal state guard and unsafe package path proof.
-- `scripts/check-public-release-hygiene.sh`: public release hygiene proof.
+- `scripts/checks/check-agent-auth-matrix.ts`: static bearer auth permutation proof.
+- `scripts/checks/check-judger-autopublish-matrix.ts`: judger and auto-publish safety matrix proof.
+- `scripts/checks/check-agent-contract.ts`: discovery/how-to/setup-script consistency proof.
+- `scripts/checks/check-admin-ui-smoke.ts`: lightweight admin/public UI source-contract smoke proof.
+- `scripts/checks/check-openapi-parity.ts`: implemented agent-facing route vs. OpenAPI proof.
+- `scripts/checks/check-provider-matrix.ts`: provider matrix proof; SQLite subset runs in the lightweight check and MySQL combinations run through the optional full-check MySQL gate.
+- `scripts/checks/check-provider-cutover.ts`: SQLite-to-MySQL cutover proof with post-cutover write validation.
+- `scripts/checks/check-skill-package-downloads.ts`: published skill package download proof.
+- `scripts/checks/check-proposal-lifecycle.ts`: proposal upload, finalization, status, admin conversion, and draft visibility proof.
+- `scripts/checks/check-observability-audit.ts`: observability exports and file-backed audit proof.
+- `scripts/checks/check-backup-restore.ts`: backup and restore script proof with isolated data.
+- `scripts/checks/check-concurrency-abuse.ts`: proposal state guard and unsafe package path proof.
+- `scripts/checks/check-public-release-hygiene.sh`: public release hygiene proof.
 - `scripts/full-check.sh`: extended-check entrypoint with optional smoke and MySQL gates.
 
 ## Proof Script Details And Backlog
@@ -111,7 +111,7 @@ The lightweight baseline currently includes:
 
 Implemented script:
 
-`scripts/check-provider-matrix.ts`
+`scripts/checks/check-provider-matrix.ts`
 
 Purpose:
 
@@ -151,7 +151,7 @@ Default execution:
 
 Proposed script:
 
-`scripts/check-judger-autopublish-matrix.ts`
+`scripts/checks/check-judger-autopublish-matrix.ts`
 
 Purpose:
 
@@ -186,7 +186,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-proposal-lifecycle.ts`
+`scripts/checks/check-proposal-lifecycle.ts`
 
 Purpose:
 
@@ -216,7 +216,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-skill-package-downloads.ts`
+`scripts/checks/check-skill-package-downloads.ts`
 
 Purpose:
 
@@ -245,7 +245,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-agent-contract.ts`
+`scripts/checks/check-agent-contract.ts`
 
 Purpose:
 
@@ -270,7 +270,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-public-release-hygiene.sh`
+`scripts/checks/check-public-release-hygiene.sh`
 
 Purpose:
 
@@ -296,7 +296,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-backup-restore.ts`
+`scripts/checks/check-backup-restore.ts`
 
 Purpose:
 
@@ -307,7 +307,7 @@ Required checks:
 
 - Create deterministic skills, proposals, judgements, audit entries, and public
   projections in an isolated `DATA_DIR`.
-- Run `scripts/backup.sh`.
+- Run `scripts/operations/backup.sh`.
 - Restore into a fresh isolated `DATA_DIR`.
 - Verify API parity after restore.
 - Verify projections can be rebuilt after restore.
@@ -322,7 +322,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-openapi-parity.ts`
+`scripts/checks/check-openapi-parity.ts`
 
 Purpose:
 
@@ -346,7 +346,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-admin-ui-smoke.ts`
+`scripts/checks/check-admin-ui-smoke.ts`
 
 Purpose:
 
@@ -373,7 +373,7 @@ Artifacts:
 
 Proposed script:
 
-`scripts/check-observability-audit.ts`
+`scripts/checks/check-observability-audit.ts`
 
 Purpose:
 
@@ -401,7 +401,7 @@ Artifacts:
 
 Implemented script:
 
-`scripts/check-provider-cutover.ts`
+`scripts/checks/check-provider-cutover.ts`
 
 Purpose:
 
@@ -435,7 +435,7 @@ Execution:
 
 Proposed script:
 
-`scripts/check-concurrency-abuse.ts`
+`scripts/checks/check-concurrency-abuse.ts`
 
 Purpose:
 

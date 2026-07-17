@@ -3,6 +3,7 @@ import { JudgementDto } from './judgement.dto';
 import { JudgementOverallRisk } from '../../domain/judgement/Judgement';
 import { ReviewLabel } from '../usecases/proposal/review-metadata';
 import { JudgementExecutionStatus } from '../usecases/judgement/judgement-execution-status';
+import { ProposalArtifactDecision } from '../../domain/proposal/Proposal';
 
 export interface ProposalReviewDto {
   latestJudgementRisk: JudgementOverallRisk | null;
@@ -68,6 +69,7 @@ export interface ProposalDetailDto {
   tags: string[];
   capabilities: string[];
   entrypoint: string | null;
+  artifactDecisions: ProposalArtifactDecision[];
   status: ProposalStatus;
   createdAt: Date;
   submittedBy: string;
@@ -127,10 +129,15 @@ export interface ProposalAdminUpdateRequestDto {
 
 export interface ProposalSubmissionResponseDto {
   id: string;
+  status: ProposalStatus;
+  uploadFinalized: boolean;
   message: string;
   statusUrl: string;
   checkUrl: string;
+  validateUploadUrl: string;
   finalizeUploadUrl: string;
+  nextAction: 'upload_or_replace_files' | 'poll_status';
+  recoveryRule: string;
 }
 
 export interface ProposalFinalizeUploadResponseDto {

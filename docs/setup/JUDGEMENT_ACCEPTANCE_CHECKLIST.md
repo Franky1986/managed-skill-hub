@@ -33,7 +33,7 @@ Notes:
    RUN_ID='judge-YYYY-MM-DD-NN'
    RUN_DIR=".tmp/judgement-acceptance/$RUN_ID"
    mkdir -p "$RUN_DIR"
-   bash scripts/restart-all.sh restart | tee "$RUN_DIR/start.log"
+   bash scripts/development/restart-all.sh restart | tee "$RUN_DIR/start.log"
    cp .tmp/restart-all.log "$RUN_DIR/server.log"
    ```
 

@@ -36,7 +36,7 @@ Authorization behavior, use
 
 Do not test OIDC by placing Authentik credentials or tokens into agent prompts.
 Use the trusted clickable link and provider-defined polling. Normal CI uses
-`scripts/check-oidc-provider.ts`; real staging uses the explicit gate described
+`scripts/checks/check-oidc-provider.ts`; real staging uses the explicit gate described
 in the setup playbook.
 
 ## Provider Profiles
@@ -152,13 +152,13 @@ node apps/api/dist/server.js
 
 ```bash
 cd /path/to/managed-skill-hub
-bash scripts/start-mysql-stack.sh up
+bash scripts/development/start-mysql-stack.sh up
 ```
 
 2. Verify services are running:
 
 ```bash
-bash scripts/start-mysql-stack.sh status
+bash scripts/development/start-mysql-stack.sh status
 ```
 
 3. Configure env and start for full MySQL:
@@ -184,7 +184,7 @@ node apps/api/dist/server.js
 4. Open phpMyAdmin at `http://127.0.0.1:33308` if you need DB visibility.
 
 5. Start the API from the repository root with `node apps/api/dist/server.js` after
-   `npm run build:prod` or with the standard workspace start flow `bash scripts/restart-all.sh`.
+   `npm run build:prod` or with the standard workspace start flow `bash scripts/development/restart-all.sh`.
 
 ### Troubleshooting phpMyAdmin host errors
 
@@ -193,7 +193,7 @@ a stale/old container name is still being used. Recreate the shared stack:
 
 ```bash
 docker rm -f $(docker ps -aq --filter "name=managed-skill-hub-mysql") || true
-bash scripts/start-mysql-stack.sh up
+bash scripts/development/start-mysql-stack.sh up
 ```
 
 If your environment still needs a custom database name, keep `MYSQL_DATABASE`
@@ -288,7 +288,7 @@ If auto-publish is enabled and no blocker exists, expect
 For a full quick check in one mode, you can run:
 
 ```bash
-bash scripts/smoke-test.sh
+bash scripts/development/smoke-test.sh
 ```
 
 Then repeat for the second provider profile to compare:
@@ -311,7 +311,7 @@ API_URL=http://localhost:3040 \
 CATALOG_PROVIDER=sqlite \
 SEARCH_PROVIDER=sqlite \
 DATA_DIR=/tmp/msh-sqlite-test \
-bash scripts/smoke-test.sh
+bash scripts/development/smoke-test.sh
 
 # MySQL mode
 API_URL=http://localhost:3040 \
@@ -324,8 +324,8 @@ MYSQL_USER=managed_skill_hub \
 MYSQL_PASSWORD=valpass \
 MYSQL_SSL_MODE=disabled \
 DATA_DIR=/tmp/msh-mysql-test \
-bash scripts/smoke-test.sh
+bash scripts/development/smoke-test.sh
 ```
 
-Because `scripts/smoke-test.sh` starts/stops the API, run the second block after the first
+Because `scripts/development/smoke-test.sh` starts/stops the API, run the second block after the first
 command has completed.

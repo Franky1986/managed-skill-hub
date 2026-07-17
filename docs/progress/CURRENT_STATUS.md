@@ -2,7 +2,7 @@
 
 ## Current Date
 
-2026-07-16
+2026-07-17
 
 ## Project State
 
@@ -16,6 +16,20 @@ external entry point.
 
 The API declares `jszip` directly for PPTX extraction, so clean server installs
 can reproduce the production build without relying on a hoisted local module.
+
+Agent proposal clients receive a versioned sequential workflow from both
+`/discover` and `/howToPropose`. Validation exposes an explicit finalization
+gate, proposal creation supports retry-safe idempotency keys, and persisted
+artifact decisions prevent silent omission or rewriting of outside-root local
+dependencies. Published category values are suggestions under an open category
+policy, not a server allowlist.
+
+Proposal workflow version `1.1` enforces one active `in_upload` proposal per
+owner and upload intent. A repeated matching create returns
+`PROPOSAL_UPLOAD_ALREADY_OPEN` with the existing proposal id and recovery
+paths. Agents are instructed to status-check and validate uncertain uploads,
+then patch metadata and replace or add files on the same proposal instead of
+opening another aggregate.
 
 The restart helper supports `FRONTEND_START_MODE=preview` for deployments: after
 `npm run build:prod`, the frontend serves the built `apps/web/dist` bundle via
@@ -39,8 +53,13 @@ committed release archive and checksum, upload explicit artifacts through an
 operator-owned non-secret SSH profile, and provide one deployment-root
 `service.sh` for start, stop, status, health, logs, and resolved configuration.
 Internal targets, reverse-proxy files, private adapters, and secrets remain
-outside Git. Existing top-level development, validation, migration, and
-operations commands remain stable and are classified in `scripts/README.md`.
+outside Git. Repository automation is grouped by responsibility below
+`scripts/checks`, `content`, `deployment`, `development`, `lib`, `operations`,
+and `security`; only `check.sh` and `full-check.sh` remain stable top-level
+orchestrators. The ownership map is documented in `scripts/README.md`.
+The tracked password-hash helper reads credentials interactively from standard
+input, while `.env.secrets.example` documents local BCrypt and random JWT
+secret generation without embedding secret values.
 The deployment blueprint normalizes upload artifacts to absolute paths, works
 with or without an SSH port on Bash 3.2, constrains remote target syntax, and
 rejects parent traversal plus symbolic links in managed deployment path
@@ -83,7 +102,7 @@ environment-specific and is not yet accepted.
 
 ## EPIC-009 Database-Backed Content Storage
 
-EPIC-009 is implemented for the first relational storage stage. `CONTENT_STORAGE_PROVIDER` is parsed and wired; filesystem remains the default. Database-backed content storage works for SQLite and MySQL provider modes for skill files, proposal files, extracts, aggregate state, and audit entries. `scripts/check-content-storage-matrix.ts` proves runtime parity for SQLite in `./scripts/check.sh`; `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` extends runtime parity to MySQL. `scripts/migrate-content-to-database.ts` and `scripts/export-content-filesystem.ts` provide copy-only two-way lifecycle operations with deterministic proof coverage for skills, proposals, files, extracts, scoped audits, global audits, and source preservation. Backup/restore docs and scripts distinguish filesystem, SQLite database-content, and MySQL database-content modes; MySQL database-content `DATA_DIR`-only backups fail fast.
+EPIC-009 is implemented for the first relational storage stage. `CONTENT_STORAGE_PROVIDER` is parsed and wired; filesystem remains the default. Database-backed content storage works for SQLite and MySQL provider modes for skill files, proposal files, extracts, aggregate state, and audit entries. `scripts/checks/check-content-storage-matrix.ts` proves runtime parity for SQLite in `./scripts/check.sh`; `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` extends runtime parity to MySQL. `scripts/content/migrate-content-to-database.ts` and `scripts/content/export-content-filesystem.ts` provide copy-only two-way lifecycle operations with deterministic proof coverage for skills, proposals, files, extracts, scoped audits, global audits, and source preservation. Backup/restore docs and scripts distinguish filesystem, SQLite database-content, and MySQL database-content modes; MySQL database-content `DATA_DIR`-only backups fail fast.
 
 ## EPIC-007 Configurable Agent API Authentication
 
@@ -308,7 +327,7 @@ EPIC-006 is implemented:
   MySQL requests cannot join another request's transaction, while SQLite queues
   outside operations around its shared async transaction connection.
 - Local MySQL bootstrap is documented via `.docker/mysql-stack.yml` and
-  `scripts/start-mysql-stack.sh`, with `restart-all.sh` now validating local MySQL
+  `scripts/development/start-mysql-stack.sh`, with `restart-all.sh` now validating local MySQL
   reachability before API startup in MySQL mode.
 
 ## EPIC-001
@@ -443,6 +462,11 @@ EPIC-005 is implemented:
   Existing `commands/` folders are preserved, missing `commands/manifest.json`
   is a non-blocking warning, and manifest source inconsistencies are reported
   without blocking finalization.
+- `/howToPropose` now exposes a mandatory outside-root artifact decision gate.
+  External services such as Figma remain prerequisites rather than package
+  files; local or ambiguous commands, references, templates, scripts, prompts,
+  fixtures, and assets require a concrete packaging proposal and the user's
+  explicit include/external/remove choice before proposal creation.
 - Proposal APIs are rate-limited in-memory per authenticated proposal bearer
   actor or IP, and production startup requires `PROPOSAL_AUTH_MODE=bearer`
   unless `ALLOW_OPEN_PROPOSALS_IN_PRODUCTION=true` is explicitly configured.

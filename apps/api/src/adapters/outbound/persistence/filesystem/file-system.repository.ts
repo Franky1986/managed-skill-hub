@@ -3,7 +3,11 @@ import path from 'path';
 import * as yaml from 'js-yaml';
 import { SkillRepositoryPort } from '../../../../application/ports/outbound/skill-repository.port';
 import { StorageError } from '../../../../domain/errors';
-import { Proposal, ProposalFile } from '../../../../domain/proposal/Proposal';
+import {
+  Proposal,
+  ProposalArtifactDecision,
+  ProposalFile,
+} from '../../../../domain/proposal/Proposal';
 import {
   Judgement,
   JudgementDimension,
@@ -49,6 +53,8 @@ interface ProposalYaml {
   submittedBy: string;
   submittedByPrincipalId?: string | null;
   submittedViaClientId?: string | null;
+  artifactDecisions?: ProposalArtifactDecision[];
+  idempotencyKeyHash?: string | null;
   createdAt: string;
   rejectionReason?: string | null;
   contentDigest?: string | null;
@@ -189,6 +195,8 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
       submittedBy: proposal.submittedBy,
       submittedByPrincipalId: proposal.submittedByPrincipalId,
       submittedViaClientId: proposal.submittedViaClientId,
+      artifactDecisions: proposal.artifactDecisions,
+      idempotencyKeyHash: proposal.idempotencyKeyHash,
       createdAt: proposal.createdAt.toISOString(),
       rejectionReason: proposal.rejectionReason,
       contentDigest: proposal.contentDigest,
@@ -247,6 +255,8 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
         submittedBy: doc.submittedBy,
         submittedByPrincipalId: doc.submittedByPrincipalId ?? null,
         submittedViaClientId: doc.submittedViaClientId ?? null,
+        artifactDecisions: doc.artifactDecisions ?? [],
+        idempotencyKeyHash: doc.idempotencyKeyHash ?? null,
         createdAt: new Date(doc.createdAt),
         rejectionReason: doc.rejectionReason ?? null,
         contentDigest: doc.contentDigest ?? null,
