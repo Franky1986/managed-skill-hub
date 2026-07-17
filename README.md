@@ -160,37 +160,43 @@ preview until its real-tenant acceptance gate is recorded.
 ```bash
 cd /path/to/managed-skill-hub
 
-# 1. Install dependencies
-npm ci --legacy-peer-deps
+# 1. Run the interactive local installer and start the stack
+./install_dev.sh
+```
 
-# 2. Run checks
-./scripts/check.sh
+What the installer does:
 
-# 3. Create local configuration
-cp .env.example .env
-cp .env.secrets.example .env.secrets
-chmod 600 .env .env.secrets
+- copies `.env.example.simple` to `.env` when missing
+- copies `.env.secrets.example` to `.env.secrets` when missing
+- installs dependencies with `npm ci --legacy-peer-deps` when `node_modules` is absent
+- sets local safe defaults (`API_PREFIX=/api`, `VITE_API_BASE_URL=http://localhost:3040`, etc.)
+- prompts for `ADMIN_PASSWORD` (or `ADMIN_PASSWORD_HASH`) and writes `ADMIN_PASSWORD_HASH` to `.env.secrets`
+- optionally sets local judger defaults:
+  - default `JUDGER_PROVIDER=noop`
+  - or `vercel-ai-sdk` with default model `openai:gpt-4.1` and optional alternatives
+  - or custom judger adapter path
+- generates `JWT_SECRET` when missing
+- launches `./scripts/development/restart-all.sh`
 
-# Local simple-auth secret in .env.secrets:
-# ADMIN_PASSWORD=admin
-# Optional BCrypt hash:
-# node -e "console.log(require('bcryptjs').hashSync('admin', 10))"
+By default the installer uses the simple profile (`ADMIN_AUTH_MODE=simple`) with
+`JUDGER_PROVIDER=noop` and starts the full local dev stack.
 
-# 4. Start development servers
-# Option A: single command from repository root
-npm run dev
+You can stop it with:
 
-# Option B: start manually
-# Terminal 1:
-npm --workspace=apps/api run dev
+```bash
+./scripts/development/restart-all.sh stop
+```
 
-# Terminal 2:
-npm --workspace=apps/web run dev
+For manual startup without the wrapper:
+
+```bash
+npm run dev --workspace=apps/api
+npm run dev --workspace=apps/web
 ```
 
 - Frontend: http://localhost:3041
 - API: http://localhost:3040
-- Admin login: http://localhost:3041/admin/login
+- Admin login: http://localhost:3041/frontend/admin/login
 
 ## Automated Smoke Test
 
