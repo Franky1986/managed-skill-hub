@@ -94,16 +94,24 @@ The build creates:
 
 1. Create the layered root environment:
    ```bash
-   cp .env.example .env
+   cp .env.example.simple .env
    cp .env.secrets.example .env.secrets
    chmod 600 .env .env.secrets
-   # For local simple auth, set ADMIN_PASSWORD in .env.secrets.
+   # Set ADMIN_PASSWORD or ADMIN_PASSWORD_HASH and a random JWT_SECRET in
+   # .env.secrets before starting simple auth.
    ```
 
 2. Development mode:
    ```bash
    # Start both apps from repository root:
    npm run dev
+   ```
+
+   Direct workspace starts also load the same root environment:
+
+   ```bash
+   npm run dev --workspace=apps/api
+   npm run dev --workspace=apps/web
    ```
 
    Native modules such as `better-sqlite3` are built for the Node.js runtime
@@ -137,13 +145,19 @@ The build creates:
    ./scripts/development/restart-all.sh stop    # stop stack
    ./scripts/development/restart-all.sh status  # check status
    ./scripts/development/restart-all.sh restart # explicit restart
+   ./scripts/development/restart-all.sh foreground # supervised/agent shell
    ```
+
+   `foreground` is the reliable choice in sandboxes that terminate detached
+   child processes after a command returns. Normal host terminals can use the
+   background `start`/`restart` flow.
 
 URLs:
 
 - Frontend: http://localhost:3041
 - API: http://localhost:3040
-- Admin login: http://localhost:3041/admin/login
+- Admin login: http://localhost:3041/frontend/admin/login
+- Frontend API proxy: http://localhost:3041/api/discover
 
 ## Automated Testing
 

@@ -6,26 +6,18 @@ import { type LanguageCode, translate } from '../i18n';
 const configuredApiBase = (import.meta.env.VITE_API_BASE_URL ?? '/api').trim();
 const useApiProxy = import.meta.env.VITE_USE_API_PROXY !== 'false';
 
-function getApiBaseUrl(): string {
-  if (!configuredApiBase) {
+export function resolveApiBaseUrl(configuredBase: string, proxyEnabled: boolean): string {
+  if (proxyEnabled) {
     return '/api';
   }
 
-  if (/^https?:\/\//i.test(configuredApiBase) && typeof window !== 'undefined') {
-    try {
-      const parsed = new URL(configuredApiBase);
-      if (parsed.hostname && parsed.hostname !== window.location.hostname && useApiProxy) {
-        return '/api';
-      }
-    } catch {
-      return configuredApiBase;
-    }
+  if (!configuredBase) {
+    return '/api';
   }
-
-  return configuredApiBase;
+  return configuredBase;
 }
 
-const API_BASE_URL = getApiBaseUrl();
+const API_BASE_URL = resolveApiBaseUrl(configuredApiBase, useApiProxy);
 
 /**
  * Build a browser-loadable API URL while preserving an optional API prefix.
@@ -62,21 +54,30 @@ export function handleApiError(error: unknown, language: LanguageCode = 'en'): s
       code?: string;
       requestId?: string;
       originalError?: string;
-      details?: {
-        authRequired?: boolean;
-        authArea?: string;
-        authScheme?: string;
-        discoverUrl?: string;
-        recommendation?: string;
-      } | unknown;
+      details?:
+        | {
+            authRequired?: boolean;
+            authArea?: string;
+            authScheme?: string;
+            discoverUrl?: string;
+            recommendation?: string;
+          }
+        | unknown;
     }>;
     const payload = axiosError.response?.data;
     const code = payload?.code;
     const fallbackMessage = payload?.error ?? payload?.message ?? axiosError.message;
-    const message = code ? translate(language, `api.error.${code}`, {}, fallbackMessage) : fallbackMessage;
+    const message = code
+      ? translate(language, `api.error.${code}`, {}, fallbackMessage)
+      : fallbackMessage;
     const extras: string[] = [];
 
-    if (payload?.details && typeof payload.details === 'object' && 'authRequired' in payload.details && payload.details.authRequired) {
+    if (
+      payload?.details &&
+      typeof payload.details === 'object' &&
+      'authRequired' in payload.details &&
+      payload.details.authRequired
+    ) {
       const details = payload.details as { authArea?: string; recommendation?: string };
       extras.push(`auth area: ${details.authArea ?? 'agent-api'}`);
     }

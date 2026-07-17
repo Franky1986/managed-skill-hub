@@ -1,5 +1,14 @@
 # NEXT_STEPS
 
+## Local Development Startup
+
+- [x] Align the default local API prefix with the frontend `/api` boundary.
+- [x] Load root environment files for direct API and web workspace starts.
+- [x] Add detached process-group management, hard HTTP readiness, and an
+      attached agent-shell mode to `restart-all.sh`.
+- [x] Repeat the complete setup from a dependency-installed clean checkout
+      using only the documented `.env` and `.env.secrets` initialization.
+
 ## Agent Retrieval Contract
 
 - [x] Expose generic network-context, retrieval-order, and endpoint-specific

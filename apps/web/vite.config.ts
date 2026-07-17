@@ -3,7 +3,21 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 
-const API_BASE_URL = process.env.VITE_API_BASE_URL ?? 'http://localhost:3040';
+export function normalizeApiPrefix(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '/') {
+    return '';
+  }
+  return `/${trimmed.replace(/^\/+|\/+$/g, '')}`;
+}
+
+export function rewriteApiProxyPath(requestPath: string, apiPrefix: string): string {
+  const suffix = requestPath.replace(/^\/api(?=\/|\?|$)/, '');
+  return `${normalizeApiPrefix(apiPrefix)}${suffix}` || '/';
+}
+
+const API_PROXY_TARGET = process.env.VITE_API_BASE_URL ?? 'http://localhost:3040';
+const API_PREFIX = process.env.API_PREFIX ?? '';
 const USE_API_PROXY = process.env.VITE_USE_API_PROXY !== 'false';
 const FRONTEND_HOST = process.env.FRONTEND_HOST ?? '127.0.0.1';
 const envDir = path.resolve(__dirname, '..');
@@ -23,9 +37,7 @@ export default defineConfig({
           }
           // Serve /api/discover inline at root so agents can bootstrap with
           // a single request to the frontend dev port, saving one redirect hop.
-          const target = USE_API_PROXY
-            ? '/api/discover'
-            : `${API_BASE_URL}/discover`;
+          const target = USE_API_PROXY ? '/api/discover' : `${API_PROXY_TARGET}/discover`;
           try {
             const url = new URL(target, `http://${req.headers.host ?? 'localhost'}`);
             const response = await fetch(url.toString());
@@ -53,9 +65,10 @@ export default defineConfig({
     proxy: USE_API_PROXY
       ? {
           '/api': {
-            target: API_BASE_URL,
+            target: API_PROXY_TARGET,
             changeOrigin: true,
             withCredentials: true,
+            rewrite: (requestPath) => rewriteApiProxyPath(requestPath, API_PREFIX),
           },
         }
       : undefined,

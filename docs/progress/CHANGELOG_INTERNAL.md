@@ -1,3 +1,18 @@
+# 2026-07-17: Make fresh-checkout local startup deterministic
+
+- Aligned local profiles on the browser-facing `/api` path and added Vite
+  rewrite coverage for root, `/api`, and custom backend prefixes.
+- Made direct API and web workspace starts load the layered repository-root
+  environment instead of silently losing required provider configuration.
+- Replaced shell-only detached startup with a managed process-group launcher,
+  hard API/frontend-proxy readiness checks, and a foreground mode for
+  supervised agent shells.
+- Added actionable preflight failures for missing local configuration and
+  simple-auth credentials.
+- Verified the staged Git tree in a clean temporary working copy: API health,
+  discovery, proxied skill listing, and the admin login page all returned
+  successful responses with the documented local templates.
+
 # 2026-07-17: Sanitize public release documentation provenance
 
 - Removed a superseded research note from the public repository.

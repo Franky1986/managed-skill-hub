@@ -10,9 +10,10 @@ frontend) with one command.
 - Kill running API and frontend processes on ports `3040` and `3041`.
 - Clean up orphaned tsx/Vite processes by command line.
 - Clean up potentially orphaned Unix domain sockets under `TMPDIR`.
-- Start `npm run dev` in the background.
+- Start `npm run dev` in a detached process group or keep it attached in
+  `foreground` mode.
 - Wait until both ports are reachable again.
-- Support the actions `start`, `restart`, `stop`, and `status`.
+- Support the actions `start`, `restart`, `foreground`, `stop`, and `status`.
 
 ## Non-Scope
 
@@ -29,10 +30,18 @@ frontend) with one command.
 - For local MySQL setups (`CATALOG_PROVIDER=mysql` or `SEARCH_PROVIDER=mysql` with
   local host), ensure `bash scripts/development/start-mysql-stack.sh up` has been run when
   MySQL is not reachable, then wait until the local port is available.
-- Start the stack in the background with `nohup npm run dev`.
+- Fail with actionable setup guidance when required local configuration or
+  simple-auth credentials are missing.
+- Start the stack through `start-detached.mjs` so the managed PID is also the
+  detached process-group leader.
 - Write the PID to `.tmp/restart-all.pid`.
 - Write combined logs to `.tmp/restart-all.log`.
-- Wait up to 30 seconds until both ports are ready.
+- Wait up to `STARTUP_TIMEOUT_SECONDS` until both ports, API health, and the
+  frontend `/api/discover` proxy are ready.
+- Fail startup instead of reporting success when readiness does not complete or
+  the managed process exits.
+- Support `foreground` for supervised shells and agent sandboxes that terminate
+  detached children when the command session ends.
 - Print local MySQL and phpMyAdmin URLs when a local MySQL provider is active.
 
 ## Inputs / Outputs
@@ -45,7 +54,9 @@ frontend) with one command.
 
 - Ports are blocked by other processes -> the script attempts to stop them.
 - `npm run dev` does not start -> the log contains the error.
-- Ports do not become ready -> the script logs a warning but does not fail.
+- Ports or HTTP routes do not become ready -> startup fails.
+- `.env`, judgement configuration, or simple-auth secrets are missing -> the
+  script prints the canonical setup commands and fails before starting.
 - `CATALOG_PROVIDER=mysql` or `SEARCH_PROVIDER=mysql` with local host requires local
   MySQL on `MYSQL_HOST:MYSQL_PORT`; if MySQL is not reachable, the script attempts
   to start the MySQL stack automatically and fails only if startup does not bring the
@@ -57,8 +68,11 @@ frontend) with one command.
 - `./scripts/development/restart-all.sh stop` reliably stops both services.
 - `./scripts/development/restart-all.sh status` shows whether the background process is
   running.
+- `./scripts/development/restart-all.sh foreground` keeps the complete stack
+  attached to the invoking session.
 - Frontend is reachable at `http://localhost:3041` after startup.
 - API is reachable at `http://localhost:3040` after startup.
+- Frontend proxy requests to `http://localhost:3041/api/discover` reach the API.
 - If MySQL is required and configured as local, startup fails when the local
   stack still does not become reachable on `MYSQL_HOST:MYSQL_PORT`.
 - If local MySQL is active, final startup output includes `phpMyAdmin: http://127.0.0.1:33308`.
@@ -67,7 +81,8 @@ frontend) with one command.
 ## Tests / Checks
 
 - Manual: `./scripts/development/restart-all.sh`, then
-  `curl http://localhost:3040/api/health` and `curl http://localhost:3041`.
+  `curl http://localhost:3040/api/health`,
+  `curl http://localhost:3041/api/discover`, and `curl http://localhost:3041`.
 - `./scripts/check.sh` verifies that the script is executable.
 
 ## Agent Guardrails

@@ -14,6 +14,13 @@ The API and Vite frontend default to loopback binding (`127.0.0.1`). Reverse
 proxy deployments must keep `FRONTEND_HOST=127.0.0.1` so nginx remains the only
 external entry point.
 
+Local templates expose browser API calls consistently under `/api`. The Vite
+development proxy maps that browser path to the configured backend
+`API_PREFIX`, including root-mounted and custom-prefix profiles. Direct
+workspace starts load the layered root environment, while `restart-all.sh`
+manages a detached process group, verifies API and frontend-proxy readiness,
+and offers an attached `foreground` mode for supervised agent shells.
+
 The API declares `jszip` directly for PPTX extraction, so clean server installs
 can reproduce the production build without relying on a hoisted local module.
 

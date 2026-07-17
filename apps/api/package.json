@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "TMPDIR=/tmp bash ../../scripts/lib/run-with-env.sh tsx watch src/server.ts",
     "build:prod": "tsc -p tsconfig.json",
     "start:prod": "node dist/server.js",
     "test": "vitest run",

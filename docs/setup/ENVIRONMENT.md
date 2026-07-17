@@ -59,10 +59,10 @@ values.
 | `API_HOST` | no | Backend bind host. | `127.0.0.1` |
 | `API_PORT` | no | Backend bind port. | `3040` |
 | `API_TRUSTED_PROXIES` | no | Comma-separated IP/CIDR allowlist of reverse proxies whose forwarded client IP headers Fastify may trust. Keep empty for direct API access. | `127.0.0.1,::1` |
-| `API_PREFIX` | no | Optional API path prefix for single-host deployments. | `` or `/api` |
+| `API_PREFIX` | no | Optional backend path prefix. Local templates default to `/api` so Vite and reverse-proxy paths match. | `/api` |
 | `REGISTRY_ID` | no | Stable local alias suggested to clients for this ManagedSkillHub instance. | `local` |
 | `REGISTRY_NAME` | no | Human-readable registry name exposed by `/discover`. | `ManagedSkillHub Local` |
-| `PUBLIC_API_BASE_URL` | no | Externally reachable API base URL used in discovery and agent-session URL resolution. | `http://localhost:3040` |
+| `PUBLIC_API_BASE_URL` | no | Externally reachable API base URL used in discovery and agent-session URL resolution. | `http://localhost:3040/api` |
 | `CORS_ALLOWED_ORIGINS` | no | Comma-separated browser origins allowed to call the API with credentials. Originless CLI/server requests are still allowed. | `http://localhost:3041,http://127.0.0.1:3041` |
 
 ## Auth / Security
@@ -294,8 +294,8 @@ Notes:
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
 | `FRONTEND_HOST` | no | Vite bind address. Keep `127.0.0.1` for nginx-fronted deployments; use an explicit non-loopback address only for intentional LAN development. | `127.0.0.1` |
-| `VITE_API_BASE_URL` | yes | Backend base URL. | `http://localhost:3040` |
-| `VITE_USE_API_PROXY` | no | Set `false` to bypass Vite proxy. | `true` |
+| `VITE_API_BASE_URL` | yes | Backend target for the Vite proxy. When proxying is disabled, the browser calls this base URL directly. | `http://localhost:3040` |
+| `VITE_USE_API_PROXY` | no | When enabled, browser requests use same-origin `/api` and Vite maps that path to `API_PREFIX` on the backend. Set `false` to call `VITE_API_BASE_URL` directly. | `true` |
 | `API_START_MODE` | no | API process mode used by `scripts/deployment/restart-server.sh`: `dev` runs the TSX watcher; `production` runs the compiled `apps/api/dist/server.js`. | `dev` |
 | `FRONTEND_START_MODE` | no | Frontend process mode used by `scripts/deployment/restart-server.sh`: `dev` for local development or `preview` to serve the already-built production bundle. | `dev` |
 | `STARTUP_TIMEOUT_SECONDS` | no | Maximum seconds each API/frontend HTTP healthcheck may wait during restart. | `45` |
@@ -317,8 +317,9 @@ Use `.env.example.authentik` in staging first. Do not activate it in production
 until the real Authentik gate and rollback rehearsal in
 [`docs/setup/AUTHENTIK.md`](./AUTHENTIK.md) have current evidence.
 
-Then restart the stack and check relevant endpoints (`/health`, `/discover`, `/skills`,
-`/skills/search`) to validate the active provider, auth, and judger setup.
+Then restart the stack and check relevant endpoints (`/api/health`,
+`/api/discover`, `/api/skills`, `/api/skills/search`) to validate the active
+provider, auth, judger, and local frontend proxy setup.
 
 ## Provider cutover checklist
 

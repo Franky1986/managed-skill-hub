@@ -24,6 +24,50 @@ load_env() {
   load_managed_skill_hub_env "${PROJECT_ROOT}"
 }
 
+refresh_runtime_ports() {
+  API_PORT="${API_PORT:-3040}"
+  FRONTEND_PORT="${FRONTEND_PORT:-3041}"
+  PORTS=("${API_PORT}" "${FRONTEND_PORT}")
+}
+
+validate_local_runtime() {
+  if [ ! -f "${PROJECT_ROOT}/.env" ] && [ -z "${JUDGER_PROVIDER:-}" ]; then
+    log "ERROR: Local configuration is missing."
+    log "Create it with: cp .env.example.simple .env"
+    return 1
+  fi
+
+  if [ -z "${JUDGER_PROVIDER:-}" ]; then
+    log "ERROR: JUDGER_PROVIDER is not configured."
+    log "Use JUDGER_PROVIDER=noop for the local simple profile."
+    return 1
+  fi
+
+  if [ "${ADMIN_AUTH_MODE:-simple}" = "simple" ]; then
+    if [ -z "${ADMIN_PASSWORD:-}" ] && [ -z "${ADMIN_PASSWORD_HASH:-}" ]; then
+      log "ERROR: Simple admin auth requires ADMIN_PASSWORD or ADMIN_PASSWORD_HASH."
+      log "Copy .env.secrets.example to .env.secrets and set one local credential."
+      return 1
+    fi
+    if [ -z "${JWT_SECRET:-}" ]; then
+      log "ERROR: Simple admin auth requires JWT_SECRET."
+      log "Generate one with the command documented in .env.secrets.example."
+      return 1
+    fi
+  fi
+}
+
+process_tree_is_running() {
+  local pid="$1"
+  kill -0 -- "-${pid}" 2>/dev/null || kill -0 "${pid}" 2>/dev/null
+}
+
+signal_process_tree() {
+  local signal="$1"
+  local pid="$2"
+  kill "-${signal}" -- "-${pid}" 2>/dev/null || kill "-${signal}" "${pid}" 2>/dev/null || true
+}
+
 kill_named_processes() {
   local patterns=("tsx watch src/server.ts" "node dist/server.js" "vite --port" "vite")
   for pattern in "${patterns[@]}"; do
@@ -96,12 +140,12 @@ stop_background_process_from_pidfile() {
     return
   fi
 
-  if kill -0 "$pid" 2>/dev/null; then
-    log "Stopping background process from PID file: ${pid}"
-    kill -TERM "$pid" 2>/dev/null || true
+  if process_tree_is_running "$pid"; then
+    log "Stopping background process group from PID file: ${pid}"
+    signal_process_tree TERM "$pid"
     sleep 1
-    if kill -0 "$pid" 2>/dev/null; then
-      kill -KILL "$pid" 2>/dev/null || true
+    if process_tree_is_running "$pid"; then
+      signal_process_tree KILL "$pid"
     fi
   fi
 }
@@ -137,7 +181,7 @@ wait_for_ports_freed() {
 }
 
 wait_for_ports_ready() {
-  local timeout=30
+  local timeout="${STARTUP_TIMEOUT_SECONDS:-45}"
   log "Waiting for API and frontend ..."
   for port in "${API_PORT}" "${FRONTEND_PORT}"; do
     local retries=0
@@ -156,11 +200,54 @@ wait_for_ports_ready() {
       sleep 1
       retries=$((retries + 1))
       if [ "$retries" -ge "$timeout" ]; then
-        log "WARN: Port ${port} was not ready within ${timeout}s."
-        break
+        log "ERROR: Port ${port} was not ready within ${timeout}s."
+        return 1
       fi
     done
   done
+}
+
+http_status() {
+  local url="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -sS --max-time 2 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || true
+    return
+  fi
+
+  node -e 'fetch(process.argv[1]).then((response) => process.stdout.write(String(response.status))).catch(() => process.stdout.write("000"))' "$url"
+}
+
+wait_for_http_status() {
+  local label="$1"
+  local url="$2"
+  local timeout="${STARTUP_TIMEOUT_SECONDS:-45}"
+  local retries=0
+  local status
+
+  while :; do
+    status="$(http_status "$url")"
+    case "$status" in
+      2??|401|403)
+        log "${label} is ready (${status})."
+        return 0
+        ;;
+    esac
+
+    sleep 1
+    retries=$((retries + 1))
+    if [ "$retries" -ge "$timeout" ]; then
+      log "ERROR: ${label} did not become ready at ${url} (last status: ${status:-000})."
+      return 1
+    fi
+  done
+}
+
+wait_for_stack_ready() {
+  wait_for_ports_ready
+  wait_for_http_status "API health" "http://127.0.0.1:${API_PORT}/api/health"
+  if [ "${VITE_USE_API_PROXY:-true}" != "false" ]; then
+    wait_for_http_status "Frontend API proxy" "http://127.0.0.1:${FRONTEND_PORT}/api/discover"
+  fi
 }
 
 wait_for_port() {
@@ -278,13 +365,17 @@ print_local_mysql_urls() {
 
 start_services() {
   local admin_ui_base_path="${ADMIN_UI_BASE_PATH:-/frontend/admin}"
+  local stack_pid
   log "Starting project in ${PROJECT_ROOT}"
   log "Logs: ${LOG_FILE}"
   cd "$PROJECT_ROOT"
-  : > "${LOG_FILE}"
-  nohup env TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" npm run dev >"${LOG_FILE}" 2>&1 < /dev/null &
-  printf '%s\n' "$!" > "${PID_FILE}"
-  log "Stack started (PID: $(cat "${PID_FILE}"))."
+  stack_pid="$(env TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" node "${SCRIPT_DIR}/start-detached.mjs" "${LOG_FILE}" npm run dev)"
+  if [ -z "$stack_pid" ]; then
+    log "ERROR: Failed to start the detached development stack."
+    return 1
+  fi
+  printf '%s\n' "$stack_pid" > "${PID_FILE}"
+  log "Stack started (process group: ${stack_pid})."
   log "Frontend: http://localhost:${FRONTEND_PORT}"
   log "API: http://localhost:${API_PORT}"
   print_local_mysql_urls
@@ -292,12 +383,23 @@ start_services() {
   log "Follow log: tail -f ${LOG_FILE}"
 }
 
+start_services_foreground() {
+  local admin_ui_base_path="${ADMIN_UI_BASE_PATH:-/frontend/admin}"
+  cd "$PROJECT_ROOT"
+  printf '%s\n' "$$" > "${PID_FILE}"
+  log "Starting stack in foreground mode (PID: $$)."
+  log "Frontend: http://localhost:${FRONTEND_PORT}"
+  log "API: http://localhost:${API_PORT}"
+  log "Admin login: http://localhost:${FRONTEND_PORT}${admin_ui_base_path}/login"
+  exec env TMPDIR=/tmp FRONTEND_PORT="${FRONTEND_PORT}" API_PORT="${API_PORT}" npm run dev
+}
+
 print_status() {
   if [ -f "$PID_FILE" ]; then
     local pid
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      log "Status: running (PID: ${pid})"
+    if [ -n "$pid" ] && process_tree_is_running "$pid"; then
+      log "Status: running (process group: ${pid})"
     else
       log "Status: PID file exists, but process is not active."
     fi
@@ -318,27 +420,47 @@ check_data_dir() {
 
 case "${1:-}" in
   stop)
+    load_env
+    refresh_runtime_ports
     stop_services
     exit 0
     ;;
   status)
+    load_env
+    refresh_runtime_ports
     print_status
     exit 0
     ;;
+  foreground)
+    load_env
+    refresh_runtime_ports
+    validate_local_runtime
+    check_data_dir
+    log "===== restart-all.sh foreground started ====="
+    stop_services
+    ensure_local_mysql_or_fail
+    start_services_foreground
+    ;;
   restart|""|start)
     load_env
+    refresh_runtime_ports
+    validate_local_runtime
     check_data_dir
     log "===== restart-all.sh started ====="
     stop_services
     sleep 1
     ensure_local_mysql_or_fail
     start_services
-    wait_for_ports_ready
+    wait_for_stack_ready
+    if ! process_tree_is_running "$(cat "${PID_FILE}")"; then
+      log "ERROR: The managed development process exited during startup."
+      exit 1
+    fi
     log "===== restart-all.sh finished ====="
     ;;
   *)
     echo "Unknown action: $1"
-    echo "Usage: $0 [start|restart|stop|status]"
+    echo "Usage: $0 [start|restart|foreground|stop|status]"
     exit 1
     ;;
 esac
