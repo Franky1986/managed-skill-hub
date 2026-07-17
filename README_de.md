@@ -151,37 +151,46 @@ English-first Dokumentation und agent-orientierte Verträge mit zweisprachiger W
 ```bash
 cd /pfad/zu/managed-skill-hub
 
-# 1. Abhängigkeiten installieren
-npm ci --legacy-peer-deps
+# 1. Installations-Skript starten und Stack hochfahren
+./install_dev.sh
+```
 
-# 2. Checks ausführen
-./scripts/check.sh
+Was das Skript macht:
 
-# 3. Lokale Konfiguration erstellen
-cp .env.example .env
-cp .env.secrets.example .env.secrets
-chmod 600 .env .env.secrets
+- legt bei Bedarf `.env` und `.env.secrets` an (`.env.example.simple` und
+  `.env.secrets.example`)
+- installiert Abhängigkeiten mit `npm ci --legacy-peer-deps` (falls `node_modules`
+  fehlt)
+- setzt lokale Defaults (`API_PREFIX=/api`, `VITE_API_BASE_URL=http://localhost:3040`)
+- fragt bei fehlendem lokalen Passwort für `ADMIN_AUTH_MODE=simple` nach und
+  schreibt `ADMIN_PASSWORD_HASH` nach `.env.secrets`
+- erzeugt ggf. einen `JWT_SECRET`
+- bietet die Judger-Auswahl an:
+  - `JUDGER_PROVIDER=noop` (Standard, ohne externe Credentials)
+  - `vercel-ai-sdk` mit `OPENAI_API_KEY` (Standardmodell `openai:gpt-4.1`, mit
+    Alternativen auswählbar)
+  - eigene `custom`-Judger-Konfiguration via `JUDGER_ADAPTER_PATH`
+- startet anschließend `./scripts/development/restart-all.sh`
 
-# Lokale Defaults:
-# In .env.secrets: ADMIN_PASSWORD=admin
-# Optionaler BCrypt-Hash:
-# node -e "console.log(require('bcryptjs').hashSync('admin', 10))"
+Standardmäßig nutzt das Skript das Simple-Auth-Profil (`ADMIN_AUTH_MODE=simple`)
+mit `JUDGER_PROVIDER=noop`.
 
-# 4. Entwicklungsserver starten
-# Variante A: einzelner Befehl im Repo-Wurzelverzeichnis
-npm run dev
+Zum Stoppen:
 
-# Variante B: manuell starten
-# Terminal 1:
-npm --workspace=apps/api run dev
+```bash
+./scripts/development/restart-all.sh stop
+```
 
-# Terminal 2:
-npm --workspace=apps/web run dev
+Manueller Start ohne Wrapper:
+
+```bash
+npm run dev --workspace=apps/api
+npm run dev --workspace=apps/web
 ```
 
 - Frontend: http://localhost:3041
 - API: http://localhost:3040
-- Admin-Login: http://localhost:3041/admin/login
+- Admin-Login: http://localhost:3041/frontend/admin/login
 
 ## Automatisierter Smoke Test
 
