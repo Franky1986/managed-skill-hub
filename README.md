@@ -157,6 +157,8 @@ preview until its real-tenant acceptance gate is recorded.
 
 ## Quickstart
 
+If this is a fresh checkout (no local `.env` and `.env.secrets` yet), start with:
+
 ```bash
 cd /path/to/managed-skill-hub
 

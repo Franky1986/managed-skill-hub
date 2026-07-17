@@ -148,6 +148,9 @@ English-first Dokumentation und agent-orientierte Verträge mit zweisprachiger W
 
 ## Schnellstart
 
+Falls es ein frischer Checkout ist (keine lokale `.env` und `.env.secrets` vorhanden),
+starte zuerst mit:
+
 ```bash
 cd /pfad/zu/managed-skill-hub
 

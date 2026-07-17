@@ -42,6 +42,16 @@ through a stable API.
 4. Relevant co-located `*.spec.md` files for the boundary being changed
 5. [`docs/product/AGENT_OPERATIONS.md`](./docs/product/AGENT_OPERATIONS.md) for local provider/auto-publish operation modes when testing with agents
 
+For a fresh checkout, or whenever `.env` and `.env.secrets` are missing, start with:
+
+```bash
+./install_dev.sh
+```
+
+This wrapper prepares local defaults, prompts for a local admin password if needed,
+and starts the full development stack through
+`./scripts/development/restart-all.sh`.
+
 For setup, provider, deployment, or judger-adapter work, also read:
 
 1. [`docs/setup/ENVIRONMENT.md`](./docs/setup/ENVIRONMENT.md)
