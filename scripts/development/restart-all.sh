@@ -38,23 +38,142 @@ validate_local_runtime() {
   fi
 
   if [ -z "${JUDGER_PROVIDER:-}" ]; then
-    log "ERROR: JUDGER_PROVIDER is not configured."
-    log "Use JUDGER_PROVIDER=noop for the local simple profile."
-    return 1
+    log "JUDGER_PROVIDER is not configured. Falling back to 'noop' for local startup."
+    export JUDGER_PROVIDER=noop
   fi
 
   if [ "${ADMIN_AUTH_MODE:-simple}" = "simple" ]; then
-    if [ -z "${ADMIN_PASSWORD:-}" ] && [ -z "${ADMIN_PASSWORD_HASH:-}" ]; then
-      log "ERROR: Simple admin auth requires ADMIN_PASSWORD or ADMIN_PASSWORD_HASH."
-      log "Copy .env.secrets.example to .env.secrets and set one local credential."
+    if ! ensure_local_admin_runtime_credentials; then
       return 1
     fi
-    if [ -z "${JWT_SECRET:-}" ]; then
-      log "ERROR: Simple admin auth requires JWT_SECRET."
-      log "Generate one with the command documented in .env.secrets.example."
+  elif [ -z "${JWT_SECRET:-}" ]; then
+    log "ERROR: JWT_SECRET is required when ADMIN_AUTH_MODE is not 'simple'."
+    log "Set JWT_SECRET in ${MANAGED_SKILL_HUB_SECRETS_FILE:-${PROJECT_ROOT}/.env.secrets}."
+    return 1
+  fi
+}
+
+ensure_local_admin_runtime_credentials() {
+  local secrets_file="${MANAGED_SKILL_HUB_SECRETS_FILE:-${PROJECT_ROOT}/.env.secrets}"
+  ensure_local_admin_secrets_file "$secrets_file"
+
+  if [ -z "${ADMIN_PASSWORD_HASH:-}" ] && [ -z "${ADMIN_PASSWORD:-}" ]; then
+    if ! prompt_for_local_admin_password "$secrets_file"; then
       return 1
     fi
   fi
+
+  if [ -z "${JWT_SECRET:-}" ]; then
+    local jwt_secret
+    jwt_secret="$(node -e '
+const crypto = require("node:crypto");
+process.stdout.write(crypto.randomBytes(48).toString("base64url"));
+')"
+    if [ -z "$jwt_secret" ]; then
+      log "ERROR: Could not generate JWT_SECRET."
+      log "Set JWT_SECRET in ${secrets_file}."
+      return 1
+    fi
+
+    upsert_secret_entry "$secrets_file" "JWT_SECRET" "'$jwt_secret'"
+    export JWT_SECRET="$jwt_secret"
+    log "Generated and stored JWT_SECRET in ${secrets_file}"
+  fi
+}
+
+prompt_for_local_admin_password() {
+  local secrets_file="$1"
+
+  if [ -n "${ADMIN_PASSWORD_HASH:-}" ] || [ -n "${ADMIN_PASSWORD:-}" ]; then
+    return 0
+  fi
+
+  if [ ! -t 0 ]; then
+    log "ERROR: Simple admin auth requires ADMIN_PASSWORD or ADMIN_PASSWORD_HASH."
+    log "Copy .env.secrets.example to .env.secrets and set one local credential."
+    return 1
+  fi
+
+  local admin_password
+  local admin_password_confirm
+  log "Simple admin auth needs an admin credential before startup."
+  read -r -s -p "Enter ADMIN_PASSWORD for local startup: " admin_password
+  echo
+  if [ -z "$admin_password" ]; then
+    log "ERROR: Password cannot be empty."
+    return 1
+  fi
+
+  read -r -s -p "Confirm ADMIN_PASSWORD for local startup: " admin_password_confirm
+  echo
+  if [ "$admin_password" != "$admin_password_confirm" ]; then
+    log "ERROR: Password confirmation does not match."
+    return 1
+  fi
+
+  local hash="$(generate_admin_password_hash "$admin_password")"
+  if [ -z "$hash" ]; then
+    log "ERROR: Could not generate ADMIN_PASSWORD_HASH."
+    return 1
+  fi
+
+  upsert_secret_entry "$secrets_file" "ADMIN_PASSWORD_HASH" "'$hash'"
+  log "Stored ADMIN_PASSWORD_HASH in ${secrets_file}"
+  export ADMIN_PASSWORD_HASH="$hash"
+  return 0
+}
+
+generate_admin_password_hash() {
+  local password="$1"
+  if ! node -e "require('bcryptjs')" >/dev/null 2>&1; then
+    log "ERROR: bcryptjs is unavailable. Run npm install from repository root."
+    return 1
+  fi
+
+  BCRYPT_ROUNDS="${BCRYPT_ROUNDS:-12}" printf '%s' "$password" | node -e '
+const fs = require("node:fs");
+const bcrypt = require("bcryptjs");
+const rounds = Number(process.env.BCRYPT_ROUNDS || 12);
+const password = fs.readFileSync(0, "utf8");
+const trimmed = password.replace(/\r?\n$/, "");
+process.stdout.write(bcrypt.hashSync(trimmed, rounds));
+'
+}
+
+ensure_local_admin_secrets_file() {
+  local secrets_file="${1:?secrets file path is required}"
+  local secret_dir
+  secret_dir="$(dirname "$secrets_file")"
+  mkdir -p "$secret_dir"
+  if [ ! -f "$secrets_file" ]; then
+    : > "$secrets_file"
+    chmod 600 "$secrets_file"
+  fi
+}
+
+upsert_secret_entry() {
+  local secrets_file="${1:?secrets file path is required}"
+  local key="$2"
+  local value="$3"
+  local tmp_file
+  tmp_file="$(mktemp "${secrets_file}.XXXXXX")"
+
+  awk -v target_key="$key" -v target_value="$value" '
+    BEGIN { replaced=0 }
+    $0 ~ "^" target_key "=" {
+      print target_key "=" target_value
+      replaced=1
+      next
+    }
+    { print }
+    END {
+      if (replaced == 0) {
+        print target_key "=" target_value
+      }
+    }
+  ' "$secrets_file" > "$tmp_file"
+
+  mv "$tmp_file" "$secrets_file"
 }
 
 process_tree_is_running() {

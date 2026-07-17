@@ -97,8 +97,10 @@ The build creates:
    cp .env.example.simple .env
    cp .env.secrets.example .env.secrets
    chmod 600 .env .env.secrets
-   # Set ADMIN_PASSWORD or ADMIN_PASSWORD_HASH and a random JWT_SECRET in
-   # .env.secrets before starting simple auth.
+# Optional: set ADMIN_PASSWORD or ADMIN_PASSWORD_HASH and a random JWT_SECRET in
+# .env.secrets before starting simple auth. If these values are missing,
+# `./scripts/development/restart-all.sh` prompts for ADMIN_PASSWORD once and
+# writes ADMIN_PASSWORD_HASH plus a fresh JWT_SECRET to the secrets file.
    ```
 
 2. Development mode:

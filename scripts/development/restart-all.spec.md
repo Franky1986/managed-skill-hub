@@ -30,8 +30,14 @@ frontend) with one command.
 - For local MySQL setups (`CATALOG_PROVIDER=mysql` or `SEARCH_PROVIDER=mysql` with
   local host), ensure `bash scripts/development/start-mysql-stack.sh up` has been run when
   MySQL is not reachable, then wait until the local port is available.
-- Fail with actionable setup guidance when required local configuration or
-  simple-auth credentials are missing.
+- Fail with actionable setup guidance when required local configuration is missing.
+- Fall back to `JUDGER_PROVIDER=noop` for local startup if `JUDGER_PROVIDER`
+  is unset.
+- Prompt for `ADMIN_PASSWORD` in interactive terminals when `ADMIN_PASSWORD`
+  and `ADMIN_PASSWORD_HASH` are missing in local simple-auth mode, then persist
+  `ADMIN_PASSWORD_HASH` to `.env.secrets`.
+- In interactive local simple mode, generate and persist a local `JWT_SECRET`
+  when missing in `.env.secrets`.
 - Start the stack through `start-detached.mjs` so the managed PID is also the
   detached process-group leader.
 - Write the PID to `.tmp/restart-all.pid`.
@@ -55,8 +61,10 @@ frontend) with one command.
 - Ports are blocked by other processes -> the script attempts to stop them.
 - `npm run dev` does not start -> the log contains the error.
 - Ports or HTTP routes do not become ready -> startup fails.
-- `.env`, judgement configuration, or simple-auth secrets are missing -> the
-  script prints the canonical setup commands and fails before starting.
+- `.env` or judgement configuration is missing -> the script prints setup
+  guidance and fails before starting.
+- Simple-admin local startup without terminal input can still fail fast with a
+  clear instruction to populate `ADMIN_PASSWORD` or `ADMIN_PASSWORD_HASH`.
 - `CATALOG_PROVIDER=mysql` or `SEARCH_PROVIDER=mysql` with local host requires local
   MySQL on `MYSQL_HOST:MYSQL_PORT`; if MySQL is not reachable, the script attempts
   to start the MySQL stack automatically and fails only if startup does not bring the
@@ -70,6 +78,8 @@ frontend) with one command.
   running.
 - `./scripts/development/restart-all.sh foreground` keeps the complete stack
   attached to the invoking session.
+- Interactive local startup can bootstrap missing simple-auth values into
+  `.env.secrets` (admin password hash + JWT secret) before starting.
 - Frontend is reachable at `http://localhost:3041` after startup.
 - API is reachable at `http://localhost:3040` after startup.
 - Frontend proxy requests to `http://localhost:3041/api/discover` reach the API.
