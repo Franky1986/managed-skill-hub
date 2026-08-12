@@ -220,7 +220,7 @@ function assertSurface(surface: PublicSurface, expectedSkillIds: string[], expec
     tagsVisible: surface.tags.includes('provider-cutover'),
     manifestExactVersion: surface.manifest.version === '1.0.0' && surface.manifest.status === 'published',
     filesMatch: sameStringArray(surface.files, ['SKILL.md', 'docs/guide.md']),
-    packageEntriesMatch: sameStringArray(surface.packageEntries, ['SKILL.md', 'docs/guide.md']),
+    packageEntriesMatch: sameStringArray(surface.packageEntries, ['SKILL.md', 'docs/guide.md', 'skill-hub-meta.json']),
     fileContentMatchesFixture: surface.skillFileContainsFixture,
     rebuildCountsMatch: surface.rebuild.skills === expectedSkillIds.length && surface.rebuild.publishedVersions === expectedSkillIds.length && surface.rebuild.proposals === expectedProposals,
   };

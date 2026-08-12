@@ -22,6 +22,8 @@ requests into inbound port calls and maps results back to JSON or file streams.
 - `GET /skills/:id/files/:fileId/extracted-content`
 - `GET /skills/:id/versions`
 - `GET /skills/:id/history`
+- Virtual `use-skill-hub` fallback reads for the public read routes listed
+  above, when no published `use-skill-hub` skill exists.
 
 ## Non-Scope
 
@@ -40,6 +42,13 @@ requests into inbound port calls and maps results back to JSON or file streams.
   paths or prefixes.
 - `GET /discover` detects whether it was called through an `/api/` prefix and
   returns entrypoint URLs with that prefix when appropriate.
+- `GET /discover` always returns `bootstrapSkill` for `use-skill-hub`.
+  `bootstrapSkill` includes `id`, `title`, `description`, `available`,
+  `fallback`, `version`, `readUrl`, `packageUrl`, `manifestUrl`,
+  `versionsUrl`, `recommended`, and `shortPath`.
+- `bootstrapSkill` URLs are request-aware: they preserve the `/api` prefix,
+  use the configured public API base URL when explicitly configured, and
+  otherwise derive scheme and host from the current request.
 - `GET /discover` returns English-only agent-facing guidance.
 - `GET /discover.agentHttpGuidance` distinguishes registry discovery metadata,
   public skill search, and version-aware package download. It tells agents that
@@ -130,6 +139,24 @@ requests into inbound port calls and maps results back to JSON or file streams.
   perform relative runtime imports that depend on transpiler-specific module
   URLs.
 - Only `published` skills are reachable through the public read path.
+- When no published `use-skill-hub` skill exists, the controller serves a
+  built-in `use-skill-hub@0.0.0-initial` fallback through detail, manifest,
+  files, entrypoint file, package, and versions routes. A real published
+  `use-skill-hub` takes precedence over this virtual fallback.
+- The built-in fallback is not stored as managed content and does not appear in
+  `/skills`, `/skills/search`, `/categories`, or `/tags`.
+- `GET /skills/:id/package` always returns a ZIP package, including
+  single-file skills. Direct one-off entrypoint reads remain available through
+  `GET /skills/:id/files/:fileId`.
+- Every package ZIP includes generated `skill-hub-meta.json` with registry,
+  skill, version, links, proposal defaults, and local update policy metadata.
+  The controller does not rewrite published `SKILL.md` content at download
+  time.
+- Any stored file named `skill-hub-meta.json` is treated as reserved download
+  metadata and is not emitted as authored package content; the generated
+  metadata file owns that ZIP path. The generated metadata content digest is
+  computed from the same filtered authored-file list that the ZIP delivers, so
+  legacy stored metadata files do not affect local update comparisons.
 - Categories and tags are exposed for retrieval and proposal preparation.
   Category values are an open vocabulary: `/categories` returns suggestions
   derived from published skills and explicitly states that custom categories
@@ -188,6 +215,15 @@ requests into inbound port calls and maps results back to JSON or file streams.
 
 - Endpoints match the OpenAPI specification.
 - Response schemas are validated by tests.
+- `/discover` advertises `bootstrapSkill` for both fallback and published
+  bootstrap states.
+- The fallback package returns ZIP with `SKILL.md` and generated
+  `skill-hub-meta.json`.
+- Normal single-file and multi-file package downloads return ZIP with generated
+  `skill-hub-meta.json`.
+- Legacy stored files whose basename is `skill-hub-meta.json` are not fetched
+  from storage during package creation and do not contribute to the generated
+  metadata content digest.
 - Protected public read routes accept either their configured agent credential
   or a reader-capable admin browser session; invalid sessions and admin sessions
   without `reader` or `admin` remain subject to configured agent auth.

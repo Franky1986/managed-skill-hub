@@ -26,6 +26,10 @@ entries.
 - Respect `AUTO_PUBLISH_ON_GREEN`.
 - Block incomplete uploads.
 - Block duplicate-content proposals/skills.
+- Block bootstrap/system-managed skills from automation, including reserved
+  skill ID `use-skill-hub`, a missing-`skillId` proposal title that would
+  derive `use-skill-hub` during conversion, category `registry-system`, or tag
+  `system-managed`.
 - Run exactly one internal duplicate assessment after judgement gates are green.
 - Block exact duplicates and skill-ID collisions, and require manual review when
   similarity reaches the configured threshold.
@@ -50,6 +54,12 @@ entries.
 - Category classifier blockers return `blockedReason = category_blocked`.
 - Classifier failures return `blockedReason = classifier_failed`.
 - Non-green or missing judgements return `blockedReason = non_green_judgement`.
+- Bootstrap/system-managed proposals return
+  `blockedReason = manual_review_required` and do not invoke duplicate
+  assessment, classifier, conversion, review, approval, or publish.
+- A new proposal with no explicit `skillId` and title `Use Skill Hub` is
+  treated as bootstrap/system-managed because the conversion path would derive
+  the reserved `use-skill-hub` ID.
 - Successful automation creates a published skill version and records a
   dedicated auto-publish audit entry.
 - Duplicate assessment is invoked at most once per auto-publish evaluation.

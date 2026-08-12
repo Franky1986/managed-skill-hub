@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { skillsApi, SkillSummary } from '../api/skills';
+import { BootstrapSkill, skillsApi, SkillSummary } from '../api/skills';
 import { useLanguage } from '../i18n';
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -41,6 +41,7 @@ export function HomePage() {
     const [skills, setSkills] = useState<SkillSummary[]>([]);
     const [categories, setCategories] = useState<string[]>([]);
     const [tags, setTags] = useState<string[]>([]);
+    const [bootstrapSkill, setBootstrapSkill] = useState<BootstrapSkill | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -48,6 +49,10 @@ export function HomePage() {
     const { t } = useLanguage();
 
     useEffect(() => {
+        skillsApi
+            .discover()
+            .then((response) => setBootstrapSkill(response.data.bootstrapSkill ?? null))
+            .catch(() => setBootstrapSkill(null));
         skillsApi
             .listCategories()
             .then((response) => {
@@ -119,6 +124,47 @@ export function HomePage() {
                     </div>
                 </form>
             </section>
+
+            {bootstrapSkill?.available && (
+                <section className="mb-xl rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-ambient">
+                    <div className="flex flex-col gap-md md:flex-row md:items-center md:justify-between">
+                        <div className="max-w-2xl">
+                            <div className="mb-sm flex flex-wrap items-center gap-sm">
+                                <span className="material-symbols-outlined text-primary">hub</span>
+                                <h2 className="font-h2 text-h2 text-on-background">{bootstrapSkill.title}</h2>
+                                <span className="rounded-md bg-surface-container-high px-2 py-1 font-mono text-mono text-on-surface">
+                                    v{bootstrapSkill.version}
+                                </span>
+                                {bootstrapSkill.fallback && (
+                                    <span className="rounded-md border border-outline-variant px-2 py-1 font-small text-small text-on-surface-variant">
+                                        {t('home.bootstrap.fallback')}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="font-body text-body text-on-surface-variant">{bootstrapSkill.description}</p>
+                            <p className="mt-sm font-small text-small text-on-surface-variant">
+                                {t('home.bootstrap.copy')}
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-sm sm:flex-row md:flex-col">
+                            <a
+                                href={bootstrapSkill.packageUrl}
+                                className="inline-flex items-center justify-center gap-xs rounded-lg bg-primary-container px-4 py-3 font-body text-body text-on-primary-container hover:opacity-90"
+                            >
+                                <span className="material-symbols-outlined text-[1rem]">download</span>
+                                {t('home.bootstrap.download')}
+                            </a>
+                            <a
+                                href={bootstrapSkill.readUrl}
+                                className="inline-flex items-center justify-center gap-xs rounded-lg border border-outline-variant px-4 py-3 font-body text-body text-on-surface hover:bg-surface-container-low"
+                            >
+                                <span className="material-symbols-outlined text-[1rem]">article</span>
+                                {t('home.bootstrap.read')}
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            )}
 
             {/* Tags */}
             <section className="mb-xl">

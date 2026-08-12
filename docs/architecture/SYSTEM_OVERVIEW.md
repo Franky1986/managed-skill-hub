@@ -86,10 +86,16 @@ target tenant and reverse proxy.
 ## Data Flow: Reads
 
 1. Agent calls `GET /discover`.
-2. Agent searches with `GET /skills/search?q=...`.
-3. Agent loads `GET /skills/:id/manifest`.
-4. API reads skill/version/file metadata from the selected catalog/search provider.
-5. Agent loads `GET /skills/:id/files/:fileId` when needed.
+2. For first-time setup, the agent follows `discover.bootstrapSkill` to read or
+   download `use-skill-hub`; fresh registries serve a built-in
+   `use-skill-hub@0.0.0-initial` fallback until a real published bootstrap
+   skill exists.
+3. Agent searches with `GET /skills/search?q=...`.
+4. Agent loads `GET /skills/:id/manifest`.
+5. API reads skill/version/file metadata from the selected catalog/search provider.
+6. Agent downloads `GET /skills/:id/package` for persistent local use. Packages
+   are ZIP-only and include generated `skill-hub-meta.json`; direct one-off
+   reads use `GET /skills/:id/files/:fileId`.
 
 ## Data Flow: Writes
 

@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { createHash } from 'crypto';
 import { promises as fs } from 'fs';
 import { Container } from '../../../infrastructure/container';
-import { SkillSearchQuery } from '../../../application/ports/inbound/skill-query.port';
+import { SkillFileInfo, SkillSearchQuery } from '../../../application/ports/inbound/skill-query.port';
 import { NotFoundError, UnsupportedFileTypeError, ValidationError } from '../../../domain/errors';
 import { sendApiError, sendMappedApiError } from './error-response';
 import { AgentApiAuth } from './agent-api-auth';
@@ -9,6 +10,24 @@ import { normalizeRelativeArtifactPath } from '../../../domain/files/relative-ar
 import { sendArtifactResponse } from './artifact-response';
 import { AdminAuth } from './admin-auth';
 import { ListSkillsUseCase } from '../../../application/usecases/skill/list-skills.usecase';
+import { Manifest } from '../../../domain/skill/Manifest';
+import { ManifestFile } from '../../../domain/skill/ManifestFile';
+import { SkillStatus } from '../../../domain/skill/SkillStatus';
+import {
+  buildSkillHubMetaBuffer,
+  isReservedSkillHubMetaPath,
+  SKILL_HUB_META_FILENAME,
+  SYSTEM_MANAGED_CATEGORY,
+  SYSTEM_MANAGED_TAG,
+  USE_SKILL_HUB_INITIAL_VERSION,
+  USE_SKILL_HUB_SKILL_ID,
+} from '../../../application/usecases/skill/skill-hub-meta';
+import {
+  computeArtifactId,
+  computeContentDigest,
+  computeSkillUuid,
+  computeVersionUuid,
+} from '../../../application/usecases/skill/public-metadata';
 
 function parseTagQuery(value: string | string[] | undefined): string[] {
   if (!value) {
@@ -141,28 +160,23 @@ function safeFilename(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
+function normalizeDownloadablePackageFiles<T extends { path: string }>(files: T[]): T[] {
+  return files
+    .map((file) => ({
+      ...file,
+      path: normalizeRelativeArtifactPath(file.path, { fieldLabel: 'Skill package file path' }),
+    }))
+    .filter((file) => !isReservedSkillHubMetaPath(file.path));
+}
+
 async function buildSkillPackageBuffer(
   skillId: string,
   version: string,
   files: { path: string }[],
-  getFile: (fileId: string) => Promise<{ path: string; mimeType: string; content: Buffer } | null>
+  getFile: (fileId: string) => Promise<{ path: string; mimeType: string; content: Buffer } | null>,
+  metadata: Buffer
 ): Promise<{ content: Buffer; filename: string; mimeType: string }> {
-  const normalizedFiles = files.map((file) => ({
-    ...file,
-    path: normalizeRelativeArtifactPath(file.path, { fieldLabel: 'Skill package file path' }),
-  }));
-
-  if (normalizedFiles.length === 1 && normalizedFiles[0].path === 'SKILL.md') {
-    const file = await getFile(normalizedFiles[0].path);
-    if (!file) {
-      throw new NotFoundError(`Skill ${skillId} version ${version} has missing SKILL.md`);
-    }
-    return {
-      content: file.content,
-      filename: `${safeFilename(skillId)}-${safeFilename(version)}-SKILL.md`,
-      mimeType: file.mimeType ?? 'text/markdown',
-    };
-  }
+  const normalizedFiles = normalizeDownloadablePackageFiles(files);
 
   const packageFiles: Array<{ path: string; content: Buffer }> = [];
   for (const file of normalizedFiles.sort((left, right) => left.path.localeCompare(right.path))) {
@@ -175,6 +189,10 @@ async function buildSkillPackageBuffer(
       content: artifact.content,
     });
   }
+  packageFiles.push({
+    path: SKILL_HUB_META_FILENAME,
+    content: metadata,
+  });
   const content = buildZipArchive(packageFiles);
   return {
     content,
@@ -188,13 +206,230 @@ export type SkillReadRouteContainer = Pick<
   'config' | 'nameSuggestion' | 'skillQuery' | 'listJudgements' | 'extractSkillFileContent' | 'probeSkillFileContent'
 >;
 
-function buildDiscoveryResponse(
+interface ResolvedReadableSkill {
+  manifest: Manifest;
+  files: SkillFileInfo[];
+  getFile: (fileId: string) => Promise<{ path: string; mimeType: string; content: Buffer } | null>;
+  fallback: boolean;
+  publishedAt: Date | null;
+}
+
+function getRequestPrefix(request: FastifyRequest): string {
+  const rawUrl = request.url ?? request.raw.url ?? '';
+  return rawUrl.startsWith('/api/') ? '/api' : '';
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return value ?? null;
+}
+
+function resolveRequestApiBaseUrl(request: FastifyRequest, configuredBaseUrl: string): string {
+  const configured = configuredBaseUrl.replace(/\/+$/, '');
+  if (configured && configured !== 'http://localhost:3040') {
+    return configured;
+  }
+
+  const host = request.hostname || firstHeaderValue(request.headers.host);
+  if (!host) {
+    return configured;
+  }
+
+  const proto = request.protocol || 'http';
+  return `${proto}://${host}${getRequestPrefix(request)}`.replace(/\/+$/, '');
+}
+
+function endpointUrl(apiBaseUrl: string, path: string): string {
+  return `${apiBaseUrl.replace(/\/+$/, '')}${path}`;
+}
+
+function hashBuffer(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+function buildUseSkillHubFallbackContent(apiBaseUrl: string): Buffer {
+  const base = apiBaseUrl.replace(/\/+$/, '');
+  return Buffer.from(
+    [
+      '---',
+      `name: ${USE_SKILL_HUB_SKILL_ID}`,
+      'description: Use this ManagedSkillHub registry from an AI agent by discovering live endpoints, downloading skills, and submitting proposals with local network-aware curl commands.',
+      '---',
+      '',
+      '# Use Skill Hub',
+      '',
+      `Use local curl or an equivalent local HTTP client against ${base}. Remote fetch tools may not share the user's DNS, VPN, firewall, or localhost access. If the agent sandbox blocks network access, request network permission or ask the user to run the curl command locally.`,
+      '',
+      'Start with live discovery:',
+      '',
+      '```bash',
+      `curl -sS "${base}/discover"`,
+      '```',
+      '',
+      'For one-off use, read the advertised bootstrap readUrl or a skill entrypoint file directly. For persistent local use, download the packageUrl because packages include skill-hub-meta.json for version, source, proposal, and update metadata.',
+      '',
+      `Find skills with ${base}/skills/search?q=<keywords>&mode=keyword, then inspect /skills/{skillId}/manifest, /skills/{skillId}/versions, and /skills/{skillId}/package. Before submitting or updating a proposal, read ${base}/howToPropose.`,
+      '',
+      'Never include skill-hub-meta.json in a proposal. It is generated local metadata. For updates, compare live versions and content digests, inspect local edits even when no edited_locally marker exists, create a backup inside the skill folder, and ask the user before replacing files.',
+      '',
+      'When behavior seems stale or an endpoint fails, re-read the live source of truth: /discover, /howToPropose, /skills/{skillId}/manifest, and /skills/{skillId}/versions.',
+      '',
+    ].join('\n'),
+    'utf-8'
+  );
+}
+
+function buildUseSkillHubFallback(request: FastifyRequest, container: SkillReadRouteContainer): ResolvedReadableSkill {
+  const apiBaseUrl = resolveRequestApiBaseUrl(request, container.config.publicApiBaseUrl);
+  const content = buildUseSkillHubFallbackContent(apiBaseUrl);
+  const sha256 = hashBuffer(content);
+  const manifest = Manifest.create({
+    id: USE_SKILL_HUB_SKILL_ID,
+    title: 'Use Skill Hub',
+    description: 'Built-in initial bootstrap guide for using this registry.',
+    version: USE_SKILL_HUB_INITIAL_VERSION,
+    status: SkillStatus.PUBLISHED,
+    category: SYSTEM_MANAGED_CATEGORY,
+    tags: ['skill-hub', 'bootstrap', 'discovery', 'curl', 'proposal', SYSTEM_MANAGED_TAG],
+    capabilities: ['discover', 'download', 'propose'],
+    useWhen: ['Use when setting up an AI agent to consume this ManagedSkillHub registry.'],
+    doNotUseWhen: ['Do not use as a replacement for live discovery when endpoint details may have changed.'],
+    entrypoint: 'SKILL.md',
+    files: [ManifestFile.create({ path: 'SKILL.md', role: 'entrypoint', mimeType: 'text/markdown', sha256 })],
+  });
+  const fileInfo: SkillFileInfo = {
+    id: 'SKILL.md',
+    artifactId: computeArtifactId(USE_SKILL_HUB_SKILL_ID, USE_SKILL_HUB_INITIAL_VERSION, 'SKILL.md'),
+    path: 'SKILL.md',
+    role: 'entrypoint',
+    mimeType: 'text/markdown',
+    sizeBytes: content.length,
+    sha256,
+    updatedAt: null,
+    extractable: true,
+  };
+  return {
+    manifest,
+    files: [fileInfo],
+    fallback: true,
+    publishedAt: null,
+    getFile: async (fileId: string) => {
+      const normalized = normalizeRelativeArtifactPath(fileId, { fieldLabel: 'Skill file path' });
+      if (normalized !== 'SKILL.md') {
+        return null;
+      }
+      return { path: 'SKILL.md', mimeType: 'text/markdown', content };
+    },
+  };
+}
+
+function fallbackVersionSummary(fallback: ResolvedReadableSkill) {
+  const contentDigest = computeContentDigest(
+    fallback.manifest.id,
+    fallback.manifest.version,
+    fallback.manifest.category,
+    fallback.manifest.tags,
+    fallback.manifest.capabilities,
+    fallback.manifest.entrypoint,
+    fallback.files
+  );
+  return {
+    version: fallback.manifest.version,
+    versionUuid: computeVersionUuid(fallback.manifest.id, fallback.manifest.version),
+    contentDigest,
+    status: SkillStatus.PUBLISHED,
+    createdAt: new Date(0),
+    approvedBy: null,
+    approvedAt: null,
+    publishedBy: null,
+    publishedAt: null,
+    rejectedBy: null,
+    rejectedAt: null,
+    rejectionReason: null,
+    deprecatedBy: null,
+    deprecatedAt: null,
+    deprecationReason: null,
+  };
+}
+
+function fallbackDetail(fallback: ResolvedReadableSkill) {
+  return {
+    id: fallback.manifest.id,
+    title: fallback.manifest.title,
+    description: fallback.manifest.description,
+    category: fallback.manifest.category,
+    tags: fallback.manifest.tags,
+    capabilities: fallback.manifest.capabilities,
+    useWhen: fallback.manifest.useWhen,
+    doNotUseWhen: fallback.manifest.doNotUseWhen,
+    entrypoint: fallback.manifest.entrypoint,
+    skillUuid: computeSkillUuid(fallback.manifest.id),
+    latestPublishedVersion: fallback.manifest.version,
+    versions: [fallbackVersionSummary(fallback)],
+  };
+}
+
+async function resolveReadableSkill(
+  request: FastifyRequest,
+  container: SkillReadRouteContainer,
+  skillId: string,
+  version?: string
+): Promise<ResolvedReadableSkill | null> {
+  const manifest = await container.skillQuery.getManifest(skillId, version);
+  if (manifest) {
+    const versions = await container.skillQuery.listVersions(skillId);
+    const versionSummary = versions.find((candidate) => candidate.version === manifest.version);
+    return {
+      manifest,
+      files: await container.skillQuery.listFiles(skillId, manifest.version),
+      fallback: false,
+      publishedAt: versionSummary?.publishedAt ?? null,
+      getFile: (fileId: string) => container.skillQuery.getFile(skillId, fileId, manifest.version),
+    };
+  }
+  if (
+    skillId === USE_SKILL_HUB_SKILL_ID &&
+    (!version || version === USE_SKILL_HUB_INITIAL_VERSION)
+  ) {
+    return buildUseSkillHubFallback(request, container);
+  }
+  return null;
+}
+
+async function buildBootstrapSkillDiscovery(
+  request: FastifyRequest,
+  container: SkillReadRouteContainer
+) {
+  const apiBaseUrl = resolveRequestApiBaseUrl(request, container.config.publicApiBaseUrl);
+  const resolved = await resolveReadableSkill(request, container, USE_SKILL_HUB_SKILL_ID);
+  const fallback = resolved?.fallback ?? true;
+  const version = resolved?.manifest.version ?? USE_SKILL_HUB_INITIAL_VERSION;
+  return {
+    id: USE_SKILL_HUB_SKILL_ID,
+    available: true,
+    fallback,
+    title: resolved?.manifest.title ?? 'Use Skill Hub',
+    description: resolved?.manifest.description ?? 'Built-in initial bootstrap guide for using this registry.',
+    version,
+    readUrl: endpointUrl(apiBaseUrl, `/skills/${USE_SKILL_HUB_SKILL_ID}/files/SKILL.md`),
+    packageUrl: endpointUrl(apiBaseUrl, `/skills/${USE_SKILL_HUB_SKILL_ID}/package`),
+    manifestUrl: endpointUrl(apiBaseUrl, `/skills/${USE_SKILL_HUB_SKILL_ID}/manifest`),
+    versionsUrl: endpointUrl(apiBaseUrl, `/skills/${USE_SKILL_HUB_SKILL_ID}/versions`),
+    recommended: 'package',
+    shortPath: fallback
+      ? 'Download packageUrl for persistent local use. A published use-skill-hub version will replace this initial fallback once available.'
+      : 'For one-off use, read readUrl. For persistent local use, download packageUrl because it includes skill-hub-meta.json for updates.',
+  };
+}
+
+async function buildDiscoveryResponse(
   request: import('fastify').FastifyRequest,
   container: SkillReadRouteContainer,
   agentAuth: AgentApiAuth
 ) {
-  const rawUrl = request.url ?? request.raw.url ?? '/discover';
-  const prefix = rawUrl.startsWith('/api/') ? '/api' : '';
+  const prefix = getRequestPrefix(request);
   const url = (path: string) => `${prefix}${path}`;
   const howToProposeUrl = url('/howToPropose');
   const frontendUrl = '/frontend';
@@ -217,6 +452,7 @@ function buildDiscoveryResponse(
 
   const authMetadata = agentAuth.metadata();
   const agentHttpGuidance = buildAgentHttpGuidance(authMetadata);
+  const bootstrapSkill = await buildBootstrapSkillDiscovery(request, container);
   const publicReadOidc = authMetadata.authSchemes.some(
     (scheme) => scheme.type === 'oauth2' && scheme.appliesTo.includes('public-read')
   );
@@ -233,6 +469,7 @@ function buildDiscoveryResponse(
     discoveryAuthRequired: authMetadata.discoveryAuthRequired,
     authSchemes: authMetadata.authSchemes,
     agentHttpGuidance,
+    bootstrapSkill,
     proposalWorkflow: buildProposalWorkflow(),
     documentation: {
       human: 'https://github.com/frankrichter/managed-skill-hub/blob/main/docs/product/AGENT_BOOTSTRAP.md',
@@ -726,9 +963,9 @@ function buildHowToProposeResponse(container: SkillReadRouteContainer, agentAuth
         checks: [
           'Use GET /skills/{skillId}/package?version=<published-version> to download any published version.',
           'If version is omitted, the endpoint resolves to the latest published version.',
-          'After download, extract to a user-approved location and verify manifest entrypoint and manifest.files all exist before running the skill.',
+          'Package downloads always return ZIP and include generated skill-hub-meta.json. After download, extract to a user-approved location and verify manifest entrypoint and manifest.files all exist before running the skill.',
           'If commands/manifest.json is present, inspect command sources and runtime target hints. Ask for confirmation before copying any command file into Cursor, Codex, Claude Code, or another runtime-specific command folder.',
-          'If only one file is available and it is SKILL.md, the endpoint may return SKILL.md directly for direct local execution.',
+          'For one-off direct local execution of a single entrypoint, read GET /skills/{skillId}/files/{fileId} instead of the package route.',
         ],
       },
     ],
@@ -970,8 +1207,8 @@ async function sendSkillPackage(
 ) {
   const { skillId } = request.params as { skillId: string };
   const { version } = request.query as { version?: string };
-  const manifest = await container.skillQuery.getManifest(skillId, version);
-  if (!manifest) {
+  const resolved = await resolveReadableSkill(request, container, skillId, version);
+  if (!resolved) {
     return sendApiError(reply, request, {
       statusCode: 404,
       code: 'NOT_FOUND',
@@ -979,8 +1216,7 @@ async function sendSkillPackage(
     });
   }
 
-  const files = await container.skillQuery.listFiles(skillId, manifest.version);
-  if (files.length === 0) {
+  if (resolved.files.length === 0) {
     return sendApiError(reply, request, {
       statusCode: 404,
       code: 'NOT_FOUND',
@@ -989,11 +1225,22 @@ async function sendSkillPackage(
   }
 
   try {
+    const downloadableFiles = normalizeDownloadablePackageFiles(resolved.files);
     const packageBuffer = await buildSkillPackageBuffer(
       skillId,
-      manifest.version,
-      files,
-      (fileId: string) => container.skillQuery.getFile(skillId, fileId, manifest.version)
+      resolved.manifest.version,
+      downloadableFiles,
+      resolved.getFile,
+      buildSkillHubMetaBuffer({
+        registryId: container.config.registryId,
+        registryName: container.config.registryName,
+        apiBaseUrl: resolveRequestApiBaseUrl(request, container.config.publicApiBaseUrl),
+        manifest: resolved.manifest,
+        files: downloadableFiles,
+        fallback: resolved.fallback,
+        downloadedAt: new Date(),
+        publishedAt: resolved.publishedAt,
+      })
     );
     return reply
       .header('Content-Type', packageBuffer.mimeType)
@@ -1124,6 +1371,10 @@ export function registerSkillReadRoutes(
     const { skillId } = request.params as { skillId: string };
     const skill = await container.skillQuery.getSkillDetail(skillId);
     if (!skill) {
+      const fallback = await resolveReadableSkill(request, container, skillId);
+      if (fallback?.fallback) {
+        return reply.send(fallbackDetail(fallback));
+      }
       return sendApiError(reply, request, {
         statusCode: 404,
         code: 'NOT_FOUND',
@@ -1136,22 +1387,29 @@ export function registerSkillReadRoutes(
   app.get('/skills/:skillId/manifest', publicReadGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
-    const manifest = await container.skillQuery.getManifest(skillId, version);
-    if (!manifest) {
+    const resolved = await resolveReadableSkill(request, container, skillId, version);
+    if (!resolved) {
       return sendApiError(reply, request, {
         statusCode: 404,
         code: 'NOT_FOUND',
         message: 'Manifest not found',
       });
     }
-    return reply.send(manifest);
+    return reply.send(resolved.manifest);
   });
 
   app.get('/skills/:skillId/files', publicReadGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const { version } = request.query as { version?: string };
-    const files = await container.skillQuery.listFiles(skillId, version);
-    return reply.send({ items: files });
+    const resolved = await resolveReadableSkill(request, container, skillId, version);
+    if (!resolved) {
+      return sendApiError(reply, request, {
+        statusCode: 404,
+        code: 'NOT_FOUND',
+        message: 'Skill or published version not found',
+      });
+    }
+    return reply.send({ items: resolved.files });
   });
 
   app.get('/skills/:skillId/judgements', publicReadGuard, async (request, reply) => {
@@ -1176,7 +1434,8 @@ export function registerSkillReadRoutes(
   app.get('/skills/:skillId/files/:fileId', publicReadGuard, async (request, reply) => {
     const { skillId, fileId } = request.params as { skillId: string; fileId: string };
     const { version } = request.query as { version?: string };
-    const file = await container.skillQuery.getFile(skillId, fileId, version);
+    const resolved = await resolveReadableSkill(request, container, skillId, version);
+    const file = await resolved?.getFile(fileId);
     if (!file) {
       return sendApiError(reply, request, {
         statusCode: 404,
@@ -1254,6 +1513,10 @@ export function registerSkillReadRoutes(
   app.get('/skills/:skillId/versions', publicReadGuard, async (request, reply) => {
     const { skillId } = request.params as { skillId: string };
     const versions = await container.skillQuery.listVersions(skillId);
+    if (versions.length === 0 && skillId === USE_SKILL_HUB_SKILL_ID) {
+      const fallback = buildUseSkillHubFallback(request, container);
+      return reply.send({ items: [fallbackVersionSummary(fallback)] });
+    }
     return reply.send({ items: versions });
   });
 

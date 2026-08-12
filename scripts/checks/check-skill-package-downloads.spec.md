@@ -10,8 +10,10 @@ from chat output.
 
 The script validates:
 
-- Explicit single-file published version download returns `SKILL.md` directly.
-- Latest multi-file published version download returns a ZIP package.
+- Explicit single-file published version download returns a ZIP package with
+  `SKILL.md` and generated `skill-hub-meta.json`.
+- Latest multi-file published version download returns a ZIP package with all
+  authored files and generated `skill-hub-meta.json`.
 - ZIP entries are deterministic, relative, and traversal-safe.
 - Explicit draft/unpublished versions are not publicly downloadable.
 - Unknown skills are not downloadable.

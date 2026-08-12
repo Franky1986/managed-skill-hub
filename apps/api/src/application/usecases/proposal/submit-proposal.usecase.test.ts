@@ -1168,6 +1168,28 @@ describe('SubmitProposalUseCase', () => {
     ).rejects.toBeInstanceOf(ProposalDisallowedPathError);
   });
 
+  it('rejects downloaded skill hub metadata files in proposal uploads', async () => {
+    const repo = new InMemorySkillRepository();
+    const storage = new InMemoryStorage();
+    const audit = new InMemoryAuditLog();
+    const judger = { judge: vi.fn() } satisfies SkillJudgerPort;
+    const scanner = new StubScanner();
+    const useCase = new SubmitProposalUseCase(repo, storage, audit, judger, scanner);
+
+    const proposal = await useCase.submitProposal(
+      { title: 'Local update', description: 'Local package should exclude generated metadata.', category: 'automation' },
+      'agent'
+    );
+
+    await expect(
+      useCase.attachFile(
+        proposal.id,
+        { path: 'nested/skill-hub-meta.json', content: Buffer.from('{}'), mimeType: 'application/json' },
+        'agent'
+      )
+    ).rejects.toThrow('must not be uploaded as proposal content');
+  });
+
   it('rejects dot-segment traversal or workspace-relative upload paths', async () => {
     const repo = new InMemorySkillRepository();
     const storage = new InMemoryStorage();

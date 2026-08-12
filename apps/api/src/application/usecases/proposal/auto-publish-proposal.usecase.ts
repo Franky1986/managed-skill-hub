@@ -12,6 +12,7 @@ import { SkillCommandPort } from '../../ports/inbound/skill-command.port';
 import { buildProposalAggregateFromCatalog } from './catalog-proposal-hydrator';
 import { ProposalDuplicateCheckUseCase } from './duplicate-check.usecase';
 import { isExtractableArtifact } from '../skill/public-metadata';
+import { isSystemManagedSkillCandidate } from '../skill/skill-hub-meta';
 import { JudgementRisk } from '../../../domain/judgement/Judgement';
 
 export type AutoPublishBlockedReason =
@@ -98,6 +99,20 @@ export class AutoPublishProposalUseCase {
         blockedReason: 'manual_review_required',
         blockedByCategory: null,
         classifierReason: 'Manual admin intervention already happened on this proposal.',
+        matchedExcludedCategory: null,
+        autoPublished: false,
+        publishedSkillId: null,
+        publishedVersion: null,
+      });
+    }
+    if (isSystemManagedSkillCandidate(proposal)) {
+      return this.recordEvaluation(proposal.id, {
+        enabled: true,
+        eligible: false,
+        blockedReason: 'manual_review_required',
+        blockedByCategory: null,
+        classifierReason:
+          'Auto-publish is not allowed for bootstrap or system-managed skills. A human reviewer must decide whether this should become a managed registry skill version.',
         matchedExcludedCategory: null,
         autoPublished: false,
         publishedSkillId: null,

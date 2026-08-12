@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import os from 'os';
 import path from 'path';
 import { mkdtemp, writeFile, rm } from 'fs/promises';
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach, vi } from 'vitest';
 import { registerSkillReadRoutes, SkillReadRouteContainer } from './skill-read.controller';
 import { AgentApiAuth } from './agent-api-auth';
 import { registerApiErrorHandler } from './error-response';
@@ -12,6 +12,7 @@ import { AppConfig } from '../../../infrastructure/config';
 import { createScriptAppConfig } from '../../../../../../scripts/lib/script-app-config';
 import { Manifest } from '../../../domain/skill/Manifest';
 import { SkillStatus } from '../../../domain/skill/SkillStatus';
+import { computeContentDigest } from '../../../application/usecases/skill/public-metadata';
 
 function testDouble<T extends object>(implementation: Partial<T> = {}): T {
   return new Proxy(implementation as T, {
@@ -44,6 +45,32 @@ function requireProposalGuidanceStep(steps: ProposalGuidanceStep[], title: strin
   return step;
 }
 
+function responseBuffer(response: { rawPayload?: Buffer; body: string | Buffer }): Buffer {
+  if (Buffer.isBuffer(response.rawPayload)) return response.rawPayload;
+  if (Buffer.isBuffer(response.body)) return response.body;
+  return Buffer.from(response.body, 'binary');
+}
+
+function zipContents(input: Buffer | Uint8Array): Map<string, Buffer> {
+  const buffer = Buffer.from(input);
+  const entries = new Map<string, Buffer>();
+  let offset = 0;
+  while (offset + 30 <= buffer.length) {
+    const signature = buffer.readUInt32LE(offset);
+    if (signature !== 0x04034b50) break;
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const fileNameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const nameEnd = nameStart + fileNameLength;
+    const contentStart = nameEnd + extraLength;
+    const contentEnd = contentStart + compressedSize;
+    entries.set(buffer.subarray(nameStart, nameEnd).toString('utf8'), buffer.subarray(contentStart, contentEnd));
+    offset = nameEnd + extraLength + compressedSize;
+  }
+  return entries;
+}
+
 function buildTestContainer(overrides: {
   config?: Partial<AppConfig>;
   nameSuggestion?: Partial<SkillReadRouteContainer['nameSuggestion']>;
@@ -66,8 +93,10 @@ function buildTestContainer(overrides: {
       ...overrides.nameSuggestion,
     }),
     skillQuery: testDouble<SkillReadRouteContainer['skillQuery']>({
+      getManifest: async () => null,
       listCategories: async () => [],
       listTags: async () => [],
+      listVersions: async () => [],
       ...overrides.skillQuery,
     }),
     listJudgements: testDouble<SkillReadRouteContainer['listJudgements']>(overrides.listJudgements),
@@ -136,6 +165,17 @@ describe('SkillReadController /discover', () => {
       openapi: '/openapi.yaml',
       frontend: '/frontend',
     });
+    expect(payload.bootstrapSkill).toMatchObject({
+      id: 'use-skill-hub',
+      available: true,
+      fallback: true,
+      title: 'Use Skill Hub',
+      version: '0.0.0-initial',
+      recommended: 'package',
+    });
+    expect(payload.bootstrapSkill.readUrl).toContain('/skills/use-skill-hub/files/SKILL.md');
+    expect(payload.bootstrapSkill.packageUrl).toContain('/skills/use-skill-hub/package');
+    expect(payload.bootstrapSkill.shortPath).toContain('packageUrl');
     expect(payload.capabilities.length).toBeGreaterThan(0);
     expect(payload.workflowNotes.conversationLanguage).toContain('language the user is currently using');
     expect(payload.workflowNotes.proposalPath).toContain('Prefer English for proposal metadata');
@@ -236,6 +276,36 @@ describe('SkillReadController /discover', () => {
     });
     expect(payload.documentation.openapi).toBe('/api/openapi.yaml');
     expect(payload.documentation.frontend).toBe('/frontend');
+    expect(payload.bootstrapSkill.readUrl).toContain('/api/skills/use-skill-hub/files/SKILL.md');
+    expect(payload.bootstrapSkill.packageUrl).toContain('/api/skills/use-skill-hub/package');
+  });
+
+  it('uses configured public API base URL before request host headers for bootstrap links', async () => {
+    const app = Fastify({ logger: false });
+    registerApiErrorHandler(app);
+    const container = buildTestContainer({
+      config: {
+        publicApiBaseUrl: 'https://configured.example.com/api',
+      },
+    });
+    registerSkillReadRoutes(app, container);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/discover',
+      headers: {
+        host: 'request-host.example.test',
+        'x-forwarded-host': 'evil.example.test',
+        'x-forwarded-proto': 'https',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payload = JSON.parse(response.payload);
+    expect(payload.bootstrapSkill.readUrl).toBe('https://configured.example.com/api/skills/use-skill-hub/files/SKILL.md');
+    expect(payload.bootstrapSkill.packageUrl).toBe('https://configured.example.com/api/skills/use-skill-hub/package');
+    expect(JSON.stringify(payload.bootstrapSkill)).not.toContain('evil.example.test');
+    expect(JSON.stringify(payload.bootstrapSkill)).not.toContain('request-host.example.test');
   });
 
 
@@ -554,6 +624,16 @@ describe('SkillReadController /discover', () => {
   it('downloads published skill package with versioned and latest resolution', async () => {
     const app = Fastify({ logger: false });
     registerApiErrorHandler(app);
+    const getFile = vi.fn(async (skillId: string, fileId: string, _version?: string) => {
+      if (skillId !== 'download-skill') return null;
+      if (fileId === 'SKILL.md') {
+        return { path: fileId, mimeType: 'text/markdown', content: Buffer.from('id: download-skill') };
+      }
+      if (fileId === 'scripts/run.py') {
+        return { path: fileId, mimeType: 'text/x-python', content: Buffer.from('print(\"run\")') };
+      }
+      throw new Error(`Unexpected file download: ${fileId}`);
+    });
     const container = buildTestContainer({
       skillQuery: {
         getManifest: async (skillId: string, version?: string) => {
@@ -613,17 +693,41 @@ describe('SkillReadController /discover', () => {
               updatedAt: new Date(),
               extractable: true,
             },
+            {
+              id: 'nested/skill-hub-meta.json',
+              artifactId: 'legacy-meta',
+              path: 'nested/skill-hub-meta.json',
+              role: 'metadata',
+              mimeType: 'application/json',
+              sizeBytes: 2,
+              sha256: 'legacy-meta-digest',
+              updatedAt: new Date(),
+              extractable: true,
+            },
           ];
         },
-        getFile: async (skillId: string, fileId: string, _version?: string) => {
-          if (skillId !== 'download-skill') return null;
-          if (fileId === 'SKILL.md') {
-            return { path: fileId, mimeType: 'text/markdown', content: Buffer.from('id: download-skill') };
-          }
-          if (fileId === 'scripts/run.py') {
-            return { path: fileId, mimeType: 'text/x-python', content: Buffer.from('print(\"run\")') };
-          }
-          return null;
+        getFile,
+        listVersions: async (skillId: string) => {
+          if (skillId !== 'download-skill') return [];
+          return [
+            {
+              version: '1.0.0',
+              versionUuid: 'version-1',
+              contentDigest: 'digest-1',
+              status: SkillStatus.PUBLISHED,
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
+              approvedBy: null,
+              approvedAt: null,
+              publishedBy: 'publisher',
+              publishedAt: new Date('2026-01-02T00:00:00.000Z'),
+              rejectedBy: null,
+              rejectedAt: null,
+              rejectionReason: null,
+              deprecatedBy: null,
+              deprecatedAt: null,
+              deprecationReason: null,
+            },
+          ];
         },
       },
     });
@@ -631,12 +735,140 @@ describe('SkillReadController /discover', () => {
 
     const explicitVersionResponse = await app.inject({ method: 'GET', url: '/skills/download-skill/package?version=1.0.0' });
     expect(explicitVersionResponse.statusCode).toBe(200);
-    expect(explicitVersionResponse.headers['content-type']).toContain('text/markdown');
+    expect(explicitVersionResponse.headers['content-type']).toContain('application/zip');
     expect(explicitVersionResponse.headers['content-disposition']).toBeDefined();
+    const explicitArchive = zipContents(responseBuffer(explicitVersionResponse));
+    expect([...explicitArchive.keys()].sort()).toEqual(['SKILL.md', 'skill-hub-meta.json']);
+    expect(explicitArchive.get('SKILL.md')?.toString('utf8')).toContain('id: download-skill');
+    const explicitMeta = JSON.parse(explicitArchive.get('skill-hub-meta.json')?.toString('utf8') ?? '{}');
+    expect(explicitMeta).toMatchObject({
+      schema: 'managed-skill-hub.skill-meta.v1',
+      skill: {
+        id: 'download-skill',
+        entrypoint: 'SKILL.md',
+      },
+      version: {
+        version: '1.0.0',
+        publishedAt: '2026-01-02T00:00:00.000Z',
+        fallback: false,
+      },
+      proposalDefaults: {
+        targetSkillId: 'download-skill',
+        excludeFromProposal: ['skill-hub-meta.json'],
+      },
+    });
+    expect(explicitMeta.links.package).toContain('/skills/download-skill/package?version=1.0.0');
 
     const latestVersionResponse = await app.inject({ method: 'GET', url: '/skills/download-skill/package' });
     expect(latestVersionResponse.statusCode).toBe(200);
     expect(latestVersionResponse.headers['content-type']).toContain('application/zip');
+    const latestArchive = zipContents(responseBuffer(latestVersionResponse));
+    expect([...latestArchive.keys()].sort()).toEqual([
+      'SKILL.md',
+      'scripts/run.py',
+      'skill-hub-meta.json',
+    ]);
+    expect(getFile).not.toHaveBeenCalledWith('download-skill', 'nested/skill-hub-meta.json', expect.anything());
+    const latestMeta = JSON.parse(latestArchive.get('skill-hub-meta.json')?.toString('utf8') ?? '{}');
+    expect(latestMeta.version.contentDigest).toBe(computeContentDigest(
+      'download-skill',
+      '1.2.0',
+      'automation',
+      [],
+      [],
+      'SKILL.md',
+      [
+        { path: 'SKILL.md', role: 'readme', mimeType: 'text/markdown', sha256: 'a1', sizeBytes: 12 },
+        { path: 'scripts/run.py', role: 'source', mimeType: 'text/x-python', sha256: 'b1', sizeBytes: 9 },
+      ]
+    ));
+  });
+
+  it('serves built-in use-skill-hub fallback through public read endpoints', async () => {
+    const app = Fastify({ logger: false });
+    registerApiErrorHandler(app);
+    const container = buildTestContainer({
+      config: {
+        registryId: 'testing-hub',
+        registryName: 'Testing Skill Hub',
+        publicApiBaseUrl: 'http://localhost:3040',
+      },
+      skillQuery: {
+        getSkillDetail: async () => null,
+        getManifest: async () => null,
+        listFiles: async () => [],
+        getFile: async () => null,
+        listVersions: async () => [],
+      },
+    });
+    registerSkillReadRoutes(app, container);
+
+    const detailResponse = await app.inject({ method: 'GET', url: '/skills/use-skill-hub' });
+    expect(detailResponse.statusCode).toBe(200);
+    expect(JSON.parse(detailResponse.payload)).toMatchObject({
+      id: 'use-skill-hub',
+      category: 'registry-system',
+      latestPublishedVersion: '0.0.0-initial',
+    });
+
+    const manifestResponse = await app.inject({ method: 'GET', url: '/skills/use-skill-hub/manifest' });
+    expect(manifestResponse.statusCode).toBe(200);
+    expect(JSON.parse(manifestResponse.payload)).toMatchObject({
+      id: 'use-skill-hub',
+      version: '0.0.0-initial',
+      entrypoint: 'SKILL.md',
+    });
+
+    const fileResponse = await app.inject({
+      method: 'GET',
+      url: '/skills/use-skill-hub/files/SKILL.md',
+      headers: {
+        host: 'skill-hub.example.test',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': 'evil.example.test',
+      },
+    });
+    expect(fileResponse.statusCode).toBe(200);
+    expect(fileResponse.payload).toContain('curl -sS "http://skill-hub.example.test/discover"');
+    expect(fileResponse.payload).not.toContain('evil.example.test');
+    expect(fileResponse.payload).toContain('skill-hub-meta.json');
+
+    const versionsResponse = await app.inject({ method: 'GET', url: '/skills/use-skill-hub/versions' });
+    expect(versionsResponse.statusCode).toBe(200);
+    expect(JSON.parse(versionsResponse.payload).items[0]).toMatchObject({
+      version: '0.0.0-initial',
+      status: 'published',
+      publishedAt: null,
+    });
+
+    const packageResponse = await app.inject({
+      method: 'GET',
+      url: '/skills/use-skill-hub/package',
+      headers: {
+        host: 'skill-hub.example.test',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': 'evil.example.test',
+      },
+    });
+    expect(packageResponse.statusCode).toBe(200);
+    expect(packageResponse.headers['content-type']).toContain('application/zip');
+    const archive = zipContents(responseBuffer(packageResponse));
+    expect([...archive.keys()].sort()).toEqual(['SKILL.md', 'skill-hub-meta.json']);
+    const meta = JSON.parse(archive.get('skill-hub-meta.json')?.toString('utf8') ?? '{}');
+    expect(meta).toMatchObject({
+      registry: {
+        id: 'testing-hub',
+        apiBaseUrl: 'http://skill-hub.example.test',
+      },
+      skill: {
+        id: 'use-skill-hub',
+      },
+      version: {
+        version: '0.0.0-initial',
+        fallback: true,
+      },
+    });
+    expect(JSON.stringify(meta)).not.toContain('evil.example.test');
   });
 
   it('serves the OpenAPI YAML specification', async () => {

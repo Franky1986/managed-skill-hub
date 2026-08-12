@@ -13,8 +13,15 @@
 
 - [x] Expose generic network-context, retrieval-order, and endpoint-specific
       authentication guidance through both `/discover` and `/howToPropose`.
+- [x] Expose `discover.bootstrapSkill` with the built-in
+      `use-skill-hub@0.0.0-initial` fallback, request-aware read/package URLs,
+      and generated package metadata for persistent local setup.
 - [ ] Verify the updated live discovery response with an external agent that
       can choose between a remote web fetcher and a local terminal HTTP client.
+- [ ] Verify first-time setup from the target deployment by asking an external
+      agent to configure the registry from the base URL, download
+      `use-skill-hub`, inspect `skill-hub-meta.json`, and then use live
+      discovery/search/package endpoints without hard-coded paths.
 
 ## Proposal Intent Contract
 
@@ -135,6 +142,9 @@ For the default release profile, complete:
 - [ ] Restart both services with the default simple-admin / bearer-agent profile.
 - [x] Verify the semantic duplicate gate blocks auto-publish for a near-duplicate
       skill and allows it for a genuinely new skill.
+- [x] Verify bootstrap/system-managed auto-publish guard blocks explicit
+      `use-skill-hub`, `registry-system`, `system-managed`, and a title-derived
+      `use-skill-hub` proposal before duplicate assessment or conversion.
 - [x] Verify the admin proposal badge shows the correct `open/in_upload/converted`
       breakdown. (Top navigation shows `Proposals (open/in_upload/converted)`;
       proposal page open filter shows submitted/judged breakdown and refreshes it.)

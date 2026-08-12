@@ -225,9 +225,9 @@ without reconstructing files from chat output.
 
 Required checks:
 
-- For a single-file published version, download can return the `SKILL.md`
-  directly when that is the configured response contract.
-- For multi-file published versions, download returns a ZIP package.
+- For single-file and multi-file published versions, package download returns
+  a ZIP package.
+- Every package ZIP includes generated `skill-hub-meta.json`.
 - Package paths are relative and safe.
 - Package content matches the published version digest/metadata.
 - Explicit version download returns that version, not latest.

@@ -77,6 +77,25 @@ export interface SearchResult extends SkillSummary {
     score: number | null;
 }
 
+export interface BootstrapSkill {
+    id: string;
+    available: boolean;
+    fallback: boolean;
+    title: string;
+    description: string;
+    version: string;
+    readUrl: string;
+    packageUrl: string;
+    manifestUrl: string;
+    versionsUrl: string;
+    recommended: 'package';
+    shortPath: string;
+}
+
+export interface DiscoveryResponse {
+    bootstrapSkill?: BootstrapSkill;
+}
+
 export interface SkillFile {
     id: string;
     artifactId: string;
@@ -108,7 +127,7 @@ export interface ArtifactProbeResponse {
 }
 
 export const skillsApi = {
-    discover: () => apiClient.get('/discover'),
+    discover: () => apiClient.get<DiscoveryResponse>('/discover'),
     list: (category?: string, tags: string[] = [], limit = 50, offset = 0) =>
         apiClient.get('/skills', { params: buildDiscoveryParams(category, tags, limit, offset) }),
     search: (q: string, category?: string, tags: string[] = [], limit = 50, offset = 0) => {

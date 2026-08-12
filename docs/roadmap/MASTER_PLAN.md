@@ -17,9 +17,12 @@ these skills autonomously.
 
 ## Current Phase
 
-Phase 1 MVP foundation is implemented. EPIC-002, Agent Workbench UI and registry
-hardening, is functionally complete. EPIC-003 is moving the project to
-English-first docs, specs, UI localization, and agent-facing contracts.
+Phase 1 MVP foundation is implemented. Agent Workbench, English-first
+contracts, configurable agent auth, delegated agent sessions, deterministic
+validation, database-backed content storage, portable command artifacts, and
+the `use-skill-hub` bootstrap/download-metadata flow are implemented. Current
+work focuses on staging deployment verification, production readiness gates,
+and environment-specific Authentik acceptance.
 
 ## Target Architecture
 
@@ -114,6 +117,13 @@ English-first docs, specs, UI localization, and agent-facing contracts.
    - Independent `none`, `bearer`, and `oidc` modes for discovery, published
      reads, and proposals.
 
+14. **Use Skill Hub Bootstrap And Download Metadata**
+   - Built-in `use-skill-hub@0.0.0-initial` fallback for fresh registries.
+   - Discovery-advertised bootstrap skill with request-aware URLs.
+   - Generated `skill-hub-meta.json` in every downloaded package for local
+     update and re-proposal workflows.
+   - Always-ZIP package downloads plus direct file reads for one-off usage.
+
 ## Dependency Order
 
 1. OpenAPI contract and domain model.
@@ -129,6 +139,7 @@ English-first docs, specs, UI localization, and agent-facing contracts.
 11. Database-backed content storage.
 12. Portable agent command artifacts.
 13. Authentik OIDC and delegated agent authentication.
+14. Use Skill Hub bootstrap and download metadata.
 
 ## Definition Of Done Per Epic
 

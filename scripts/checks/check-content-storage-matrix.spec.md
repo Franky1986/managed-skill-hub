@@ -14,7 +14,9 @@ Proves that `CONTENT_STORAGE_PROVIDER` is externally invisible for the local det
 - Create and publish the same deterministic skill fixture in each mode.
 - Exercise public read endpoints through Fastify injection.
 - Compare scrubbed JSON responses for list, search, detail, manifest, files, categories, tags, and history.
-- Compare direct file download bytes and deterministic package download bytes.
+- Compare direct file download bytes and normalized package content. Generated
+  `skill-hub-meta.json` fields that are intentionally dynamic, such as
+  `downloadedAt` and registry identity, are scrubbed before parity comparison.
 - Verify database mode does not create managed `data/skills` or `data/proposals` content directories and writes `content.db`.
 - Emit Fastify error logs when an injected route fails so hidden internal
   adapter or module-resolution errors remain diagnosable.

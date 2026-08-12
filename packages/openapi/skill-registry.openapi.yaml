@@ -735,17 +735,9 @@ paths:
           type: string
       responses:
         '200':
-          description: Skill package or single SKILL.md file
+          description: ZIP skill package containing authored files and generated skill-hub-meta.json
           content:
             application/zip:
-              schema:
-                type: string
-                format: binary
-            text/markdown:
-              schema:
-                type: string
-                format: binary
-            text/plain:
               schema:
                 type: string
                 format: binary
@@ -3006,6 +2998,7 @@ components:
       - proposalAuthRequired
       - discoveryAuthRequired
       - agentHttpGuidance
+      - bootstrapSkill
       - proposalWorkflow
       - documentation
       - capabilities
@@ -3033,6 +3026,8 @@ components:
             $ref: '#/components/schemas/RuntimeAuthScheme'
         agentHttpGuidance:
           $ref: '#/components/schemas/AgentHttpGuidance'
+        bootstrapSkill:
+          $ref: '#/components/schemas/BootstrapSkill'
         proposalWorkflow:
           $ref: '#/components/schemas/ProposalWorkflow'
         workflowNotes:
@@ -3117,6 +3112,189 @@ components:
                 type: string
               url:
                 type: string
+    BootstrapSkill:
+      type: object
+      required:
+      - id
+      - available
+      - fallback
+      - title
+      - description
+      - version
+      - readUrl
+      - packageUrl
+      - manifestUrl
+      - versionsUrl
+      - recommended
+      - shortPath
+      properties:
+        id:
+          type: string
+          example: use-skill-hub
+        available:
+          type: boolean
+        fallback:
+          type: boolean
+          description: True when the built-in 0.0.0-initial bootstrap is served because no published use-skill-hub exists.
+        title:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        readUrl:
+          type: string
+          format: uri
+        packageUrl:
+          type: string
+          format: uri
+        manifestUrl:
+          type: string
+          format: uri
+        versionsUrl:
+          type: string
+          format: uri
+        recommended:
+          type: string
+          enum:
+          - package
+        shortPath:
+          type: string
+    SkillHubMeta:
+      type: object
+      required:
+      - schema
+      - downloadedAt
+      - registry
+      - skill
+      - version
+      - links
+      - proposalDefaults
+      - localUpdatePolicy
+      additionalProperties: true
+      properties:
+        schema:
+          type: string
+          enum:
+          - managed-skill-hub.skill-meta.v1
+        downloadedAt:
+          type: string
+          format: date-time
+        registry:
+          type: object
+          required:
+          - id
+          - name
+          - apiBaseUrl
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            apiBaseUrl:
+              type: string
+              format: uri
+        skill:
+          type: object
+          required:
+          - id
+          - title
+          - description
+          - category
+          - tags
+          - capabilities
+          - entrypoint
+          - skillUuid
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            description:
+              type: string
+            category:
+              type: string
+            tags:
+              type: array
+              items:
+                type: string
+            capabilities:
+              type: array
+              items:
+                type: string
+            entrypoint:
+              type: string
+            skillUuid:
+              type: string
+              format: uuid
+        version:
+          type: object
+          required:
+          - version
+          - versionUuid
+          - contentDigest
+          - publishedAt
+          - fallback
+          properties:
+            version:
+              type: string
+            versionUuid:
+              type: string
+              format: uuid
+            contentDigest:
+              type: string
+            publishedAt:
+              type:
+              - string
+              - 'null'
+              format: date-time
+            fallback:
+              type: boolean
+        links:
+          type: object
+          additionalProperties:
+            type: string
+        proposalDefaults:
+          type: object
+          required:
+          - targetSkillId
+          - resolution
+          - entrypoint
+          - metadataSource
+          - excludeFromProposal
+          properties:
+            targetSkillId:
+              type: string
+            resolution:
+              type: string
+              enum:
+              - create_new_version
+            entrypoint:
+              type: string
+            metadataSource:
+              type: string
+              enum:
+              - skill-hub-meta.json
+            excludeFromProposal:
+              type: array
+              items:
+                type: string
+        localUpdatePolicy:
+          type: object
+          required:
+          - backupDirectory
+          - localEditMarker
+          - requiresUserConfirmationBeforeReplace
+          - instruction
+          properties:
+            backupDirectory:
+              type: string
+            localEditMarker:
+              type: string
+            requiresUserConfirmationBeforeReplace:
+              type: boolean
+            instruction:
+              type: string
     RuntimeAuthScheme:
       type: object
       required:

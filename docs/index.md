@@ -41,6 +41,7 @@ co-located `*.spec.md` files.
 | [docs/roadmap/EPIC-009-database-backed-content-storage.md](roadmap/EPIC-009-database-backed-content-storage.md) | Planned database-backed content storage |
 | [docs/roadmap/EPIC-010-portable-agent-command-artifacts.md](roadmap/EPIC-010-portable-agent-command-artifacts.md) | Planned portable command artifacts for Cursor, Codex, Claude Code, and generic agent runtimes |
 | [docs/roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md](roadmap/EPIC-011-authentik-oidc-and-delegated-agent-authentication.md) | Implemented Authentik runtime and remaining real-staging production activation gate |
+| [docs/roadmap/EPIC-013-use-skill-hub-bootstrap-and-download-metadata.md](roadmap/EPIC-013-use-skill-hub-bootstrap-and-download-metadata.md) | Implemented use-skill-hub bootstrap fallback, generated download metadata, and update-aware local consumption |
 | [docs/progress/CURRENT_STATUS.md](progress/CURRENT_STATUS.md) | Current project state |
 | [docs/progress/NEXT_STEPS.md](progress/NEXT_STEPS.md) | Concrete next steps |
 | [docs/progress/CHANGELOG_INTERNAL.md](progress/CHANGELOG_INTERNAL.md) | Engineering change journal |

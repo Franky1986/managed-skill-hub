@@ -2,7 +2,7 @@
 
 ## Current Date
 
-2026-07-17
+2026-08-12
 
 ## Project State
 
@@ -30,6 +30,20 @@ gate, proposal creation supports retry-safe idempotency keys, and persisted
 artifact decisions prevent silent omission or rewriting of outside-root local
 dependencies. Published category values are suggestions under an open category
 policy, not a server allowlist.
+
+Fresh registries expose a built-in `use-skill-hub@0.0.0-initial` bootstrap
+skill through `/discover.bootstrapSkill` and the public read endpoints. A real
+published `use-skill-hub` skill takes precedence when available. Package
+downloads are ZIP-only and include generated `skill-hub-meta.json` metadata for
+local update and re-proposal workflows; direct file reads remain the one-off
+path. Proposal uploads reject `skill-hub-meta.json`, and bootstrap or
+system-managed proposals cannot auto-publish. The auto-publish guard also
+blocks a new proposal whose title would derive the reserved `use-skill-hub`
+skill ID, and generated package metadata computes its content digest from the
+same authored-file set that is actually delivered in the ZIP. Filesystem-backed
+skill persistence stores and rehydrates lifecycle metadata, so `publishedAt`
+and related version fields survive projection rebuilds and remain available in
+downloaded package metadata.
 
 Proposal workflow version `1.1` enforces one active `in_upload` proposal per
 owner and upload intent. A repeated matching create returns
@@ -95,7 +109,9 @@ with `nosniff` plus sandbox CSP, attachment delivery for active browser content
 types, public file-read manifest validation, filesystem-storage path containment,
 and restore archive member validation. Proposal writes have production fail-fast
 auth defaults, per-process rate limits, and submitter ownership checks. The
-locked dependency graph currently audits with zero known vulnerabilities.
+locked dependency graph currently audits with zero known vulnerabilities after
+the 2026-08-11 audit remediation for Fastify Swagger UI/static delivery, YAML
+parsing, PostCSS, React Router, and related transitive packages.
 Remaining production concerns include gateway-level distributed rate limits and
 completion of the environment-specific real Authentik activation gate.
 Runtime configuration is layered so agent-editable `.env` profiles contain no

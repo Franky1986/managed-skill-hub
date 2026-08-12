@@ -8,6 +8,8 @@ Persists skills and skill versions as files on the filesystem.
 
 - Read/write skill metadata
 - Read/write versions
+- Preserve version lifecycle metadata (`created*`, `approved*`, `published*`,
+  `rejected*`, `deprecated*`) across save/load cycles and projection rebuilds
 - Atomic writes through temp file plus rename
 
 ## Non-Scope
@@ -39,6 +41,7 @@ Persists skills and skill versions as files on the filesystem.
 ## Acceptance Criteria
 
 - A stored skill can be fully loaded again.
+- Review and publish metadata survive a filesystem reload.
 - Partial writes do not leave corrupted data.
 
 ## Tests / Checks

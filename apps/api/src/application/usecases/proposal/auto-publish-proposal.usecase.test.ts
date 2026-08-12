@@ -775,6 +775,109 @@ describe('AutoPublishProposalUseCase semantic duplicate gate', () => {
 });
 
 describe('AutoPublishProposalUseCase skillId collision gate', () => {
+  it('blocks auto-publish for the reserved use-skill-hub bootstrap skill', async () => {
+    const proposal = Proposal.create({
+      id: 'proposal-bootstrap',
+      skillId: 'use-skill-hub',
+      title: 'Use Skill Hub',
+      description: 'Update the registry bootstrap skill.',
+      category: 'registry-system',
+      tags: ['system-managed'],
+      capabilities: ['discover'],
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    })
+      .addFile(ProposalFile.create({
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 100,
+        sha256: 'abc',
+      }))
+      .finalizeUpload();
+
+    const duplicateCheck = {
+      executeForProposal: vi.fn(),
+    };
+    const convertProposal = vi.fn();
+    const classifyAutoPublishCategory = vi.fn();
+    const append = vi.fn(async () => undefined);
+    const useCase = new AutoPublishProposalUseCase(
+      { findProposalById: vi.fn(async () => proposal) } as never,
+      { readProposalFile: vi.fn() } as never,
+      { append, findByProposalId: vi.fn(async () => []) } as never,
+      { scan: vi.fn() } as never,
+      { judge: vi.fn(), classifyAutoPublishCategory } as never,
+      { convertProposal } as never,
+      { submitForReview: vi.fn(), approve: vi.fn(), publish: vi.fn() } as never,
+      { enabled: true, excludedCategories: [], autoApproveWithoutJudger: false, similarityThreshold: 0.5 },
+      {} as never,
+      duplicateCheck as never,
+    );
+
+    const result = await useCase.execute(proposal.id);
+
+    expect(result.eligible).toBe(false);
+    expect(result.blockedReason).toBe('manual_review_required');
+    expect(result.classifierReason).toContain('system-managed');
+    expect(duplicateCheck.executeForProposal).not.toHaveBeenCalled();
+    expect(classifyAutoPublishCategory).not.toHaveBeenCalled();
+    expect(convertProposal).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalled();
+  });
+
+  it('blocks auto-publish when a new proposal title would derive the reserved use-skill-hub id', async () => {
+    const proposal = Proposal.create({
+      id: 'proposal-bootstrap-title',
+      title: 'Use Skill Hub',
+      description: 'A proposal without explicit skillId would derive the reserved bootstrap id.',
+      category: 'tooling',
+      tags: ['bootstrap'],
+      capabilities: ['discover'],
+      entrypoint: 'SKILL.md',
+      submittedBy: 'agent',
+    })
+      .addFile(ProposalFile.create({
+        id: 'SKILL.md',
+        path: 'SKILL.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 100,
+        sha256: 'abc',
+      }))
+      .finalizeUpload()
+      .addJudgement(greenJudgement('proposal', 'proposal-bootstrap-title'))
+      .addJudgement(greenJudgement('file', 'proposal-bootstrap-title:SKILL.md'));
+
+    const duplicateCheck = {
+      executeForProposal: vi.fn(),
+    };
+    const convertProposal = vi.fn();
+    const classifyAutoPublishCategory = vi.fn();
+    const append = vi.fn(async () => undefined);
+    const useCase = new AutoPublishProposalUseCase(
+      { findProposalById: vi.fn(async () => proposal) } as never,
+      { readProposalFile: vi.fn() } as never,
+      { append, findByProposalId: vi.fn(async () => []) } as never,
+      { scan: vi.fn() } as never,
+      { judge: vi.fn(), classifyAutoPublishCategory } as never,
+      { convertProposal } as never,
+      { submitForReview: vi.fn(), approve: vi.fn(), publish: vi.fn() } as never,
+      { enabled: true, excludedCategories: [], autoApproveWithoutJudger: false, similarityThreshold: 0.5 },
+      {} as never,
+      duplicateCheck as never,
+    );
+
+    const result = await useCase.execute(proposal.id);
+
+    expect(result.eligible).toBe(false);
+    expect(result.blockedReason).toBe('manual_review_required');
+    expect(result.classifierReason).toContain('system-managed');
+    expect(duplicateCheck.executeForProposal).not.toHaveBeenCalled();
+    expect(classifyAutoPublishCategory).not.toHaveBeenCalled();
+    expect(convertProposal).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalled();
+  });
+
   it('blocks auto-publish when the proposal targets an existing skillId', async () => {
     const proposal = Proposal.create({
       id: 'proposal-collision',

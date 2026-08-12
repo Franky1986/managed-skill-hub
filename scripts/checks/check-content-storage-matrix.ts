@@ -29,6 +29,7 @@ interface CaseResult {
   searchProvider: SearchProvider;
   checks: Record<string, unknown>;
   packageSha256: string;
+  packageSignature: unknown;
   directFileSha256: string;
   noManagedFilesystemContent: boolean | null;
 }
@@ -154,6 +155,7 @@ async function runCase(testCase: MatrixCase, skillId: string): Promise<CaseResul
     const pack = await app.inject({ method: 'GET', url: '/skills/' + skillId + '/package?version=1.0.0' });
     assert(pack.statusCode === 200, mode + ' package status ' + pack.statusCode);
     const packageBuffer = responseBuffer(pack);
+    const packageSignature = normalizedPackageSignature(packageBuffer);
 
     return {
       id: testCase.id,
@@ -162,7 +164,8 @@ async function runCase(testCase: MatrixCase, skillId: string): Promise<CaseResul
       searchProvider: testCase.searchProvider,
       checks,
       directFileSha256: sha256(directBuffer),
-      packageSha256: sha256(packageBuffer),
+      packageSha256: sha256(Buffer.from(JSON.stringify(packageSignature))),
+      packageSignature,
       noManagedFilesystemContent: mode === 'database'
         ? !(await exists(path.join(dataDir, 'skills'))) && !(await exists(path.join(dataDir, 'proposals'))) && (testCase.catalogProvider === 'mysql' || await exists(path.join(dataDir, 'index', 'search.db')))
         : null,
@@ -223,6 +226,56 @@ function responseBuffer(response: { rawPayload?: Buffer; body: string | Buffer; 
 
 function sha256(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex');
+}
+
+function normalizedPackageSignature(input: Buffer): unknown {
+  const entries = zipContents(input);
+  const authoredFiles: Record<string, string> = {};
+  for (const [entry, content] of entries) {
+    if (entry === 'skill-hub-meta.json') {
+      continue;
+    }
+    authoredFiles[entry] = sha256(content);
+  }
+  const meta = entries.get('skill-hub-meta.json');
+  return {
+    entries: [...entries.keys()].sort(),
+    authoredFiles,
+    meta: meta ? scrubSkillHubMeta(JSON.parse(meta.toString('utf8'))) : null,
+  };
+}
+
+function zipContents(input: Buffer | Uint8Array): Map<string, Buffer> {
+  const buffer = Buffer.from(input);
+  const entries = new Map<string, Buffer>();
+  let offset = 0;
+  while (offset + 30 <= buffer.length) {
+    const signature = buffer.readUInt32LE(offset);
+    if (signature !== 0x04034b50) break;
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const fileNameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const nameEnd = nameStart + fileNameLength;
+    const contentStart = nameEnd + extraLength;
+    const contentEnd = contentStart + compressedSize;
+    entries.set(buffer.subarray(nameStart, nameEnd).toString('utf8'), buffer.subarray(contentStart, contentEnd));
+    offset = contentEnd;
+  }
+  return entries;
+}
+
+function scrubSkillHubMeta(value: Record<string, unknown>): Record<string, unknown> {
+  const scrubbed = scrubJson(value) as Record<string, unknown>;
+  scrubbed.downloadedAt = '<dynamic>';
+  if (scrubbed.registry && typeof scrubbed.registry === 'object') {
+    scrubbed.registry = {
+      ...(scrubbed.registry as Record<string, unknown>),
+      id: '<registry>',
+      name: '<registry>',
+    };
+  }
+  return scrubbed;
 }
 
 function scrubJson(value: unknown): unknown {
@@ -300,8 +353,8 @@ async function main(): Promise<void> {
     if (baseline.directFileSha256 !== result.directFileSha256) {
       failures.push(result.id + ': direct file bytes mismatch');
     }
-    if (baseline.packageSha256 !== result.packageSha256) {
-      failures.push(result.id + ': package bytes mismatch');
+    if (JSON.stringify(baseline.packageSignature) !== JSON.stringify(result.packageSignature)) {
+      failures.push(result.id + ': package normalized content mismatch');
     }
     if (result.noManagedFilesystemContent !== true) {
       failures.push(result.id + ': database mode wrote managed skills/proposals filesystem content or missed content tables');

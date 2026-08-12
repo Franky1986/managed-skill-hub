@@ -1,3 +1,49 @@
+# 2026-08-12: Implement use-skill-hub bootstrap and package metadata
+
+- Added the built-in `use-skill-hub@0.0.0-initial` fallback to public read
+  endpoints and `/discover.bootstrapSkill`, with request-aware bootstrap URLs.
+- Changed package downloads to always return ZIP and include generated
+  `skill-hub-meta.json` metadata without rewriting authored `SKILL.md`
+  content.
+- Blocked proposal uploads of reserved `skill-hub-meta.json` files and added
+  an explicit auto-publish blocker for `use-skill-hub`, `registry-system`, and
+  `system-managed` proposals.
+- Hardened the blocker so proposals without an explicit `skillId` are also
+  blocked when their title would derive the reserved `use-skill-hub` ID during
+  conversion.
+- Hardened package metadata so legacy authored files named
+  `skill-hub-meta.json` are excluded from both the delivered ZIP content and
+  the generated metadata content digest.
+- Fixed filesystem repository rehydration so skill lifecycle metadata such as
+  `approvedAt` and `publishedAt` survives save/load cycles and projection
+  rebuilds; this keeps generated package metadata version information intact
+  after a real `use-skill-hub` publish.
+- Updated API specs, OpenAPI, agent documentation, frontend first-run entry
+  point, focused unit tests, and deterministic package/provider proofs.
+
+# 2026-08-12: Plan use-skill-hub bootstrap and download metadata
+
+- Added EPIC-013 to plan a directly usable `use-skill-hub@0.0.0-initial`
+  fallback, request-aware bootstrap discovery, generated
+  `skill-hub-meta.json` package metadata, update-aware local consumption,
+  proposal re-submission rules, reserved metadata-file rejection, and
+  auto-publish blockers for system-managed skills.
+- Linked the new implementation plan from the master roadmap and documentation
+  index.
+
+# 2026-08-11: Refresh dependency audit baseline
+
+- Ran `npm audit fix` followed by `npm audit fix --force` to clear the current
+  npm advisory set.
+- Kept the repository's exact-version dependency policy after the forced audit
+  update by removing npm-introduced ranges and misplaced workspace dependencies.
+- Updated direct pins for `@fastify/swagger-ui`, `js-yaml`,
+  `react-router-dom`, and `postcss`; the lockfile now resolves patched
+  transitive packages including `@fastify/static`, `brace-expansion`,
+  `fast-uri`, `find-my-way`, and `nanoid`.
+- Verified the remediation with `npm audit`, `npm run typecheck`,
+  `./scripts/check.sh`, and `npm run build:prod`.
+
 # 2026-07-17: Make fresh-checkout local startup deterministic
 
 - Aligned local profiles on the browser-facing `/api` path and added Vite

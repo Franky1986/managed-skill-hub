@@ -117,4 +117,46 @@ describe('FileSystemSkillRepository', () => {
     expect(loaded).not.toBeNull();
     expect(loaded?.getLatestPublishedVersion()?.version).toBe('1.0.0');
   });
+
+  it('rehydrates skill review and publish metadata from persisted YAML', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-repo-'));
+    tempDirs.push(dataDir);
+
+    const repo = new FileSystemSkillRepository(dataDir);
+    const skill = Skill.create({ id: SkillId.create('lifecycle-skill'), createdBy: 'creator' });
+    skill.addVersion(
+      SkillVersion.create({
+        skillId: skill.id,
+        version: '1.0.0',
+        createdBy: 'creator',
+        createdAt: new Date('2026-08-12T08:00:00.000Z'),
+        manifest: Manifest.create({
+          id: 'lifecycle-skill',
+          title: 'Lifecycle Skill',
+          description: 'Keeps review metadata after reload',
+          version: '1.0.0',
+          status: SkillStatus.DRAFT,
+          category: 'automation',
+          entrypoint: 'README.md',
+          files: [],
+        }),
+      })
+    );
+    skill.submitForReview('1.0.0', 'reviewer', new Date('2026-08-12T09:00:00.000Z'));
+    skill.approveVersion('1.0.0', 'approver', new Date('2026-08-12T10:00:00.000Z'));
+    skill.publishVersion('1.0.0', 'publisher', new Date('2026-08-12T11:00:00.000Z'));
+
+    await repo.save(skill);
+
+    const loaded = await repo.findById('lifecycle-skill');
+    const loadedVersion = loaded?.getVersion('1.0.0');
+
+    expect(loadedVersion?.status).toBe(SkillStatus.PUBLISHED);
+    expect(loadedVersion?.createdBy).toBe('creator');
+    expect(loadedVersion?.createdAt.toISOString()).toBe('2026-08-12T08:00:00.000Z');
+    expect(loadedVersion?.approvedBy).toBe('approver');
+    expect(loadedVersion?.approvedAt?.toISOString()).toBe('2026-08-12T10:00:00.000Z');
+    expect(loadedVersion?.publishedBy).toBe('publisher');
+    expect(loadedVersion?.publishedAt?.toISOString()).toBe('2026-08-12T11:00:00.000Z');
+  });
 });

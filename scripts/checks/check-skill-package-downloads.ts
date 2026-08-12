@@ -119,6 +119,28 @@ function container(): Container {
         if (!version || version.status !== 'published' || !file) return null;
         return { path: fileId, mimeType: file.mimeType, content: Buffer.from(file.content) };
       },
+      listVersions: async (skillId: string) => {
+        if (skillId !== 'package-proof-skill') return [];
+        return Object.values(versions)
+          .filter((version) => version.status === 'published')
+          .map((version) => ({
+            version: version.version,
+            versionUuid: 'version-' + version.version,
+            contentDigest: 'digest-' + version.version,
+            status: 'published',
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            approvedBy: null,
+            approvedAt: null,
+            publishedBy: 'package-proof',
+            publishedAt: new Date('2026-01-02T00:00:00.000Z'),
+            rejectedBy: null,
+            rejectedAt: null,
+            rejectionReason: null,
+            deprecatedBy: null,
+            deprecatedAt: null,
+            deprecationReason: null,
+          }));
+      },
       listCategories: async () => ['automation'],
       listTags: async () => ['proof'],
     } as unknown as Container['skillQuery'],
@@ -176,16 +198,19 @@ async function main(): Promise<void> {
 
   const single = await app.inject({ method: 'GET', url: '/skills/package-proof-skill/package?version=1.0.0' });
   assert(single.statusCode === 200, 'single file status');
-  assert(String(single.headers['content-type']).includes('text/markdown'), 'single file content type');
-  assert(String(single.headers['content-disposition']).includes('package-proof-skill-1.0.0-SKILL.md'), 'single file name');
-  assert(responseBuffer(single).toString('utf8').includes('Single file'), 'single file content');
+  assert(String(single.headers['content-type']).includes('application/zip'), 'single file package content type');
+  assert(String(single.headers['content-disposition']).includes('package-proof-skill-1.0.0.zip'), 'single file package name');
+  const singleBuffer = responseBuffer(single);
+  const singleEntries = zipEntries(singleBuffer);
+  assert(['SKILL.md', 'skill-hub-meta.json'].every((entry) => singleEntries.includes(entry)) && singleEntries.length === 2, 'single file package entries');
+  assertSafeZipEntries(singleEntries);
   results.push({
     id: 'single-file-explicit-version',
     statusCode: single.statusCode,
     contentType: String(single.headers['content-type']),
     contentDisposition: single.headers['content-disposition'] as string | undefined,
-    bodyLength: single.body.length,
-    zipEntries: [],
+    bodyLength: singleBuffer.length,
+    zipEntries: singleEntries,
     result: 'PASS',
   });
 
@@ -195,7 +220,7 @@ async function main(): Promise<void> {
   assert(String(latest.headers['content-disposition']).includes('package-proof-skill-1.1.0.zip'), 'latest package file name');
   const latestBuffer = responseBuffer(latest);
   const entries = zipEntries(latestBuffer);
-  assert(['SKILL.md', 'docs/guide.md', 'scripts/run.py'].every((entry) => entries.includes(entry)) && entries.length === 3, 'latest package complete entries');
+  assert(['SKILL.md', 'docs/guide.md', 'scripts/run.py', 'skill-hub-meta.json'].every((entry) => entries.includes(entry)) && entries.length === 4, 'latest package complete entries');
   assertSafeZipEntries(entries);
   results.push({
     id: 'multi-file-latest-version',

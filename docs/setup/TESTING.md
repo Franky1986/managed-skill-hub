@@ -300,7 +300,7 @@ This proof is part of `./scripts/check.sh`.
 
 ## Content Storage Matrix
 
-`scripts/checks/check-content-storage-matrix.ts` proves that filesystem-backed content storage and SQLite database-backed content storage are black-box equivalent for the covered public API and download paths. It creates the same published skill fixture in both modes, compares scrubbed JSON responses, compares direct file bytes, compares package ZIP bytes, and verifies database mode does not create managed `data/skills` or `data/proposals` directories.
+`scripts/checks/check-content-storage-matrix.ts` proves that filesystem-backed content storage and SQLite database-backed content storage are black-box equivalent for the covered public API and download paths. It creates the same published skill fixture in both modes, compares scrubbed JSON responses, compares direct file bytes, compares normalized package contents with dynamic `skill-hub-meta.json` fields scrubbed, and verifies database mode does not create managed `data/skills` or `data/proposals` directories.
 
 Artifacts:
 
@@ -326,7 +326,8 @@ Successful runs generate `.tmp/provider-matrix.log` and `.tmp/provider-matrix.js
 ### Skill Package Downloads
 
 `./scripts/check.sh` runs `scripts/checks/check-skill-package-downloads.ts` to prove that agents can download published skill versions deterministically.
-It validates direct single-file `SKILL.md` downloads, multi-file ZIP downloads, blocked draft versions, and unknown-skill 404 behavior.
+It validates single-file and multi-file ZIP package downloads with generated
+`skill-hub-meta.json`, blocked draft versions, and unknown-skill 404 behavior.
 Successful runs generate `.tmp/skill-package-downloads.log` and `.tmp/skill-package-downloads.json`.
 
 ### Concurrency And Abuse Proof

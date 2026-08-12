@@ -36,6 +36,18 @@ interface SkillManifestYaml {
   useWhen?: string[];
   doNotUseWhen?: string[];
   entrypoint: string;
+  createdBy?: string;
+  createdAt?: string;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  publishedBy?: string | null;
+  publishedAt?: string | null;
+  rejectedBy?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+  deprecatedBy?: string | null;
+  deprecatedAt?: string | null;
+  deprecationReason?: string | null;
   files?: { path: string; role: string; mimeType?: string; sha256?: string }[];
 }
 
@@ -104,6 +116,18 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
         useWhen: version.manifest.useWhen,
         doNotUseWhen: version.manifest.doNotUseWhen,
         entrypoint: version.manifest.entrypoint,
+        createdBy: version.createdBy,
+        createdAt: version.createdAt.toISOString(),
+        approvedBy: version.approvedBy,
+        approvedAt: version.approvedAt?.toISOString() ?? null,
+        publishedBy: version.publishedBy,
+        publishedAt: version.publishedAt?.toISOString() ?? null,
+        rejectedBy: version.rejectedBy,
+        rejectedAt: version.rejectedAt?.toISOString() ?? null,
+        rejectionReason: version.rejectionReason,
+        deprecatedBy: version.deprecatedBy,
+        deprecatedAt: version.deprecatedAt?.toISOString() ?? null,
+        deprecationReason: version.deprecationReason,
         files: version.manifest.files.map((f) => ({
           path: f.path,
           role: f.role,
@@ -299,6 +323,7 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
   private async loadVersion(skillId: string, version: string): Promise<SkillVersion | null> {
     const file = path.join(this.skillsDir(), skillId, version, 'skill.yaml');
     try {
+      const stat = await fs.stat(file);
       const raw = await fs.readFile(file, 'utf-8');
       const doc = yaml.load(raw) as SkillManifestYaml;
       const manifest = Manifest.create({
@@ -322,16 +347,35 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
           })
         ),
       });
-      return SkillVersion.create({
+      return SkillVersion.rehydrate({
         skillId: SkillId.create(skillId),
         version: doc.version,
         manifest,
-        createdBy: 'system',
+        createdBy: doc.createdBy ?? 'system',
+        createdAt: parseStoredDate(doc.createdAt) ?? stat.mtime,
+        approvedBy: doc.approvedBy ?? null,
+        approvedAt: parseStoredDate(doc.approvedAt),
+        publishedBy: doc.publishedBy ?? null,
+        publishedAt: parseStoredDate(doc.publishedAt),
+        rejectedBy: doc.rejectedBy ?? null,
+        rejectedAt: parseStoredDate(doc.rejectedAt),
+        rejectionReason: doc.rejectionReason ?? null,
+        deprecatedBy: doc.deprecatedBy ?? null,
+        deprecatedAt: parseStoredDate(doc.deprecatedAt),
+        deprecationReason: doc.deprecationReason ?? null,
       });
     } catch {
       return null;
     }
   }
+}
+
+function parseStoredDate(value?: string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function normalizeStatusFilter(status?: string): string[] {

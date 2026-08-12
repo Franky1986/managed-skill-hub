@@ -72,6 +72,10 @@ function container(testCase: MatrixCase): Container {
       suggestSkillId: async () => ({ suggestion: 'skill', alternatives: [], isAvailable: true }),
     } as unknown as Container['nameSuggestion'],
     skillQuery: {
+      getManifest: async () => null,
+      listFiles: async () => [],
+      getFile: async () => null,
+      listVersions: async () => [],
       listCategories: async () => ['automation'],
       listTags: async () => ['agent'],
     } as unknown as Container['skillQuery'],
