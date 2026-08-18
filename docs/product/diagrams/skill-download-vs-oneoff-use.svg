@@ -1,0 +1,100 @@
+<svg viewBox="0 0 1400 800" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="800" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="38" font-size="24" font-weight="700" fill="#111827">Using a Found Skill — Package Download vs. One-Off File Read</text>
+  <text x="40" y="62" font-size="14" fill="#6b7280">Zooms into step 2 of the bootstrap/proposal flow · applies to any skill in the registry, not only use-skill-hub</text>
+
+  <!-- Shared start box -->
+  <rect x="460" y="86" width="480" height="64" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="700" y="112" font-size="14" font-weight="700" fill="#111827" text-anchor="middle">Found a skill via /skills/search</text>
+  <text x="700" y="132" font-size="12" fill="#374151" text-anchor="middle">→ resolved skillId + published version</text>
+
+  <!-- Branch -->
+  <path d="M700,150 L700,178 L340,178 L340,198" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+  <path d="M700,150 L700,178 L1060,178 L1060,198" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+  <text x="700" y="172" font-size="12" fill="#6b7280" text-anchor="middle">need it again later, or just once, right now?</text>
+
+  <!-- Left column: persistent download (green) -->
+  <rect x="140" y="200" width="400" height="110" rx="10" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <text x="156" y="226" font-size="14" font-weight="700" fill="#14532d">A1 · Download Package (persistent)</text>
+  <text x="156" y="248" font-size="12" fill="#14532d">GET /skills/:id/package?version=...</text>
+  <text x="156" y="265" font-size="12" fill="#14532d">→ always ZIP (even for single-file skills)</text>
+  <text x="156" y="282" font-size="12" fill="#14532d">contains SKILL.md + all files + skill-hub-meta.json</text>
+  <text x="156" y="299" font-size="12" fill="#14532d">saved locally, e.g. in the project workspace</text>
+
+  <path d="M340,310 L340,336" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+
+  <rect x="140" y="340" width="400" height="110" rx="10" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <text x="156" y="366" font-size="14" font-weight="700" fill="#14532d">A2 · Local Metadata Is Created</text>
+  <text x="156" y="388" font-size="12" fill="#14532d">skill-hub-meta.json carries:</text>
+  <text x="156" y="405" font-size="12" fill="#14532d">skillUuid, versionUuid, contentDigest,</text>
+  <text x="156" y="422" font-size="12" fill="#14532d">links (versions/manifest/proposals), update policy</text>
+  <text x="156" y="439" font-size="12" fill="#14532d">never uploaded again as authored content</text>
+
+  <path d="M340,450 L340,476" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+
+  <rect x="140" y="480" width="400" height="120" rx="10" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <text x="156" y="506" font-size="14" font-weight="700" fill="#14532d">A3 · Stays Usable Long-Term</text>
+  <text x="156" y="528" font-size="12" fill="#14532d">compare live version/digest later via links.versions;</text>
+  <text x="156" y="545" font-size="12" fill="#14532d">back up before replacing, ask user before overwrite;</text>
+  <text x="156" y="562" font-size="12" fill="#14532d">can later be edited and re-proposed</text>
+  <text x="156" y="579" font-size="12" fill="#14532d">(strip skill-hub-meta.json first)</text>
+
+  <!-- Right column: one-off read (blue) -->
+  <rect x="860" y="200" width="400" height="110" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="876" y="226" font-size="14" font-weight="700" fill="#1e3a8a">B1 · Read Single File (one-off)</text>
+  <text x="876" y="248" font-size="12" fill="#1e3a8a">GET /skills/:id/files/:fileId</text>
+  <text x="876" y="265" font-size="12" fill="#1e3a8a">(e.g. the entrypoint file, such as SKILL.md)</text>
+  <text x="876" y="282" font-size="12" fill="#1e3a8a">→ raw file content only, nothing else</text>
+  <text x="876" y="299" font-size="12" fill="#1e3a8a">no ZIP, no package step</text>
+
+  <path d="M1060,310 L1060,336" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+
+  <rect x="860" y="340" width="400" height="110" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="876" y="366" font-size="14" font-weight="700" fill="#1e3a8a">B2 · No Local Metadata</text>
+  <text x="876" y="388" font-size="12" fill="#1e3a8a">no skill-hub-meta.json is generated;</text>
+  <text x="876" y="405" font-size="12" fill="#1e3a8a">nothing persisted about registry identity,</text>
+  <text x="876" y="422" font-size="12" fill="#1e3a8a">version, content digest, or update policy</text>
+  <text x="876" y="439" font-size="12" fill="#1e3a8a">nothing left behind after the task ends</text>
+
+  <path d="M1060,450 L1060,476" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+
+  <rect x="860" y="480" width="400" height="120" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="876" y="506" font-size="14" font-weight="700" fill="#1e3a8a">B3 · Short, One-Off Usage Only</text>
+  <text x="876" y="528" font-size="12" fill="#1e3a8a">fine for a quick read-through or a single task;</text>
+  <text x="876" y="545" font-size="12" fill="#1e3a8a">no update tracking, no local edit/re-propose path;</text>
+  <text x="876" y="562" font-size="12" fill="#1e3a8a">need it again or want to change it?</text>
+  <text x="876" y="579" font-size="12" fill="#1e3a8a">→ go back and use the package download (A) instead</text>
+
+  <!-- Down to decision box -->
+  <path d="M340,600 L340,650 L700,650 L700,662" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+  <path d="M1060,600 L1060,650 L700,650" stroke="#374151" stroke-width="2" fill="none"/>
+
+  <!-- Decision box -->
+  <rect x="140" y="666" width="1120" height="100" rx="10" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+  <text x="700" y="692" font-size="14" font-weight="700" fill="#78350f" text-anchor="middle">Decision Rule</text>
+  <text x="700" y="716" font-size="12" fill="#78350f" text-anchor="middle">Need it again, want update/version checks, or plan to edit &amp; propose changes back? → download the package (A).</text>
+  <text x="700" y="736" font-size="12" fill="#78350f" text-anchor="middle">Just need to read it once, right now, for a quick task? → the one-off file read (B) is enough.</text>
+
+  <!-- Legend -->
+  <rect x="140" y="778" width="16" height="16" fill="#f3f4f6" stroke="#6b7280"/>
+  <text x="164" y="791" font-size="11" fill="#111827">Shared starting point</text>
+
+  <rect x="330" y="778" width="16" height="16" fill="#dcfce7" stroke="#15803d"/>
+  <text x="354" y="791" font-size="11" fill="#111827">Persistent download</text>
+
+  <rect x="530" y="778" width="16" height="16" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="554" y="791" font-size="11" fill="#111827">One-off, ephemeral read</text>
+
+  <rect x="760" y="778" width="16" height="16" fill="#fef3c7" stroke="#b45309"/>
+  <text x="784" y="791" font-size="11" fill="#111827">Decision guidance</text>
+
+  <text x="1000" y="791" font-size="11" fill="#9ca3af">Source: EPIC-013 (On-Demand vs. Persistent Local Use), AGENT_BOOTSTRAP.md</text>
+</svg>

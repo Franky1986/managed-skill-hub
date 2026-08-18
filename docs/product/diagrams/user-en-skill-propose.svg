@@ -1,0 +1,139 @@
+<svg viewBox="0 0 1400 1100" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="pmArrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+
+    <symbol id="p-doc" viewBox="0 0 24 24">
+      <path d="M6,3 H14 L18,7 V21 H6 Z"/>
+      <line x1="9" y1="11" x2="15" y2="11"/>
+      <line x1="9" y1="15" x2="15" y2="15"/>
+    </symbol>
+    <symbol id="p-robot" viewBox="0 0 24 24">
+      <rect x="7" y="9" width="10" height="8" rx="1.5"/>
+      <circle cx="10" cy="13" r="0.9"/>
+      <circle cx="14" cy="13" r="0.9"/>
+      <line x1="12" y1="9" x2="12" y2="6"/>
+      <circle cx="12" cy="5" r="1"/>
+      <line x1="4" y1="12" x2="7" y2="12"/>
+      <line x1="17" y1="12" x2="20" y2="12"/>
+    </symbol>
+    <symbol id="p-person" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="3.5"/>
+      <path d="M5,21 C5,15.5 8,13 12,13 C16,13 19,15.5 19,21"/>
+    </symbol>
+    <symbol id="p-agent" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="12" rx="3"/>
+      <path d="M8,16 L6,20 L11,16"/>
+      <line x1="12" y1="7" x2="12" y2="13"/>
+      <line x1="9" y1="10" x2="15" y2="10"/>
+    </symbol>
+    <symbol id="p-check" viewBox="0 0 24 24">
+      <polyline points="5,13 10,18 19,7"/>
+    </symbol>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="1100" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="60" y="40" font-size="26" font-weight="700" fill="#111827">Skill Hub for Everyday Users: Propose a Skill</text>
+  <text x="60" y="66" font-size="15" fill="#6b7280">Who does what: you give the instruction – your agent (e.g. Cursor) prepares &amp; submits it</text>
+
+  <!-- ============ CARD 1: Prepare & Submit (merged) ============ -->
+  <rect x="360" y="100" width="680" height="350" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="700" cy="138" r="26" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-doc" x="682" y="120" width="36" height="36"/>
+  </g>
+  <text x="700" y="190" font-size="16" font-weight="700" fill="#1e3a8a" text-anchor="middle">1. Prepare &amp; Submit a Proposal</text>
+
+  <rect x="376" y="208" width="648" height="90" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
+  <circle cx="400" cy="234" r="14" fill="#ffffff" stroke="#6b7280" stroke-width="1.8"/>
+  <g stroke="#374151" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-person" x="388" y="222" width="24" height="24"/>
+  </g>
+  <text x="422" y="238" font-size="12.5" font-weight="700" fill="#374151">You say, e.g.:</text>
+  <text x="700" y="267" font-size="12.5" fill="#374151" text-anchor="middle">"Submit this change to the skill hub."</text>
+  <text x="700" y="287" font-size="12" fill="#6b7280" text-anchor="middle">(If your agent has a question, you just answer it.)</text>
+
+  <rect x="376" y="308" width="648" height="130" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <circle cx="400" cy="334" r="14" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-agent" x="388" y="322" width="24" height="24"/>
+  </g>
+  <text x="422" y="338" font-size="12.5" font-weight="700" fill="#1e3a8a">Your agent does:</text>
+  <text x="700" y="367" font-size="12.5" fill="#1e3a8a" text-anchor="middle">Checks locally for duplicates,</text>
+  <text x="700" y="387" font-size="12.5" fill="#1e3a8a" text-anchor="middle">prepares the files + description,</text>
+  <text x="700" y="407" font-size="12.5" fill="#1e3a8a" text-anchor="middle">and submits the proposal.</text>
+
+  <!-- Branch -->
+  <path d="M700,450 L700,480 L340,480 L340,498" stroke="#374151" stroke-width="2.5" fill="none" marker-end="url(#pmArrow2)"/>
+  <path d="M700,450 L700,480 L1060,480 L1060,498" stroke="#374151" stroke-width="2.5" fill="none" marker-end="url(#pmArrow2)"/>
+  <text x="820" y="470" font-size="12" fill="#6b7280" text-anchor="middle">how is it reviewed?</text>
+
+  <!-- ============ ROW 2: Automated check / Human review ============ -->
+  <rect x="60" y="500" width="560" height="210" rx="14" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <circle cx="340" cy="542" r="32" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+  <g stroke="#7c3aed" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-robot" x="316" y="518" width="48" height="48"/>
+  </g>
+  <text x="340" y="608" font-size="16" font-weight="700" fill="#4c1d95" text-anchor="middle">3a. Automated Check</text>
+  <text x="340" y="634" font-size="12.5" fill="#4c1d95" text-anchor="middle">If your registry has one configured,</text>
+  <text x="340" y="654" font-size="12.5" fill="#4c1d95" text-anchor="middle">an automated check scores the risk</text>
+  <text x="340" y="674" font-size="12.5" fill="#4c1d95" text-anchor="middle">and can approve low-risk proposals.</text>
+  <text x="340" y="698" font-size="11.5" font-style="italic" fill="#6d28d9" text-anchor="middle">(nothing for you to do here)</text>
+
+  <rect x="780" y="500" width="560" height="210" rx="14" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+  <circle cx="1060" cy="542" r="32" fill="#ffffff" stroke="#b45309" stroke-width="2"/>
+  <g stroke="#b45309" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-person" x="1036" y="518" width="48" height="48"/>
+  </g>
+  <text x="1060" y="608" font-size="16" font-weight="700" fill="#78350f" text-anchor="middle">3b. Human Review</text>
+  <text x="1060" y="634" font-size="12.5" fill="#78350f" text-anchor="middle">If there's no automated check,</text>
+  <text x="1060" y="654" font-size="12.5" fill="#78350f" text-anchor="middle">or the result isn't clear-cut, an</text>
+  <text x="1060" y="674" font-size="12.5" fill="#78350f" text-anchor="middle">admin looks at the proposal.</text>
+  <text x="1060" y="698" font-size="11.5" font-style="italic" fill="#92400e" text-anchor="middle">(nothing for you to do here)</text>
+
+  <!-- Converge -->
+  <path d="M340,710 L340,741" stroke="#374151" stroke-width="2.5" fill="none" marker-end="url(#pmArrow2)"/>
+  <path d="M1060,710 L1060,741" stroke="#374151" stroke-width="2.5" fill="none" marker-end="url(#pmArrow2)"/>
+
+  <!-- ============ ROW 3: Published ============ -->
+  <rect x="60" y="745" width="1280" height="160" rx="14" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <circle cx="700" cy="783" r="26" fill="#ffffff" stroke="#15803d" stroke-width="2"/>
+  <g stroke="#15803d" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-check" x="682" y="765" width="36" height="36"/>
+  </g>
+  <text x="700" y="837" font-size="17" font-weight="700" fill="#14532d" text-anchor="middle">4. Published</text>
+  <text x="700" y="863" font-size="13.5" fill="#14532d" text-anchor="middle">Once approved, the new version is immediately usable by everyone.</text>
+  <text x="700" y="885" font-size="13.5" fill="#14532d" text-anchor="middle">Ask your agent: "Has my proposal been published yet?" to check the status.</text>
+
+  <!-- Reassurance note -->
+  <rect x="60" y="925" width="1280" height="80" rx="12" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.5"/>
+  <text x="700" y="957" font-size="14.5" font-weight="700" fill="#374151" text-anchor="middle">Good to know</text>
+  <text x="700" y="982" font-size="13.5" fill="#374151" text-anchor="middle">Your proposal is never made visible to everyone automatically without someone or something reviewing it first.</text>
+
+  <!-- Legend -->
+  <g stroke="#374151" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-person" x="60" y="1024" width="22" height="22"/>
+  </g>
+  <text x="90" y="1040" font-size="12.5" fill="#111827">= You</text>
+
+  <g stroke="#2563eb" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-agent" x="380" y="1024" width="22" height="22"/>
+  </g>
+  <text x="410" y="1040" font-size="12.5" fill="#111827">= Your agent (e.g. Cursor)</text>
+
+  <g stroke="#7c3aed" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-robot" x="700" y="1024" width="22" height="22"/>
+  </g>
+  <text x="730" y="1040" font-size="12.5" fill="#111827">= Automated check (optional, if configured)</text>
+
+  <g stroke="#b45309" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#p-person" x="1080" y="1024" width="22" height="22"/>
+  </g>
+  <text x="1110" y="1040" font-size="12.5" fill="#111827">= Admin (human review)</text>
+
+  <!-- Footer -->
+  <text x="60" y="1075" font-size="12" fill="#9ca3af">Simplified view for everyday users. Technical details (proposal API, validation, duplicate check): see SKILL_HUB_FLOW.md.</text>
+</svg>

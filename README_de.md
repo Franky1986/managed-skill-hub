@@ -57,6 +57,26 @@ Erstellt und gepflegt von [Frank Richter](https://www.linkedin.com/in/frank-rich
   Search-Projektionen nutzen oder später weitere Provider hinter denselben
   Ports ergänzen.
 
+## Für Endanwender
+
+Kein Entwickler? Du musst die API nicht direkt aufrufen – sag einfach deinem
+Coding-Agenten (z. B. Cursor, Claude, Codex) in normaler Sprache, was du
+willst.
+
+**Einen Skill herunterladen und nutzen** *(Diagramme auf Englisch)*
+
+![Download and use a skill](./docs/product/diagrams/user-en-skill-download.svg)
+
+**Einen Skill vorschlagen** *(Diagramme auf Englisch)*
+
+![Propose a skill](./docs/product/diagrams/user-en-skill-propose.svg)
+
+Die vollständige technische Erklärung dieser Abläufe (API-Endpunkte,
+optionaler Judger, `skill-hub-meta.json`) steht in
+[`docs/product/SKILL_HUB_FLOW.md`](./docs/product/SKILL_HUB_FLOW.md)
+(Englisch). Eine vereinfachte Anleitung (Englisch) gibt es unter
+[`docs/product/SKILL_HUB_FOR_USERS.md`](./docs/product/SKILL_HUB_FOR_USERS.md).
+
 ## Workflow Im Überblick
 
 1. Agents suchen und laden veröffentlichte Skills über Public-Read-Endpunkte.

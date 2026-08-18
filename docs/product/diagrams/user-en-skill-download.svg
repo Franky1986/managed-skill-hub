@@ -1,0 +1,180 @@
+<svg viewBox="0 0 1400 900" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="pmArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+
+    <symbol id="ic-search" viewBox="0 0 24 24">
+      <circle cx="10" cy="10" r="6"/>
+      <line x1="15" y1="15" x2="21" y2="21"/>
+    </symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24">
+      <line x1="12" y1="3" x2="12" y2="14"/>
+      <polyline points="7,10 12,15 17,10"/>
+      <line x1="4" y1="19" x2="20" y2="19"/>
+    </symbol>
+    <symbol id="ic-sliders" viewBox="0 0 24 24">
+      <line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/>
+      <line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/>
+      <line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2"/>
+    </symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24">
+      <polyline points="5,13 10,18 19,7"/>
+    </symbol>
+    <symbol id="ic-person" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="3.5"/>
+      <path d="M5,21 C5,15.5 8,13 12,13 C16,13 19,15.5 19,21"/>
+    </symbol>
+    <symbol id="ic-agent" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="12" rx="3"/>
+      <path d="M8,16 L6,20 L11,16"/>
+      <line x1="12" y1="7" x2="12" y2="13"/>
+      <line x1="9" y1="10" x2="15" y2="10"/>
+    </symbol>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="50" y="40" font-size="26" font-weight="700" fill="#111827">Skill Hub for Everyday Users: Download &amp; Use</text>
+  <text x="50" y="66" font-size="15" fill="#6b7280">Who does what: you talk to your agent (e.g. Cursor) in plain language – it handles the technical steps</text>
+
+  <!-- ================= CARD 1 (blue) ================= -->
+  <rect x="50" y="140" width="300" height="430" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="200" cy="178" r="26" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-search" x="182" y="160" width="36" height="36"/>
+  </g>
+  <text x="200" y="230" font-size="16" font-weight="700" fill="#1e3a8a" text-anchor="middle">1. Find a Skill</text>
+
+  <rect x="66" y="248" width="268" height="118" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
+  <circle cx="90" cy="274" r="14" fill="#ffffff" stroke="#6b7280" stroke-width="1.8"/>
+  <g stroke="#374151" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-person" x="78" y="262" width="24" height="24"/>
+  </g>
+  <text x="112" y="270" font-size="12.5" font-weight="700" fill="#374151">You say, e.g.:</text>
+  <text x="200" y="309" font-size="12" fill="#374151" text-anchor="middle">"Find a skill for</text>
+  <text x="200" y="327" font-size="12" fill="#374151" text-anchor="middle">summarizing meeting notes."</text>
+
+  <rect x="66" y="376" width="268" height="150" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <circle cx="90" cy="402" r="14" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-agent" x="78" y="390" width="24" height="24"/>
+  </g>
+  <text x="112" y="398" font-size="12.5" font-weight="700" fill="#1e3a8a">Your agent does:</text>
+  <text x="200" y="434" font-size="12" fill="#1e3a8a" text-anchor="middle">Searches the skill hub</text>
+  <text x="200" y="452" font-size="12" fill="#1e3a8a" text-anchor="middle">and suggests matching</text>
+  <text x="200" y="470" font-size="12" fill="#1e3a8a" text-anchor="middle">results.</text>
+
+  <!-- ================= CARD 2 (blue) ================= -->
+  <rect x="390" y="140" width="300" height="430" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="540" cy="178" r="26" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-download" x="522" y="160" width="36" height="36"/>
+  </g>
+  <text x="540" y="230" font-size="16" font-weight="700" fill="#1e3a8a" text-anchor="middle">2. Download</text>
+
+  <rect x="406" y="248" width="268" height="118" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
+  <circle cx="430" cy="274" r="14" fill="#ffffff" stroke="#6b7280" stroke-width="1.8"/>
+  <g stroke="#374151" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-person" x="418" y="262" width="24" height="24"/>
+  </g>
+  <text x="452" y="270" font-size="12.5" font-weight="700" fill="#374151">You say, e.g.:</text>
+  <text x="540" y="309" font-size="12" fill="#374151" text-anchor="middle">"Download this skill</text>
+  <text x="540" y="327" font-size="12" fill="#374151" text-anchor="middle">for good."</text>
+
+  <rect x="406" y="376" width="268" height="150" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <circle cx="430" cy="402" r="14" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-agent" x="418" y="390" width="24" height="24"/>
+  </g>
+  <text x="452" y="398" font-size="12.5" font-weight="700" fill="#1e3a8a">Your agent does:</text>
+  <text x="540" y="434" font-size="12" fill="#1e3a8a" text-anchor="middle">Downloads the skill +</text>
+  <text x="540" y="452" font-size="12" fill="#1e3a8a" text-anchor="middle">info file, and remembers</text>
+  <text x="540" y="470" font-size="12" fill="#1e3a8a" text-anchor="middle">its version and source.</text>
+
+  <!-- ================= CARD 3 (blue) ================= -->
+  <rect x="730" y="140" width="300" height="430" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="880" cy="178" r="26" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-sliders" x="862" y="160" width="36" height="36"/>
+  </g>
+  <text x="880" y="230" font-size="16" font-weight="700" fill="#1e3a8a" text-anchor="middle">3. Adjust</text>
+
+  <rect x="746" y="248" width="268" height="118" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
+  <circle cx="770" cy="274" r="14" fill="#ffffff" stroke="#6b7280" stroke-width="1.8"/>
+  <g stroke="#374151" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-person" x="758" y="262" width="24" height="24"/>
+  </g>
+  <text x="792" y="270" font-size="12.5" font-weight="700" fill="#374151">You say, e.g.:</text>
+  <text x="880" y="309" font-size="12" fill="#374151" text-anchor="middle">"Use these repos, and</text>
+  <text x="880" y="327" font-size="12" fill="#374151" text-anchor="middle">output as PDF."</text>
+
+  <rect x="746" y="376" width="268" height="150" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <circle cx="770" cy="402" r="14" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+  <g stroke="#2563eb" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-agent" x="758" y="390" width="24" height="24"/>
+  </g>
+  <text x="792" y="398" font-size="12.5" font-weight="700" fill="#1e3a8a">Your agent does:</text>
+  <text x="880" y="434" font-size="12" fill="#1e3a8a" text-anchor="middle">Enters your settings</text>
+  <text x="880" y="452" font-size="12" fill="#1e3a8a" text-anchor="middle">into the skill's own</text>
+  <text x="880" y="470" font-size="12" fill="#1e3a8a" text-anchor="middle">configuration.</text>
+
+  <!-- ================= CARD 4 (green) ================= -->
+  <rect x="1070" y="140" width="300" height="430" rx="14" fill="#ffffff" stroke="#15803d" stroke-width="2"/>
+  <circle cx="1220" cy="178" r="26" fill="#ffffff" stroke="#15803d" stroke-width="2"/>
+  <g stroke="#15803d" fill="none" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-check" x="1202" y="160" width="36" height="36"/>
+  </g>
+  <text x="1220" y="230" font-size="16" font-weight="700" fill="#14532d" text-anchor="middle">4. Use It</text>
+
+  <rect x="1086" y="248" width="268" height="118" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
+  <circle cx="1110" cy="274" r="14" fill="#ffffff" stroke="#6b7280" stroke-width="1.8"/>
+  <g stroke="#374151" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-person" x="1098" y="262" width="24" height="24"/>
+  </g>
+  <text x="1132" y="270" font-size="12.5" font-weight="700" fill="#374151">You say, e.g.:</text>
+  <text x="1220" y="309" font-size="12" fill="#374151" text-anchor="middle">You give it your actual</text>
+  <text x="1220" y="327" font-size="12" fill="#374151" text-anchor="middle">task to work on.</text>
+
+  <rect x="1086" y="376" width="268" height="150" rx="10" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <circle cx="1110" cy="402" r="14" fill="#ffffff" stroke="#15803d" stroke-width="1.8"/>
+  <g stroke="#15803d" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-agent" x="1098" y="390" width="24" height="24"/>
+  </g>
+  <text x="1132" y="398" font-size="12.5" font-weight="700" fill="#14532d">Your agent does:</text>
+  <text x="1220" y="434" font-size="12" fill="#14532d" text-anchor="middle">Applies the skill to</text>
+  <text x="1220" y="452" font-size="12" fill="#14532d" text-anchor="middle">your task and hands</text>
+  <text x="1220" y="470" font-size="12" fill="#14532d" text-anchor="middle">you the result.</text>
+
+  <!-- Arrows between cards -->
+  <path d="M350,178 L386,178" stroke="#374151" stroke-width="2.5" fill="none" marker-end="url(#pmArrow)"/>
+  <path d="M690,178 L726,178" stroke="#374151" stroke-width="2.5" fill="none" marker-end="url(#pmArrow)"/>
+  <path d="M1030,178 L1066,178" stroke="#374151" stroke-width="2.5" fill="none" marker-end="url(#pmArrow)"/>
+
+  <!-- Note 1: one-off read (gray) -->
+  <rect x="50" y="590" width="1320" height="100" rx="12" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.5"/>
+  <text x="710" y="618" font-size="14.5" font-weight="700" fill="#374151" text-anchor="middle">Just want a quick look?</text>
+  <text x="710" y="642" font-size="13" fill="#374151" text-anchor="middle">Tell your agent, e.g.: "Show me what's in this skill" – nothing gets downloaded or saved.</text>
+  <text x="710" y="663" font-size="13" fill="#374151" text-anchor="middle">Want to keep using it? Say instead: "Download this skill" (step 2).</text>
+
+  <!-- Note 2: bridge to propose flow (amber) -->
+  <rect x="50" y="706" width="1320" height="100" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+  <text x="710" y="734" font-size="14.5" font-weight="700" fill="#78350f" text-anchor="middle">Changed something about the skill?</text>
+  <text x="710" y="758" font-size="13" fill="#78350f" text-anchor="middle">Tell your agent: "Submit this change to the skill hub."</text>
+  <text x="710" y="779" font-size="13" fill="#78350f" text-anchor="middle">It prepares the proposal and files and submits it – see the "Propose a Skill" diagram next.</text>
+
+  <!-- Legend -->
+  <g stroke="#374151" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-person" x="50" y="826" width="22" height="22"/>
+  </g>
+  <text x="80" y="842" font-size="12.5" fill="#111827">= You – speak in plain language</text>
+
+  <g stroke="#2563eb" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#ic-agent" x="600" y="826" width="22" height="22"/>
+  </g>
+  <text x="630" y="842" font-size="12.5" fill="#111827">= Your agent (e.g. Cursor) – handles the technical steps</text>
+
+  <!-- Footer -->
+  <text x="50" y="880" font-size="12" fill="#9ca3af">Simplified view for everyday users. Technical details (API endpoints, skill-hub-meta.json): see SKILL_HUB_FLOW.md.</text>
+</svg>

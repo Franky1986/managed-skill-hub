@@ -54,6 +54,25 @@ Created and maintained by [Frank Richter](https://www.linkedin.com/in/frank-rich
 - Operators can run the registry locally with SQLite, use MySQL for catalog and
   search projections, or add future provider adapters behind the same ports.
 
+## For Everyday Users
+
+Not a developer? You don't need to call the API directly — just tell your
+coding agent (e.g. Cursor, Claude, Codex) what you want in plain language.
+
+**Download and use a skill**
+
+![Download and use a skill](./docs/product/diagrams/user-en-skill-download.svg)
+
+**Propose a skill**
+
+![Propose a skill](./docs/product/diagrams/user-en-skill-propose.svg)
+
+For the full technical explanation of these flows (API endpoints, the optional
+judger, `skill-hub-meta.json`), see
+[`docs/product/SKILL_HUB_FLOW.md`](./docs/product/SKILL_HUB_FLOW.md). A
+simplified walkthrough for non-technical users is available at
+[`docs/product/SKILL_HUB_FOR_USERS.md`](./docs/product/SKILL_HUB_FOR_USERS.md).
+
 ## Workflow At A Glance
 
 1. Agents search and download published skills through public read endpoints.
