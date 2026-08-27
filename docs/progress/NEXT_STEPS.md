@@ -2,6 +2,17 @@
 
 ## Local Development Startup
 
+## Judgement reuse and migrations
+
+- [x] Persist canonical judgement fingerprints and reuse unchanged proposal
+      judgements during conversion without a provider call.
+- [x] Bound public judger concurrency to a configurable maximum of four calls
+      per API process.
+- [x] Introduce append-only SQLite/MySQL catalog migrations with a frozen
+      legacy baseline, provider locks, and conditional pre-migration backups.
+- [ ] Exercise the public staged installer against copies of an existing
+      SQLite catalog and, when used, a MySQL catalog before a production rollout.
+
 - [x] Align the default local API prefix with the frontend `/api` boundary.
 - [x] Load root environment files for direct API and web workspace starts.
 - [x] Add detached process-group management, hard HTTP readiness, and an

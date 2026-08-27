@@ -62,6 +62,8 @@ describe('FileSystemSkillRepository', () => {
         },
         summary: 'Stored judgement',
         model: 'custom-judger:example-alias@version-1',
+        inputFingerprint: 'a'.repeat(64),
+        promptVersion: '2026-08-judgement-input-v3:test',
       })
     );
 
@@ -74,6 +76,8 @@ describe('FileSystemSkillRepository', () => {
     expect(loaded?.files).toHaveLength(1);
     expect(loaded?.judgements).toHaveLength(1);
     expect(loaded?.judgements[0]?.summary).toBe('Stored judgement');
+    expect(loaded?.judgements[0]?.inputFingerprint).toBe('a'.repeat(64));
+    expect(loaded?.judgements[0]?.promptVersion).toBe('2026-08-judgement-input-v3:test');
     expect(loaded?.judgements[0]?.dimensions.promptInjection.risk).toBe(JudgementRisk.MEDIUM);
     expect(loaded?.idempotencyKeyHash).toBe('idempotency-hash');
     expect(loaded?.artifactDecisions).toEqual([

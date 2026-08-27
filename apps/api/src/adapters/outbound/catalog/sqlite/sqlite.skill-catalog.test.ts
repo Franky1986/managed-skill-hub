@@ -13,6 +13,18 @@ import { AuditEntry } from '../../../../domain/audit/AuditEntry';
 import { Proposal } from '../../../../domain/proposal/Proposal';
 import { ProposalFile } from '../../../../domain/proposal/Proposal';
 import { Judgement, JudgementRisk } from '../../../../domain/judgement/Judgement';
+import Database from 'better-sqlite3';
+import { mkdirSync } from 'node:fs';
+import { ensureSqliteCatalogSchema } from './sqlite.catalog-schema';
+
+function createCatalog(dataDir: string): SqliteSkillCatalog {
+  const databasePath = path.join(dataDir, 'index', 'search.db');
+  mkdirSync(path.dirname(databasePath), { recursive: true });
+  const database = new Database(databasePath);
+  ensureSqliteCatalogSchema(database);
+  database.close();
+  return new SqliteSkillCatalog(dataDir, databasePath);
+}
 
 describe('SqliteSkillCatalog', () => {
   const tempDirs: string[] = [];
@@ -42,7 +54,7 @@ describe('SqliteSkillCatalog', () => {
       )
     );
 
-    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const catalog = createCatalog(dataDir);
     const skill = Skill.create({ id: SkillId.create('catalog-skill'), createdBy: 'tester' });
     skill.addVersion(
       SkillVersion.create({
@@ -137,7 +149,7 @@ describe('SqliteSkillCatalog', () => {
       )
     );
 
-    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const catalog = createCatalog(dataDir);
     const skill = Skill.create({ id: SkillId.create('catalog-skill'), createdBy: 'tester' });
     skill.addVersion(
       SkillVersion.create({
@@ -209,7 +221,7 @@ describe('SqliteSkillCatalog', () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-catalog-'));
     tempDirs.push(dataDir);
 
-    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const catalog = createCatalog(dataDir);
     let proposal = Proposal.create({
       title: 'Projected Proposal',
       description: 'Contains judgements',
@@ -296,7 +308,7 @@ describe('SqliteSkillCatalog', () => {
   it('finds exact proposal content only in finalized review states and supports self-exclusion', async () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-catalog-'));
     tempDirs.push(dataDir);
-    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const catalog = createCatalog(dataDir);
     const file = ProposalFile.create({
       id: 'SKILL.md',
       path: 'SKILL.md',
@@ -332,7 +344,7 @@ describe('SqliteSkillCatalog', () => {
   it('maps noop proposal judgements to no_judge_available', async () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-catalog-'));
     tempDirs.push(dataDir);
-    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const catalog = createCatalog(dataDir);
 
     let proposal = Proposal.create({
       title: 'Noop Candidate',
@@ -383,7 +395,7 @@ describe('SqliteSkillCatalog', () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-catalog-'));
     tempDirs.push(dataDir);
 
-    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const catalog = createCatalog(dataDir);
     const proposal = Proposal.create({
       title: 'Delete me',
       description: 'Projected proposal metadata',
@@ -409,7 +421,7 @@ describe('SqliteSkillCatalog', () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-catalog-'));
     tempDirs.push(dataDir);
 
-    const catalog = new SqliteSkillCatalog(dataDir, path.join(dataDir, 'index', 'search.db'));
+    const catalog = createCatalog(dataDir);
     await catalog.upsertAuditEntry(
       AuditEntry.create({
         id: 'audit-1',

@@ -47,7 +47,7 @@ prepare_release() {
   local data_dir
   data_dir="$(resolve_data_dir)"
 
-  log_step "1/3" "Checking runtime prerequisites and layered environment ..."
+  log_step "1/4" "Checking runtime prerequisites and layered environment ..."
   require_command node
   require_command npm
   require_minimum_major node 20
@@ -72,23 +72,30 @@ prepare_release() {
     "${data_dir}/audit" \
     "${data_dir}/backups" \
     "${data_dir}/uploads"
-  log_step "1/3" "Prerequisites, environment, and data directories are ready."
+  log_step "1/4" "Prerequisites, environment, and data directories are ready."
   echo ""
 
-  log_step "2/3" "Installing the locked dependency graph ..."
+  log_step "2/4" "Installing the locked dependency graph ..."
   (
     cd "$PROJECT_ROOT"
     npm ci --include=dev --legacy-peer-deps --no-audit --no-fund
   )
-  log_step "2/3" "Locked dependencies installed."
+  log_step "2/4" "Locked dependencies installed."
   echo ""
 
-  log_step "3/3" "Creating production build ..."
+  log_step "3/4" "Creating production build ..."
   (
     cd "$PROJECT_ROOT"
     npm run build:prod
   )
-  log_step "3/3" "Production build successful."
+  log_step "3/4" "Production build successful."
+
+  log_step "4/4" "Planning, backing up when required, and applying catalog migrations ..."
+  (
+    cd "$PROJECT_ROOT"
+    node apps/api/dist/infrastructure/migrations/run-catalog-migrations.js
+  )
+  log_step "4/4" "Catalog schema migrations verified."
 }
 
 start_release() {

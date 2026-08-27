@@ -19,6 +19,7 @@ import {
     selectDefaultComparisonVersion,
     selectDefaultSkillFilePath,
     selectInitialSkillVersion,
+    isProposalArtifactView as selectProposalArtifactView,
     DiffLine,
 } from './adminSkillPageSelectors';
 
@@ -91,6 +92,8 @@ export function AdminSkillPage() {
     const [proposalFinalizeComment, setProposalFinalizeComment] = useState('');
     const [showSelectedFileJudgements, setShowSelectedFileJudgements] = useState(false);
     const isReadOnlyProposalView = fromProposal && (!isEditMode || !canAdmin);
+    // Proposal artifacts remain proposal-backed and read-only while metadata is edited.
+    const isProposalArtifactView = selectProposalArtifactView(fromProposal, proposalDetail);
     const sortedShownJudgements = useMemo(
         () => [...judgements].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
         [judgements]
@@ -187,11 +190,11 @@ export function AdminSkillPage() {
         && ['draft', 'in_review', 'approved'].includes(selectedVersionRecord.status);
 
     const proposalDisplayFiles = useMemo(
-        () => (isReadOnlyProposalView && proposalDetail ? mapProposalFilesToSkillFiles(proposalDetail) : []),
-        [isReadOnlyProposalView, proposalDetail]
+        () => (isProposalArtifactView && proposalDetail ? mapProposalFilesToSkillFiles(proposalDetail) : []),
+        [isProposalArtifactView, proposalDetail]
     );
 
-    const displayedFiles = isReadOnlyProposalView && proposalDetail ? proposalDisplayFiles : files;
+    const displayedFiles = isProposalArtifactView && proposalDetail ? proposalDisplayFiles : files;
 
     const selectedFile = useMemo(
         () => displayedFiles.find((file) => file.path === selectedFilePath) ?? null,
@@ -244,14 +247,14 @@ export function AdminSkillPage() {
     }, [selectedDirectoryFiles, selectedDirectoryPath]);
 
     const selectedProposalFile = useMemo(() => {
-        if (!isReadOnlyProposalView || !proposalDetail || !selectedFilePath) {
+        if (!isProposalArtifactView || !proposalDetail || !selectedFilePath) {
             return null;
         }
         return proposalDetail.files.find((file) => file.path === selectedFilePath) ?? null;
-    }, [isReadOnlyProposalView, proposalDetail, selectedFilePath]);
+    }, [isProposalArtifactView, proposalDetail, selectedFilePath]);
 
     useEffect(() => {
-        if (!isReadOnlyProposalView || !proposalDetail) {
+        if (!isProposalArtifactView || !proposalDetail) {
             return;
         }
         setSelectedFilePath((current) => {
@@ -262,7 +265,7 @@ export function AdminSkillPage() {
             setSelectedDirectoryPath(nextSelected ? dirname(nextSelected) : null);
             return nextSelected;
         });
-    }, [isReadOnlyProposalView, proposalDetail, proposalDisplayFiles]);
+    }, [isProposalArtifactView, proposalDetail, proposalDisplayFiles]);
 
     const availableComparisonVersions = useMemo(() => {
         return skill ? selectAvailableComparisonVersions(skill, selectedVersion, selectedProposalFile !== null) : [];
@@ -1387,7 +1390,7 @@ export function AdminSkillPage() {
             <section className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
                 <aside className="rounded border bg-white p-4">
                     <h2 className="mb-3 text-lg font-medium">{t('adminSkill.artifacts')}</h2>
-                    {isReadOnlyProposalView && proposalDetail && (
+                    {isProposalArtifactView && proposalDetail && (
                         <p className="mb-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
                             {t('adminSkill.proposalArtifactSource', {
                                 proposalId: proposalDetail.id,
@@ -1433,7 +1436,7 @@ export function AdminSkillPage() {
                                 <p>{t('adminSkill.directEntries')}: {selectedDirectorySummary.directChildren}</p>
                                 <p>{t('adminSkill.extractable')}: {selectedDirectorySummary.extractableFiles}</p>
                             </div>
-                            {(canAdmin && !isReadOnlyProposalView && !fromProposal && !selectedFileIsInternal) && (
+                            {(canAdmin && !isProposalArtifactView && !fromProposal && !selectedFileIsInternal) && (
                                 <div className="mt-3 flex flex-wrap gap-2">
                                     <button
                                         type="button"
@@ -1475,7 +1478,7 @@ export function AdminSkillPage() {
                                         </p>
                                     </div>
                                     <div className="flex gap-2">
-                                        {canAdmin && !isReadOnlyProposalView && !selectedFileIsInternal && (
+                                        {canAdmin && !isProposalArtifactView && !selectedFileIsInternal && (
                                             <button
                                                 type="button"
                                                 onClick={() => void handleReextract()}
@@ -1562,7 +1565,7 @@ export function AdminSkillPage() {
                                     </details>
                                 )}
 
-                                {(!selectedFileIsInternal && (isReadOnlyProposalView || !isTextLikeFile(selectedFile))) && (
+                                {(!selectedFileIsInternal && (isProposalArtifactView || !isTextLikeFile(selectedFile))) && (
                                     <ArtifactInlineViewer
                                         file={selectedFile}
                                         artifactId={selectedFile.artifactId}
@@ -1597,7 +1600,7 @@ export function AdminSkillPage() {
                                     />
                                 )}
 
-                                {canAdmin && !isReadOnlyProposalView && !selectedFileIsInternal && (
+                                {canAdmin && !isProposalArtifactView && !selectedFileIsInternal && (
                                     <div className="rounded border border-gray-200 p-4">
                                         <h3 className="text-sm font-medium text-gray-900">{t('adminSkill.moveRenameFile')}</h3>
                                         {selectedDirectoryPath && (
@@ -1624,7 +1627,7 @@ export function AdminSkillPage() {
                                     </div>
                                 )}
 
-                                {canAdmin && !isReadOnlyProposalView && !selectedFileIsInternal && (
+                                {canAdmin && !isProposalArtifactView && !selectedFileIsInternal && (
                                     <div className="rounded border border-red-200 bg-red-50 p-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3">
                                             <div>
@@ -1656,9 +1659,9 @@ export function AdminSkillPage() {
                                             <div className="rounded border border-gray-200 p-4">
                                                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                                                     <h3 className="text-sm font-medium text-gray-900">
-                                                        {isReadOnlyProposalView ? t('adminSkill.textContent') : t('adminSkill.editTextContent')}
+                                                        {isProposalArtifactView ? t('adminSkill.textContent') : t('adminSkill.editTextContent')}
                                                     </h3>
-                                                    {canAdmin && !isReadOnlyProposalView && (
+                                                    {canAdmin && !isProposalArtifactView && (
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleSaveFileContent()}
@@ -1669,7 +1672,7 @@ export function AdminSkillPage() {
                                                         </button>
                                                     )}
                                                 </div>
-                                                {isReadOnlyProposalView ? (
+                                                {isProposalArtifactView ? (
                                                     <pre className="max-h-72 min-h-72 overflow-x-auto overflow-y-auto rounded border border-slate-200 bg-slate-950 p-4 font-mono text-sm text-slate-100 whitespace-pre-wrap break-words">
                                                         {showInvisible ? renderVisibleText(editableContent) : editableContent}
                                                     </pre>

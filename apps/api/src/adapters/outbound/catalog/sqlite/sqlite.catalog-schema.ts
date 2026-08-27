@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 
-export function ensureSqliteCatalogSchema(db: Database.Database): void {
+/** Versioned baseline passes false so it remains frozen before reuse metadata. */
+export function ensureSqliteCatalogSchema(db: Database.Database, includeJudgementReuse = true): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS skill_catalog_versions (
       skill_id TEXT NOT NULL,
@@ -202,6 +203,14 @@ export function ensureSqliteCatalogSchema(db: Database.Database): void {
   ensureProposalColumns(db);
   ensureVersionColumns(db);
   ensureAgentSessionColumns(db);
+  if (includeJudgementReuse) ensureJudgementReuseColumns(db);
+}
+
+function ensureJudgementReuseColumns(db: Database.Database): void {
+  const columns = db.prepare(`PRAGMA table_info(skill_catalog_judgements)`).all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('input_fingerprint')) db.exec(`ALTER TABLE skill_catalog_judgements ADD COLUMN input_fingerprint TEXT;`);
+  if (!names.has('prompt_version')) db.exec(`ALTER TABLE skill_catalog_judgements ADD COLUMN prompt_version TEXT;`);
 }
 
 function ensureAgentSessionColumns(db: Database.Database): void {

@@ -99,6 +99,8 @@ interface SerializedJudgement {
   summary: string;
   skillPurposeSummary: string | null;
   model: string | null;
+  inputFingerprint?: string | null;
+  promptVersion?: string | null;
   createdAt: string;
 }
 
@@ -354,6 +356,8 @@ function serializeProposal(proposal: Proposal): SerializedProposal {
       summary: judgement.summary,
       skillPurposeSummary: judgement.skillPurposeSummary,
       model: judgement.model,
+      inputFingerprint: judgement.inputFingerprint,
+      promptVersion: judgement.promptVersion,
       createdAt: judgement.createdAt.toISOString(),
     })),
   };
@@ -388,6 +392,8 @@ function deserializeProposal(payload: SerializedProposal): Proposal {
       summary: judgement.summary,
       skillPurposeSummary: judgement.skillPurposeSummary,
       model: judgement.model,
+      inputFingerprint: judgement.inputFingerprint ?? null,
+      promptVersion: judgement.promptVersion ?? null,
       createdAt: new Date(judgement.createdAt),
     })),
   });

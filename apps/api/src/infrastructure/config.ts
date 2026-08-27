@@ -40,6 +40,8 @@ export interface AppConfig {
   vercelAiSdkTimeoutMs: number;
   vercelAiSdkMaxTextChars: number;
   vercelAiSdkMaxRetries: number;
+  judgerMaxConcurrency: number;
+  judgerReuseScope: string;
   catalogProvider: CatalogProvider;
   searchProvider: SearchProvider;
   contentStorageProvider: ContentStorageProvider;
@@ -254,6 +256,13 @@ export function loadConfig(): AppConfig {
     vercelAiSdkTimeoutMs: Number(process.env.VERCEL_AI_SDK_TIMEOUT_MS ?? 30000),
     vercelAiSdkMaxTextChars: Number(process.env.VERCEL_AI_SDK_MAX_TEXT_CHARS ?? 12000),
     vercelAiSdkMaxRetries: Number(process.env.VERCEL_AI_SDK_MAX_RETRIES ?? 0),
+    judgerMaxConcurrency: parseBoundedInteger(
+      process.env.JUDGER_MAX_CONCURRENCY, 4, 'JUDGER_MAX_CONCURRENCY', 1, 4
+    ),
+    judgerReuseScope: valueOrDefault(
+      process.env.JUDGER_REUSE_SCOPE,
+      defaultJudgerReuseScope(parseJudgerProvider(process.env.JUDGER_PROVIDER))
+    ),
     catalogProvider,
     searchProvider,
     contentStorageProvider,
@@ -462,6 +471,15 @@ function loadEnvFiles(): void {
 function valueOrNull(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+/** Provider-neutral cache key. Increase JUDGER_POLICY_REVISION after any custom adapter policy change. */
+function defaultJudgerReuseScope(provider: JudgerProvider): string {
+  const policyRevision = valueOrDefault(process.env.JUDGER_POLICY_REVISION, 'v1');
+  const model = provider === 'vercel-ai-sdk'
+    ? valueOrDefault(process.env.VERCEL_AI_SDK_MODEL, 'default')
+    : valueOrDefault(process.env.JUDGER_ADAPTER_PATH, 'default');
+  return `${provider}:${model}:${policyRevision}`;
 }
 
 export function parseJudgerProvider(value: string | undefined): JudgerProvider {

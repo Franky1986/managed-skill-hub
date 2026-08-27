@@ -36,14 +36,10 @@ describe('JudgeSkillVersionUseCase', () => {
       id: 'catalog-skill:1.0.1',
       title: 'Catalog Skill',
       metadata: {
-        skillId: 'catalog-skill',
-        version: '1.0.1',
-        groups: ['automation', 'agent'],
-        capabilities: ['read'],
-        status: 'draft',
+        scope: 'global-skill-assessment',
       },
     });
-    expect(judger.targets[0]?.text).toContain('"entrypoint": "README.md"');
+    expect(judger.targets[0]?.text).toContain('"entrypoint":"README.md"');
     expect(audit.entries).toHaveLength(1);
     expect(catalog.upserted).toEqual([{ skillId: 'catalog-skill', version: '1.0.1', judgementId: judgement.id }]);
   });

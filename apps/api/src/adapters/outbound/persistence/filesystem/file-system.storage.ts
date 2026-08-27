@@ -97,7 +97,8 @@ export class FileSystemSkillStorage implements SkillFileStoragePort {
       const entries = await fs.readdir(dir, { withFileTypes: true, recursive: true });
       const meta = await this.readMeta(path.join(dir, '.meta.json'));
       return entries
-        .filter((e) => e.isFile() && e.name !== '.meta.json' && e.name !== '.extracts.json')
+        .filter((e) => e.isFile() && e.name !== '.meta.json' && e.name !== '.extracts.json'
+          && !(e.name === 'skill.yaml' && (e.parentPath ?? dir) === dir))
         .map((e) => {
           const relative = path.relative(dir, path.join(e.parentPath ?? dir, e.name));
           const m = meta[relative];

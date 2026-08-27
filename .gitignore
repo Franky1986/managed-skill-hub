@@ -43,3 +43,4 @@ logs/
 # Data backups
 data/
 !data/.gitkeep
+managed-skill-hub-data-*.tar.gz

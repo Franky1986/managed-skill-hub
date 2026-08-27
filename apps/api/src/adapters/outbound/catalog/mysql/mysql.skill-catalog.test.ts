@@ -327,7 +327,7 @@ class FakeMysqlClient {
     if (normalized.includes('insert into skill_catalog_judgements')) {
       const [
         id, targetType, targetId, proposalId, skillId, skillVersion,
-        dimensions, overallRisk, summary, skillPurposeSummary, model, createdAt,
+        dimensions, overallRisk, summary, skillPurposeSummary, model, inputFingerprint, promptVersion, createdAt,
       ] = params;
       this.judgements.set(String(id), {
         id: String(id),
@@ -341,6 +341,8 @@ class FakeMysqlClient {
         summary: String(summary),
         skill_purpose_summary: typeof skillPurposeSummary === 'string' ? skillPurposeSummary : null,
         model: typeof model === 'string' ? model : null,
+        input_fingerprint: typeof inputFingerprint === 'string' ? inputFingerprint : null,
+        prompt_version: typeof promptVersion === 'string' ? promptVersion : null,
         created_at: String(createdAt),
       });
       return;

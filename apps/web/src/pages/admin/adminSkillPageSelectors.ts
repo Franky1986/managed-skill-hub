@@ -89,6 +89,11 @@ export function mapProposalFilesToSkillFiles(proposal: ProposalDetail): SkillFil
     }));
 }
 
+/** Artifact source is independent of whether proposal metadata is currently editable. */
+export function isProposalArtifactView(fromProposal: boolean, proposal: ProposalDetail | null): boolean {
+    return fromProposal && proposal !== null;
+}
+
 export function selectAvailableComparisonVersions(
     skill: SkillDetail,
     selectedVersion: string,

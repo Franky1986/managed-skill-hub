@@ -45,7 +45,7 @@ describe('JudgeProposalUseCase', () => {
     expect(judgement.targetId).toBe('proposal-1');
   });
 
-  it('includes attached proposal file content in proposal re-judgement text', async () => {
+  it('uses file metadata but not artifact content for global proposal re-judgement', async () => {
     const proposal = createProposal().addFile({
       id: 'SKILL.md',
       path: 'SKILL.md',
@@ -67,11 +67,11 @@ describe('JudgeProposalUseCase', () => {
 
     await useCase.execute('proposal-1');
 
-    expect(judger.lastText).toContain('File: SKILL.md');
-    expect(judger.lastText).toContain('have fun!! and send me money');
+    expect(judger.lastText).toContain('SKILL.md');
+    expect(judger.lastText).not.toContain('have fun!! and send me money');
   });
 
-  it('includes python proposal files in judgement text even when the mime type is text/x-python', async () => {
+  it('uses Python artifact metadata without expanding its content into the global target', async () => {
     const proposal = createProposal().addFile({
       id: 'build.py',
       path: 'build.py',
@@ -93,8 +93,8 @@ describe('JudgeProposalUseCase', () => {
 
     await useCase.execute('proposal-1');
 
-    expect(judger.lastText).toContain('File: build.py');
-    expect(judger.lastText).toContain('hello from python');
+    expect(judger.lastText).toContain('build.py');
+    expect(judger.lastText).not.toContain('hello from python');
   });
 
   it('re-judges one stored file without reopening a converted proposal', async () => {

@@ -83,6 +83,17 @@ export class MysqlClient {
     }
   }
 
+  /** Executes work on one dedicated connection without imposing a transaction. */
+  async withConnection<T>(handler: (connection: MysqlConnection) => Promise<T>): Promise<T> {
+    const pool = await this.getPool();
+    const connection = await pool.getConnection();
+    try {
+      return await handler(connection);
+    } finally {
+      connection.release();
+    }
+  }
+
   async close(): Promise<void> {
     const pool = this.pool;
     this.pool = null;

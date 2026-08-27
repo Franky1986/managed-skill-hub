@@ -35,6 +35,7 @@ import { isExtractableArtifact, isTextLikeArtifact } from '../skill/public-metad
 import { isReservedSkillHubMetaPath, SKILL_HUB_META_FILENAME } from '../skill/skill-hub-meta';
 import { normalizeRelativeArtifactPath } from '../../../domain/files/relative-artifact-path';
 import { JudgementRuntimeEventSink, judgementErrorCategory } from '../judgement/judgement-runtime-event';
+import { buildFileJudgementTarget, buildGlobalJudgementTarget, resolveEffectiveEntrypoint, truncateJudgementText, withJudgementInputFingerprint } from '../judgement/judgement-input';
 
 interface ProposalUploadConfig {
   maxFiles: number;
@@ -56,7 +57,8 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       disallowedPathPrefixes: ['node_modules/', '.venv/', 'venv/', 'vendor/', 'dist-packages/', 'site-packages/'],
     },
     private readonly autoPublish?: AutoPublishProposalUseCase,
-    private readonly judgementEvents?: JudgementRuntimeEventSink
+    private readonly judgementEvents?: JudgementRuntimeEventSink,
+    private readonly judgementReuseScope = 'default'
   ) {}
 
   async submitProposal(draft: SubmitProposalDraft, actor: ProposalActor): Promise<Proposal> {
@@ -419,13 +421,16 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
   ): Promise<Proposal> {
     let updated = proposal;
     try {
-      const proposalJudgement = await this.judger.judge({
-        type: 'proposal',
-        id: proposal.id,
+      const entrypoint = resolveEffectiveEntrypoint(proposal.entrypoint, proposal.files);
+      const target = buildGlobalJudgementTarget({
+        targetType: 'proposal', targetId: proposal.id,
         title: proposal.title,
-        text: `${proposal.title}\n\n${proposal.description}`,
-        metadata: { groups: proposal.groups, capabilities: proposal.capabilities },
+        description: proposal.description, category: proposal.category, tags: proposal.tags,
+        capabilities: proposal.capabilities, entrypoint,
+        files: proposal.files.map((file) => ({ path: file.path, role: entrypoint === file.path ? 'entrypoint' : 'attachment',
+          mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256 })),
       });
+      const proposalJudgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope);
       updated = updated.addJudgement(proposalJudgement);
       await this.repo.saveProposal(updated);
       this.judgementEvents?.({
@@ -497,8 +502,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     actor: ReturnType<typeof normalizeProposalActor>,
     extractedByPath: Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>
   ): Promise<Proposal> {
-    let updated = proposal;
-    for (const file of proposal.files) {
+    const results = await Promise.all(proposal.files.map(async (file) => {
       try {
         const stored = await this.storage.readProposalFile(proposal.id, file.path);
         if (!stored) {
@@ -514,22 +518,11 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
                 }
               : await this.scanner.scan(stored.content, stored.mimeType, file.path)
           );
-        const fileJudgement = await this.judger.judge({
-          type: 'file',
-          id: `${proposal.id}:${file.path}`,
-          title: file.path,
-          text: scanned.text,
-          metadata: { mimeType: file.mimeType, sizeBytes: file.sizeBytes },
+        const target = buildFileJudgementTarget({
+          targetId: `${proposal.id}:${file.path}`, path: file.path, text: truncateJudgementText(scanned.text),
+          mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256, extractedBy: scanned.extractedBy,
         });
-        updated = updated.addJudgement(fileJudgement);
-        await this.repo.saveProposal(updated);
-        this.judgementEvents?.({
-          event: 'judgement_execution',
-          outcome: 'success',
-          operation: 'proposal_file',
-          proposalId: proposal.id,
-          filePath: file.path,
-        });
+        return { file, judgement: withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope) };
       } catch (error) {
         await this.audit.append(
           AuditEntry.create({
@@ -547,7 +540,17 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           filePath: file.path,
           errorCategory: judgementErrorCategory(error),
         });
+        return null;
       }
+    }));
+
+    let updated = proposal;
+    for (const result of results) {
+      if (!result) continue;
+      updated = updated.addJudgement(result.judgement);
+      await this.repo.saveProposal(updated);
+      this.judgementEvents?.({ event: 'judgement_execution', outcome: 'success', operation: 'proposal_file',
+        proposalId: proposal.id, filePath: result.file.path });
     }
     return updated;
   }

@@ -3,6 +3,16 @@
 > Warning: production deployment is not automated. This document describes the
 > manual process.
 
+## Catalog migrations
+
+The staged installer runs catalog migrations after the production build and
+before service startup. Migrations are append-only files under
+`apps/api/src/infrastructure/migrations/`. Run the compiled runner with
+`--plan` for a read-only preflight. When pending migrations modify an existing
+catalog, the runner creates exactly one backup while holding the SQLite or
+MySQL migration lock. Fresh and already-current stores create no migration
+backup.
+
 ## Reusable Deployment Blueprint
 
 The public repository provides organization-neutral building blocks under

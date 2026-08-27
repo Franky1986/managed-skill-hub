@@ -260,6 +260,9 @@ Cutover note: filesystem-to-database migration should be copy-only and run durin
 |----------|----------|-------------|---------|
 | `JUDGER_PROVIDER` | yes | Judger backend selector (`noop`, `vercel-ai-sdk`) or custom provider key (`my-custom-judger`). | `noop` |
 | `JUDGER_ADAPTER_PATH` | no | Required when `JUDGER_PROVIDER` is custom/non-built-in. | `./path/to/custom.adapter.ts` |
+| `JUDGER_MAX_CONCURRENCY` | no | Maximum concurrent judger operations per API process (1–4). | `4` |
+| `JUDGER_REUSE_SCOPE` | no | Optional explicit judgement reuse scope. The default derives from provider identity, model or adapter path, and policy revision. | `custom:adapter:v1` |
+| `JUDGER_POLICY_REVISION` | no | Increment after a provider, prompt, model, or safety-policy change to prevent reuse of incompatible judgements. | `v1` |
 | `PUBLISH_JUDGEMENT_POLICY` | no | Publication gate: `disabled` skips the check, `warn` records incomplete judgement and publishes, `required` blocks until every extractable file and the skill version have a real judgement. Administrators may override `required` with an audited reason. | `required` in production, otherwise `warn` |
 | `VERCEL_AI_SDK_MODEL` | no | Active model with provider prefix. | `openai:gpt-4.1` |
 | `OPENAI_API_KEY` | no | OpenAI key when VERCEL model uses OpenAI. | `sk-...` |
@@ -271,6 +274,8 @@ Notes:
 
 - `JUDGER_PROVIDER=noop` marks proposals as `overallRisk=no_judge_available` for proposal/file judgements. This is a clear signal that no real automated judgement was performed yet; auto-publish remains blocked unless `AUTO_APPROVE_WITHOUT_JUDGER=true`.
 - `JUDGER_PROVIDER` can also be any custom identifier when `JUDGER_ADAPTER_PATH` points to a module implementing `SkillJudgerPort`.
+- Judgements with the same canonical input fingerprint and reuse scope are cloned during proposal conversion; no provider request is made. Older judgements without a fingerprint are judged once and then become reusable.
+- `JUDGER_MAX_CONCURRENCY` limits work in each API process. With multiple processes, the effective limit is the configured value per process.
 - Built-in providers ignore `JUDGER_ADAPTER_PATH`. Development logs emit `judger_adapter_path_ignored`; production startup rejects this contradictory combination.
 - Proposal details expose `not_started`, `completed`, `unavailable`, or `failed` judgement execution states for the proposal and each file. Provider errors remain server-side and are represented by a safe status message.
 - For a complete example and export contract, see [`docs/setup/JUDGER_ADAPTERS.md`](./JUDGER_ADAPTERS.md).

@@ -29,6 +29,8 @@ export function createScriptAppConfig(overrides: Partial<AppConfig> = {}): AppCo
     vercelAiSdkTimeoutMs: 30_000,
     vercelAiSdkMaxTextChars: 12_000,
     vercelAiSdkMaxRetries: 0,
+    judgerMaxConcurrency: 4,
+    judgerReuseScope: 'noop:default:v1',
     catalogProvider: 'sqlite',
     searchProvider: 'sqlite',
     contentStorageProvider: 'filesystem',

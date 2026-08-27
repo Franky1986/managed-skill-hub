@@ -53,6 +53,8 @@ export async function buildProposalAggregateFromCatalog(
         summary: judgement.summary,
         skillPurposeSummary: judgement.skillPurposeSummary,
         model: judgement.model,
+        inputFingerprint: judgement.inputFingerprint,
+        promptVersion: judgement.promptVersion,
         createdAt: judgement.createdAt,
       })
     ),
