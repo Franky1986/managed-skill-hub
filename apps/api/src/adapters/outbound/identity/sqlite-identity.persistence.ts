@@ -19,7 +19,6 @@ import {
 } from '../../../application/ports/outbound/principal-repository.port';
 import { PrincipalKind, PrincipalRole } from '../../../application/security/authenticated-principal';
 import { StorageError, ValidationError } from '../../../domain/errors';
-import { ensureSqliteCatalogSchema } from '../catalog/sqlite/sqlite.catalog-schema';
 import { hashOpaqueCredential } from './opaque-credential-hash';
 
 interface PrincipalRow {
@@ -39,7 +38,6 @@ implements PrincipalRepositoryPort, AdminSessionPort, OidcLoginTransactionPort {
   constructor(databasePath: string) {
     mkdirSync(path.dirname(databasePath), { recursive: true });
     this.db = new Database(databasePath);
-    ensureSqliteCatalogSchema(this.db);
   }
 
   async findById(principalId: string): Promise<PrincipalRecord | null> {

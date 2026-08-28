@@ -3,9 +3,11 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { AuthentikAccessTokenVerifier } from '../../apps/api/src/adapters/outbound/identity/authentik-access-token.verifier';
 import { SqliteIdentityPersistence } from '../../apps/api/src/adapters/outbound/identity/sqlite-identity.persistence';
+import { ensureSqliteCatalogSchema } from '../../apps/api/src/adapters/outbound/catalog/sqlite/sqlite.catalog-schema';
 import { AuthorizationPolicy } from '../../apps/api/src/application/security/authorization-policy';
 import { PrincipalProjectionService } from '../../apps/api/src/application/security/principal-projection.service';
 import { createScriptAppConfig } from '../lib/script-app-config';
@@ -154,7 +156,11 @@ async function run(): Promise<ProofResult> {
   issuer = `http://127.0.0.1:${address.port}/application/o/agent/`;
 
   const directory = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-oidc-proof-'));
-  const persistence = new SqliteIdentityPersistence(path.join(directory, 'catalog.db'));
+  const databasePath = path.join(directory, 'catalog.db');
+  const database = new Database(databasePath);
+  ensureSqliteCatalogSchema(database);
+  database.close();
+  const persistence = new SqliteIdentityPersistence(databasePath);
   try {
     const clientId = 'managedskillhub-agent-device';
     const config = createScriptAppConfig({

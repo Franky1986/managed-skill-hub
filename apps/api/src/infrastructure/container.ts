@@ -13,7 +13,7 @@ import { MysqlSkillCatalog } from '../adapters/outbound/catalog/mysql/mysql.skil
 import { AgentSessionRepositoryPort } from '../application/ports/outbound/agent-session.port';
 import { SqliteAgentSessionRepository } from '../adapters/outbound/catalog/sqlite/sqlite.agent-session.repository';
 import { MysqlAgentSessionRepository } from '../adapters/outbound/catalog/mysql/mysql.agent-session.repository';
-import { ensureSqliteCatalogSchema } from '../adapters/outbound/catalog/sqlite/sqlite.catalog-schema';
+import { migrateCatalogWithBackup } from './migrations/run-catalog-migrations';
 import Database from 'better-sqlite3';
 import { MysqlSkillSearch } from '../adapters/outbound/search/mysql/mysql.search';
 import { MysqlClient } from '../adapters/outbound/mysql/mysql.connection';
@@ -23,6 +23,8 @@ import { LiteParseFileScanner } from '../adapters/outbound/scanner/liteparse.sca
 import { NativeFileScanner } from '../adapters/outbound/scanner/native.scanner';
 import { NoopSkillJudger } from '../adapters/outbound/judger/noop.judger';
 import { VercelAiSdkSkillJudger } from '../adapters/outbound/judger/vercel-ai-sdk.judger';
+import { BoundedSkillJudger } from '../adapters/outbound/judger/bounded-skill-judger';
+import { SafeExternalSkillJudger } from '../adapters/outbound/judger/safe-external-judger';
 import { SkillCommandPort } from '../application/ports/inbound/skill-command.port';
 import { SkillQueryPort } from '../application/ports/inbound/skill-query.port';
 import { ProposalCommandPort } from '../application/ports/inbound/proposal-command.port';
@@ -122,6 +124,7 @@ export async function buildContainer(
   options: ContainerBuildOptions = {}
 ): Promise<Container> {
   await validateDataDir(config.dataDir);
+  await migrateCatalogWithBackup(config);
 
   const mysqlClient = needsMysqlClient(config) ? new MysqlClient(config) : null;
   const agentSessionRepository = buildAgentSessionRepository(
@@ -153,7 +156,7 @@ export async function buildContainer(
   const storage = buildStorageAdapter(config.contentStorageProvider ?? 'filesystem', config, contentDb);
   const audit = buildAuditAdapter(config.contentStorageProvider ?? 'filesystem', config, catalog, contentDb);
   const scanner = new CompositeFileScanner([new NativeFileScanner(), new LiteParseFileScanner()]);
-  const judger = await buildJudger(config);
+  const judger = new BoundedSkillJudger(await buildJudger(config), config.judgerMaxConcurrency);
   const repo = buildRepositoryAdapter(config.contentStorageProvider ?? 'filesystem', config, catalog, contentDb);
   const query = new SkillQueryAdapter(repo, search, storage, audit, catalog);
   const extractor = new ExtractSkillFileContentUseCase(repo, storage, scanner, catalog);
@@ -172,7 +175,8 @@ export async function buildContainer(
     catalog,
     storage,
     scanner,
-    options.recordJudgementEvent
+    options.recordJudgementEvent,
+    config.judgerReuseScope
   );
   const reviewProposal = new ReviewProposalUseCase(
     repo,
@@ -233,7 +237,7 @@ export async function buildContainer(
       maxFiles: config.proposalMaxFiles,
       maxFileSizeBytes: config.proposalMaxFileSizeBytes,
       disallowedPathPrefixes: config.proposalDisallowedPaths,
-    }, autoPublishProposal, options.recordJudgementEvent),
+    }, autoPublishProposal, options.recordJudgementEvent, config.judgerReuseScope),
     proposalRead: new ProposalReadUseCase(
       repo,
       storage,
@@ -256,7 +260,8 @@ export async function buildContainer(
       catalog,
       storage,
       scanner,
-      options.recordJudgementEvent
+      options.recordJudgementEvent,
+      config.judgerReuseScope
     ),
     judgeFile: new JudgeFileUseCase(scanner, judger),
     judgeSkillVersion,
@@ -392,7 +397,6 @@ function buildAgentSessionRepository(
   if (provider === 'sqlite') {
     mkdirSync(path.dirname(catalogPath), { recursive: true });
     const db = new Database(catalogPath);
-    ensureSqliteCatalogSchema(db);
     return new SqliteAgentSessionRepository(db);
   }
   if (provider === 'mysql') {
@@ -459,6 +463,17 @@ type JudgerAdapterFactoryContext = {
 };
 
 async function loadExternalJudgerAdapter(config: AppConfig): Promise<SkillJudgerPort> {
+  try {
+    return await loadExternalJudgerAdapterUnsafe(config);
+  } catch (error) {
+    if (error instanceof ConfigurationError && error.message.startsWith('JUDGER_PROVIDER=')) throw error;
+    // Custom modules are an untrusted boundary. Their import/factory errors may
+    // contain provider payloads or credentials and must never escape startup.
+    throw new ConfigurationError('External judger adapter could not be initialized.');
+  }
+}
+
+async function loadExternalJudgerAdapterUnsafe(config: AppConfig): Promise<SkillJudgerPort> {
   const rawAdapterModuleCandidates = resolveJudgerAdapterModuleCandidates(config);
   const adapterModulePathCandidates: string[] = [];
 
@@ -513,7 +528,7 @@ async function loadExternalJudgerAdapter(config: AppConfig): Promise<SkillJudger
   for (const candidate of candidates) {
     const adapter = await instantiateJudgerCandidate(candidate, context);
     if (adapter) {
-      return adapter;
+      return new SafeExternalSkillJudger(adapter);
     }
   }
 

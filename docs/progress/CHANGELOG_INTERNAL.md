@@ -1,3 +1,25 @@
+# 2026-08-27: Harden migration backup and judgement audit handling
+
+- Made filesystem backup archives owner-readable only and excluded the backup
+  directory from archive input to prevent recursive archive inclusion.
+- Replaced raw provider, scanner, and conversion error messages in judgement
+  audit records with stable error categories.
+- Added a negative test proving that a matching proposal judgement is reused
+  for conversion without a provider call, plus backup permission/self-inclusion
+  proof coverage.
+
+# 2026-08-27: Add public judgement reuse and catalog migrations
+
+- Added provider-neutral canonical judgement inputs, persisted fingerprints,
+  reuse scopes, and bounded per-process concurrency.
+- Reused unchanged proposal-level and per-file judgements during conversion;
+  legacy records without fingerprints are safely re-judged once.
+- Added public-native, append-only SQLite/MySQL catalog migrations with a
+  frozen legacy baseline, conditional backup under provider locks, and staged
+  deployment integration.
+- Kept proposal artifacts proposal-backed and read-only while metadata editing
+  is enabled, and excluded root repository `skill.yaml` from user artifacts.
+
 # 2026-08-12: Implement use-skill-hub bootstrap and package metadata
 
 - Added the built-in `use-skill-hub@0.0.0-initial` fallback to public read

@@ -27,7 +27,12 @@ must survive redeploys.
 - Internal hostnames, certificate paths, reverse-proxy details, custom private
   adapters, and real secrets remain outside the public repository.
 - Server preparation installs the committed lockfile graph and creates
-  production artifacts before stopping the active release.
+  production artifacts before stopping the active release. Pending catalog
+  migrations run only after the recorded active processes have stopped and
+  before the staged release is activated; this quiesces legacy writers during
+  backup and DDL.
+- The direct public deployment procedure stops the recorded service before it
+  replaces `src/`; it must never overwrite active sources before quiescing.
 - The stack starts in the background via `scripts/deployment/restart-server.sh`, with
   separate verified API and frontend PID files.
 - Deployment startup uses built artifacts, waits for API and frontend HTTP

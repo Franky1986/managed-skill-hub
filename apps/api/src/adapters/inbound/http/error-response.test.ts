@@ -191,6 +191,10 @@ describe('error-response', () => {
       code: 'JUDGER_UNAVAILABLE',
       requestId: 'req-123',
     });
+    const logged = (request.log.error as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(logged).toMatchObject({ errorCategory: 'JUDGER_UNAVAILABLE' });
+    expect(logged.error).toBeUndefined();
+    expect(JSON.stringify(logged)).not.toContain('sensitive upstream details');
   });
 });
 

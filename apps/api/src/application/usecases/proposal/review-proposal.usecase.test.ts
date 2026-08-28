@@ -14,6 +14,8 @@ import { SkillStatus } from '../../../domain/skill/SkillStatus';
 import { SkillVersion } from '../../../domain/skill/SkillVersion';
 import { CatalogProposalRecord, CatalogSkillVersionRecord, SkillCatalogPort } from '../../ports/outbound/skill-catalog.port';
 import { Judgement, JudgementRisk } from '../../../domain/judgement/Judgement';
+import { SkillJudgerPort, JudgementTarget } from '../../ports/outbound/judger.port';
+import { buildGlobalJudgementTarget, withJudgementInputFingerprint } from '../judgement/judgement-input';
 
 describe('ReviewProposalUseCase', () => {
   it('rejects a proposal and persists the new status', async () => {
@@ -74,6 +76,62 @@ describe('ReviewProposalUseCase', () => {
     expect(judgeSkillVersion.calls).toHaveLength(1);
     expect(judgeSkillVersion.calls[0]?.version).toBe('1.0.0');
     expect(audit.entries.some((entry) => entry.action === 'convert_proposal')).toBe(true);
+  });
+
+  it('reuses an unchanged proposal judgement through conversion without calling the provider', async () => {
+    const repo = new ReviewRepo();
+    const storage = new ReviewStorage();
+    const audit = new ReviewAudit();
+    const provider = new CountingJudger(true);
+    const judge = new JudgeSkillVersionUseCase(repo, provider, audit, undefined, storage);
+    const useCase = new ReviewProposalUseCase(repo, storage, audit, new CreateSkillUseCase(repo, storage, audit), judge);
+    const proposal = reusableProposal('Unchanged conversion');
+    await repo.saveProposal(proposal);
+    storage.files.set(`${proposal.id}:README.md`, { content: Buffer.from('# Skill'), mimeType: 'text/markdown' });
+
+    await useCase.convertProposal(proposal.id, 'admin');
+
+    expect(provider.calls).toBe(0);
+    expect(audit.entries.some((entry) => entry.action === 'reuse_skill_judgement')).toBe(true);
+  });
+
+  it('does not reuse an unchanged proposal judgement when the configured model identity is unknown', async () => {
+    const repo = new ReviewRepo(); const storage = new ReviewStorage(); const audit = new ReviewAudit();
+    const provider = new CountingJudger(false, null); const judge = new JudgeSkillVersionUseCase(repo, provider, audit, undefined, storage);
+    const useCase = new ReviewProposalUseCase(repo, storage, audit, new CreateSkillUseCase(repo, storage, audit), judge);
+    const proposal = reusableProposal('Unknown model identity'); await repo.saveProposal(proposal);
+    storage.files.set(`${proposal.id}:README.md`, { content: Buffer.from('# Skill'), mimeType: 'text/markdown' });
+    await useCase.convertProposal(proposal.id, 'admin');
+    expect(provider.calls).toBe(1); expect(audit.entries.some((entry) => entry.action === 'reuse_skill_judgement')).toBe(false);
+  });
+
+  it('reuses an unchanged proposal judgement when identity is stable but the provider returned no model', async () => {
+    const repo = new ReviewRepo(); const storage = new ReviewStorage(); const audit = new ReviewAudit();
+    const provider = new CountingJudger(true, 'counting-judger', null); const judge = new JudgeSkillVersionUseCase(repo, provider, audit, undefined, storage);
+    const useCase = new ReviewProposalUseCase(repo, storage, audit, new CreateSkillUseCase(repo, storage, audit), judge);
+    const proposal = reusableProposal('Stable identity without model', 'sha256', null, 'counting-judger'); await repo.saveProposal(proposal);
+    storage.files.set(`${proposal.id}:README.md`, { content: Buffer.from('# Skill'), mimeType: 'text/markdown' });
+    await useCase.convertProposal(proposal.id, 'admin');
+    expect(provider.calls).toBe(0); expect(audit.entries.some((entry) => entry.action === 'reuse_skill_judgement')).toBe(true);
+  });
+
+  it.each([
+    ['metadata', () => reusableProposal('Changed conversion').updateMetadata({ description: 'Changed after proposal judgement' })],
+    ['file digest', () => reusableProposal('Changed conversion', 'different-sha256')],
+  ])('calls the provider once when conversion changes %s', async (_kind, createChangedProposal) => {
+    const repo = new ReviewRepo();
+    const storage = new ReviewStorage();
+    const audit = new ReviewAudit();
+    const provider = new CountingJudger();
+    const judge = new JudgeSkillVersionUseCase(repo, provider, audit, undefined, storage);
+    const useCase = new ReviewProposalUseCase(repo, storage, audit, new CreateSkillUseCase(repo, storage, audit), judge);
+    const proposal = createChangedProposal();
+    await repo.saveProposal(proposal);
+    storage.files.set(`${proposal.id}:README.md`, { content: Buffer.from('# Skill'), mimeType: 'text/markdown' });
+
+    await useCase.convertProposal(proposal.id, 'admin');
+
+    expect(provider.calls).toBe(1);
   });
 
   it('converts a proposal with existing skillId into a new draft skill version', async () => {
@@ -258,11 +316,20 @@ class ReviewStorage implements SkillFileStoragePort {
     this.files.set(`${skillId}:${version}:${path}`, { content, mimeType });
     return { path, mimeType, sizeBytes: content.length, sha256: 'sha256', updatedAt: new Date('2026-07-02T00:00:00.000Z') };
   }
-  async readSkillFile(): Promise<null> {
-    return null;
+  async readSkillFile(skillId: string, version: string, path: string): Promise<{ content: Buffer; mimeType: string } | null> {
+    return this.files.get(`${skillId}:${version}:${path}`) ?? null;
   }
-  async listSkillFiles(): Promise<StoredFile[]> {
-    return [];
+  async listSkillFiles(skillId: string, version: string): Promise<StoredFile[]> {
+    const prefix = `${skillId}:${version}:`;
+    return [...this.files.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, value]) => ({
+        path: key.slice(prefix.length),
+        mimeType: value.mimeType,
+        sizeBytes: value.content.length,
+        sha256: 'sha256',
+        updatedAt: null,
+      }));
   }
   async storeSkillFileExtract(): Promise<StoredExtractedContent> {
     throw new Error('not implemented');
@@ -279,6 +346,26 @@ class ReviewStorage implements SkillFileStoragePort {
   }
   async listProposalFiles(): Promise<StoredFile[]> {
     return [];
+  }
+}
+
+class CountingJudger implements SkillJudgerPort {
+  calls = 0;
+
+  constructor(private readonly throwOnCall = false, readonly modelIdentity: string | null = 'counting-judger', private readonly returnedModel: string | null = modelIdentity) {}
+
+  async judge(target: JudgementTarget): Promise<Judgement> {
+    this.calls += 1;
+    if (this.throwOnCall) {
+      throw new Error('provider must not be called for an unchanged conversion');
+    }
+    return Judgement.create({
+      targetType: target.type,
+      targetId: target.id,
+      model: this.returnedModel,
+      summary: 'new provider judgement',
+      dimensions: { harmful: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' } },
+    });
   }
 }
 
@@ -491,6 +578,35 @@ function createExistingSkill(id: string): Skill {
     })
   );
   return skill;
+}
+
+function reusableProposal(title: string, judgementFileSha = 'sha256', judgementModel: string | null = 'counting-judger', reuseIdentity: string | null = judgementModel): Proposal {
+  let proposal = Proposal.create({
+    title,
+    description: 'Proposal that should retain its judgement during conversion',
+    category: 'automation',
+    entrypoint: 'README.md',
+    submittedBy: 'agent',
+  });
+  proposal = proposal.addFile({
+    id: 'README.md', path: 'README.md', mimeType: 'text/markdown', sizeBytes: 7, sha256: 'sha256',
+  });
+  const target = buildGlobalJudgementTarget({
+    targetType: 'proposal',
+    targetId: proposal.id,
+    title: proposal.title,
+    description: proposal.description,
+    category: proposal.category,
+    tags: proposal.tags,
+    capabilities: proposal.capabilities,
+    entrypoint: proposal.entrypoint,
+    files: [{ path: 'README.md', role: 'entrypoint', mimeType: 'text/markdown', sizeBytes: 7, sha256: judgementFileSha }],
+  });
+  return proposal.finalizeUpload().addJudgement(withJudgementInputFingerprint(Judgement.create({
+    id: 'proposal-reuse-judgement', targetType: 'proposal', targetId: proposal.id,
+    model: judgementModel, summary: 'already assessed',
+    dimensions: { harmful: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' } },
+  }), target, 'default', reuseIdentity));
 }
 
 function createCatalogVersion(skillId: string): CatalogSkillVersionRecord {

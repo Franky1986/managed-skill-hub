@@ -71,6 +71,8 @@ export interface CatalogJudgementRecord {
   summary: string;
   skillPurposeSummary: string | null;
   model: string | null;
+  inputFingerprint: string | null;
+  promptVersion: string | null;
   createdAt: Date;
 }
 

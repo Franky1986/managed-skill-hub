@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const execFileAsync = promisify(execFile);
@@ -53,6 +53,10 @@ async function main(): Promise<void> {
   const archive = archiveMatch?.[1] ?? archiveMatch?.[2];
   assert(archive, 'backup output must contain archive path');
   assert(await exists(archive), 'backup archive must exist');
+  const archiveMode = (await stat(archive)).mode & 0o777;
+  assert(archiveMode === 0o600, `backup archive must be owner-readable only, received ${archiveMode.toString(8)}`);
+  const archiveContents = await execFileAsync('tar', ['-tzf', archive]);
+  assert(!archiveContents.stdout.split('\n').some((entry) => entry.includes('/backups/')), 'backup archive must not recursively include backup archives');
 
   const mysqlGuard = await execFileAsync('bash', ['scripts/operations/backup.sh'], {
     cwd: root,
@@ -69,7 +73,32 @@ async function main(): Promise<void> {
     (error: { code?: number; stderr?: string }) => ({ exitCode: error.code ?? 1, stderr: error.stderr ?? '' })
   );
   assert(mysqlGuard.exitCode !== 0, 'mysql database-content backup must fail fast');
-  assert(mysqlGuard.stderr.includes('CONTENT_STORAGE_PROVIDER=database') && mysqlGuard.stderr.includes('CATALOG_PROVIDER=mysql'), 'mysql database-content backup guard must explain the incomplete mode');
+  assert(mysqlGuard.stderr.includes('CATALOG_PROVIDER=mysql') && mysqlGuard.stderr.includes('MySQL database dump'), 'mysql catalog backup guard must explain the incomplete mode');
+
+  const fakeBin = path.join(proofRoot, 'fake-bin');
+  await mkdir(fakeBin, { recursive: true });
+  const fakeDump = path.join(fakeBin, 'mysqldump');
+  await writeFile(fakeDump, '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "${DUMP_ARGS_FILE:?}"\nprintf -- "-- managed-skill-hub MySQL migration backup proof\\n"\n');
+  await chmod(fakeDump, 0o755);
+  const mysqlMigrationDataDir = path.join(proofRoot, 'mysql-migration-data');
+  const mysqlDumpArgs = path.join(proofRoot, 'mysqldump-args.txt');
+  const mysqlMigrationBackup = await execFileAsync('bash', ['scripts/operations/backup-mysql-for-migration.sh'], {
+    cwd: root,
+    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}`, DATA_DIR: mysqlMigrationDataDir, MSH_SKIP_ENV: 'true', MYSQL_HOST: '127.0.0.1', MYSQL_PORT: '3306', MYSQL_DATABASE: 'managed_skill_hub_proof', MYSQL_USER: 'managed_skill_hub_proof', MYSQL_PASSWORD: 'not-a-real-password', MYSQL_SSL_MODE: 'verify_identity', DUMP_ARGS_FILE: mysqlDumpArgs },
+    maxBuffer: 1024 * 1024,
+  });
+  const mysqlDump = mysqlMigrationBackup.stdout.match(/MySQL migration backup created: (.+\.sql)/)?.[1];
+  assert(mysqlDump, 'mysql migration backup output must contain dump path');
+  assert((await readFile(mysqlDump, 'utf8')).includes('migration backup proof'), 'mysql migration backup must contain dump output');
+  assert(((await stat(mysqlDump)).mode & 0o777) === 0o600, 'mysql migration backup must have restrictive permissions');
+  assert((await readFile(mysqlDumpArgs, 'utf8')).includes('--ssl-mode=VERIFY_IDENTITY'), 'mysql migration backup must preserve the configured TLS mode');
+  const secondMysqlMigrationBackup = await execFileAsync('bash', ['scripts/operations/backup-mysql-for-migration.sh'], {
+    cwd: root,
+    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}`, DATA_DIR: mysqlMigrationDataDir, MSH_SKIP_ENV: 'true', MYSQL_HOST: '127.0.0.1', MYSQL_PORT: '3306', MYSQL_DATABASE: 'managed_skill_hub_proof', MYSQL_USER: 'managed_skill_hub_proof', MYSQL_PASSWORD: 'not-a-real-password', MYSQL_SSL_MODE: 'verify_identity', DUMP_ARGS_FILE: mysqlDumpArgs },
+    maxBuffer: 1024 * 1024,
+  });
+  const secondMysqlDump = secondMysqlMigrationBackup.stdout.match(/MySQL migration backup created: (.+\.sql)/)?.[1];
+  assert(secondMysqlDump && secondMysqlDump !== mysqlDump, 'repeated MySQL migration backups must use collision-safe names');
 
   const currentOnly = path.join(dataDir, 'current-only.txt');
   await writeFile(currentOnly, 'must be moved aside during restore\n');
@@ -99,7 +128,9 @@ async function main(): Promise<void> {
 
   const results: CheckResult[] = [
     { id: 'backup-archive-created', detail: archive, result: 'PASS' },
-    { id: 'mysql-database-content-guard', detail: 'DATA_DIR archive refused for MySQL database-content mode', result: 'PASS' },
+    { id: 'backup-archive-private', detail: '0600 and excludes DATA_DIR/backups', result: 'PASS' },
+    { id: 'mysql-catalog-guard', detail: 'DATA_DIR archive refused for every MySQL catalog mode', result: 'PASS' },
+    { id: 'mysql-migration-backup', detail: 'atomic, private, collision-safe, and TLS-aware', result: 'PASS' },
     { id: 'restore-completed', detail: dataDir, result: 'PASS' },
     { id: 'skill-data-restored', detail: 'skills/backup-proof/1.0.0/SKILL.md', result: 'PASS' },
     { id: 'proposal-data-restored', detail: 'proposals/proposal-backup-proof/proposal.json', result: 'PASS' },

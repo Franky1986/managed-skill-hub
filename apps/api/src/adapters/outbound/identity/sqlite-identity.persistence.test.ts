@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SqliteIdentityPersistence } from './sqlite-identity.persistence';
+import { ensureSqliteCatalogSchema } from '../catalog/sqlite/sqlite.catalog-schema';
 
 describe('SqliteIdentityPersistence', () => {
   let directory: string;
@@ -13,6 +14,9 @@ describe('SqliteIdentityPersistence', () => {
   beforeEach(async () => {
     directory = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-identity-'));
     databasePath = path.join(directory, 'catalog.db');
+    const database = new Database(databasePath);
+    ensureSqliteCatalogSchema(database);
+    database.close();
     persistence = new SqliteIdentityPersistence(databasePath);
   });
 

@@ -16,7 +16,6 @@ import {
 } from '../../../application/ports/outbound/principal-repository.port';
 import { PrincipalKind, PrincipalRole } from '../../../application/security/authenticated-principal';
 import { StorageError, ValidationError } from '../../../domain/errors';
-import { ensureMysqlCatalogSchema } from '../catalog/mysql/mysql.catalog-schema';
 import { MysqlClient, MysqlConnection } from '../mysql/mysql.connection';
 import { hashOpaqueCredential } from './opaque-credential-hash';
 
@@ -35,7 +34,9 @@ implements PrincipalRepositoryPort, AdminSessionPort, OidcLoginTransactionPort {
   private readonly schemaReady: Promise<void>;
 
   constructor(private readonly client: MysqlClient) {
-    this.schemaReady = ensureMysqlCatalogSchema(client);
+    // Catalog schema changes are exclusively applied by the versioned runner
+    // before adapters are constructed.
+    this.schemaReady = Promise.resolve();
   }
 
   async findById(principalId: string): Promise<PrincipalRecord | null> {

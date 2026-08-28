@@ -24,7 +24,6 @@ import {
   JudgementTargetType,
 } from '../../../../domain/judgement/Judgement';
 import { AuditEntry } from '../../../../domain/audit/AuditEntry';
-import { ensureSqliteCatalogSchema } from './sqlite.catalog-schema';
 import {
   computeArtifactId,
   computeContentDigestForVersion,
@@ -215,8 +214,8 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
     const insertJudgement = db.prepare(`
       INSERT INTO skill_catalog_judgements (
         id, target_type, target_id, proposal_id, skill_id, skill_version,
-        dimensions, overall_risk, summary, skill_purpose_summary, model, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        dimensions, overall_risk, summary, skill_purpose_summary, model, input_fingerprint, prompt_version, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const tx = db.transaction(() => {
@@ -266,6 +265,8 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
           judgement.summary,
           judgement.skillPurposeSummary,
           judgement.model,
+          judgement.inputFingerprint,
+          judgement.promptVersion,
           judgement.createdAt.toISOString()
         );
       }
@@ -295,8 +296,8 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
       db.prepare(
         `INSERT OR REPLACE INTO skill_catalog_judgements (
           id, target_type, target_id, proposal_id, skill_id, skill_version,
-          dimensions, overall_risk, summary, skill_purpose_summary, model, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          dimensions, overall_risk, summary, skill_purpose_summary, model, input_fingerprint, prompt_version, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         judgement.id,
         judgement.targetType,
@@ -309,6 +310,8 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
         judgement.summary,
         judgement.skillPurposeSummary,
         judgement.model,
+        judgement.inputFingerprint,
+        judgement.promptVersion,
         judgement.createdAt.toISOString()
       );
     } catch (error) {
@@ -719,7 +722,6 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
     if (!this.db) {
       mkdirSync(path.dirname(this.indexPath), { recursive: true });
       this.db = new Database(this.indexPath);
-      ensureSqliteCatalogSchema(this.db);
     }
     return this.db;
   }
@@ -914,6 +916,8 @@ interface CatalogJudgementRow {
   summary: string;
   skill_purpose_summary: string | null;
   model: string | null;
+  input_fingerprint: string | null;
+  prompt_version: string | null;
   created_at: string;
 }
 
@@ -1016,6 +1020,8 @@ function mapCatalogJudgementRow(row: CatalogJudgementRow): CatalogJudgementRecor
     summary: row.summary,
     skillPurposeSummary: row.skill_purpose_summary,
     model: row.model,
+    inputFingerprint: row.input_fingerprint,
+    promptVersion: row.prompt_version,
     createdAt: new Date(row.created_at),
   };
 }

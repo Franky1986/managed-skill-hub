@@ -50,6 +50,27 @@ describe('judger provider parsing', () => {
   });
 });
 
+describe('judger reuse configuration', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+
+  it('defaults to four concurrent operations and derives a provider-neutral reuse scope', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'vercel-ai-sdk');
+    vi.stubEnv('VERCEL_AI_SDK_MODEL', 'openai:test');
+    vi.stubEnv('JUDGER_POLICY_REVISION', 'r2');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+    const config = loadConfig();
+    expect(config.judgerMaxConcurrency).toBe(4);
+    expect(config.judgerReuseScope).toBe('vercel-ai-sdk:openai:test:r2');
+  });
+
+  it('rejects concurrency values outside the documented range', () => {
+    vi.stubEnv('JUDGER_PROVIDER', 'noop');
+    vi.stubEnv('JUDGER_MAX_CONCURRENCY', '5');
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
+    expect(() => loadConfig()).toThrow(ConfigurationError);
+  });
+});
+
 describe('publish judgement policy parsing', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

@@ -152,4 +152,9 @@ async function start() {
   }
 }
 
-start();
+start().catch(() => {
+  // Startup can fail while loading an operator-provided adapter. Do not let a
+  // raw module/provider error reach stderr before Fastify logging is active.
+  console.error('ManagedSkillHub startup failed. Check the safe configuration and deployment diagnostics.');
+  process.exitCode = 1;
+});

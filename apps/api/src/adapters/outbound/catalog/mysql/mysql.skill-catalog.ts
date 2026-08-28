@@ -19,7 +19,6 @@ import {
 import { computeArtifactId, computeContentDigestForVersion, computeSkillUuid, computeVersionUuid, isExtractableArtifact } from '../../../../application/usecases/skill/public-metadata';
 import { deriveProposalReviewMetadata } from '../../../../application/usecases/proposal/review-metadata';
 import { MysqlClient, MysqlConnection } from '../../mysql/mysql.connection';
-import { ensureMysqlCatalogSchema } from './mysql.catalog-schema';
 
 interface FileMetaEntry {
   mimeType?: string;
@@ -73,7 +72,7 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
     private readonly dataDir: string,
     private readonly dbClient: MysqlClient
   ) {
-    this.schemaReady = ensureMysqlCatalogSchema(this.dbClient);
+    this.schemaReady = Promise.resolve();
   }
 
   private async ensureSchema(): Promise<void> {
@@ -334,8 +333,8 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
       const insertJudgement = `
         INSERT INTO skill_catalog_judgements (
           id, target_type, target_id, proposal_id, skill_id, skill_version,
-          dimensions, overall_risk, summary, skill_purpose_summary, model, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          dimensions, overall_risk, summary, skill_purpose_summary, model, input_fingerprint, prompt_version, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       for (const judgement of proposal.judgements) {
         await connection.execute(insertJudgement, [
@@ -350,6 +349,8 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
           judgement.summary,
           judgement.skillPurposeSummary,
           judgement.model,
+          judgement.inputFingerprint,
+          judgement.promptVersion,
           toMysqlDateTime(judgement.createdAt),
         ]);
       }
@@ -368,8 +369,8 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
     await this.execute(`
       INSERT INTO skill_catalog_judgements (
         id, target_type, target_id, proposal_id, skill_id, skill_version,
-        dimensions, overall_risk, summary, skill_purpose_summary, model, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        dimensions, overall_risk, summary, skill_purpose_summary, model, input_fingerprint, prompt_version, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         target_type = VALUES(target_type),
         target_id = VALUES(target_id),
@@ -381,6 +382,8 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
         summary = VALUES(summary),
         skill_purpose_summary = VALUES(skill_purpose_summary),
         model = VALUES(model),
+        input_fingerprint = VALUES(input_fingerprint),
+        prompt_version = VALUES(prompt_version),
         created_at = VALUES(created_at)
     `, [
       judgement.id,
@@ -394,6 +397,8 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
       judgement.summary,
       judgement.skillPurposeSummary,
       judgement.model,
+      judgement.inputFingerprint,
+      judgement.promptVersion,
       toMysqlDateTime(judgement.createdAt),
     ]);
   }
@@ -991,6 +996,8 @@ interface CatalogJudgementRow {
   summary: string;
   skill_purpose_summary: string | null;
   model: string | null;
+  input_fingerprint: string | null;
+  prompt_version: string | null;
   created_at: string;
 }
 
@@ -1107,6 +1114,8 @@ function mapCatalogJudgementRow(row: CatalogJudgementRow): CatalogJudgementRecor
     summary: row.summary,
     skillPurposeSummary: row.skill_purpose_summary,
     model: row.model,
+    inputFingerprint: row.input_fingerprint,
+    promptVersion: row.prompt_version,
     createdAt: requireMysqlDateTime(row.created_at, 'skill_catalog_judgements.created_at'),
   };
 }

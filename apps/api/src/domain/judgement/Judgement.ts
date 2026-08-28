@@ -27,8 +27,17 @@ export class Judgement {
   readonly summary: string,
     readonly skillPurposeSummary: string | null,
     readonly model: string | null,
+    readonly inputFingerprint: string | null,
+    readonly promptVersion: string | null,
     readonly createdAt: Date
-  ) {}
+  ) {
+    // Reuse bookkeeping is persistence/application metadata, never part of
+    // the HTTP judgement contract when a domain object is serialized.
+    Object.defineProperties(this, {
+      inputFingerprint: { enumerable: false },
+      promptVersion: { enumerable: false },
+    });
+  }
 
   static create(props: {
     id?: string;
@@ -39,6 +48,8 @@ export class Judgement {
     summary?: string;
     skillPurposeSummary?: string | null;
     model?: string | null;
+    inputFingerprint?: string | null;
+    promptVersion?: string | null;
     createdAt?: Date;
   }): Judgement {
     const dimensions = props.dimensions;
@@ -55,6 +66,8 @@ export class Judgement {
       props.summary ?? '',
       props.skillPurposeSummary ?? null,
       props.model ?? null,
+      props.inputFingerprint ?? null,
+      props.promptVersion ?? null,
       props.createdAt ?? new Date()
     );
   }

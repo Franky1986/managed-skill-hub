@@ -7,6 +7,13 @@ prove. Run each applicable aggregate gate for the changed scope; focused tests
 do not replace a repository-provided lifecycle, API-contract, migration,
 security, or deployment proof.
 
+For a behavior-preserving refactor, state the prior caller-visible invariant and
+run or add a regression test at the production seam for the most plausible
+semantic change. Cover altered loops, callbacks, concurrency, batching, retry,
+early-exit, error, transaction, queue, state-transition, cache, or
+serialization behavior; a happy-path test, typecheck, or lint result alone is
+not evidence that behavior was preserved.
+
 For a TypeScript change, record the selected Git base and build the
 verification scope from the committed branch diff, `git diff --cached`, `git
 diff`, and relevant untracked files reported by `git status --short`. Review
