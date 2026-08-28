@@ -27,6 +27,10 @@ metadata, and clean up abandoned uploads.
   exist yet, a new skill is created with this ID.
 - Multiple proposals with the same title, category, or target skill ID are
   allowed at the same time. Admins resolve collisions during conversion.
+- Conversion validates the domain transition before duplicate checks, audit
+  writes, skill materialization, file copying, extraction, catalog updates, or
+  skill-version judgement. `in_upload` and `rejected` proposals therefore leave
+  no draft skill, artifacts, catalog records, or audit entries behind.
 
 ## Responsibilities
 
@@ -81,6 +85,8 @@ metadata, and clean up abandoned uploads.
 - With catalog projection available, the existing-skill convert path does not
   need repository rehydration for skill basis.
 - Proposal is stored as `converted` after successful conversion.
+- Converting an `in_upload` or `rejected` proposal fails without materializing
+  a skill, copying files, or writing audit/catalog side effects.
 - Administrative cleanup deletes open uploads and refuses submitted, judged,
   rejected, converted, or otherwise finalized proposals.
 

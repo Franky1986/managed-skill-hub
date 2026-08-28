@@ -87,6 +87,7 @@ export class ReviewProposalUseCase {
       throw new NotFoundError(`Proposal ${proposalId} not found`);
     }
 
+    const converted = proposal.approve().convert();
     const duplicateWarning = await this.detectDuplicateContent(proposal);
     if (duplicateWarning) {
       await this.audit.append(
@@ -105,7 +106,6 @@ export class ReviewProposalUseCase {
       await this.extractDraftVersionArtifacts(skill.id.toString(), targetVersion, actor, proposal.id);
     }
 
-    const converted = proposal.approve().convert();
     await this.repo.saveProposal(converted);
     if (this.judgeSkillVersion) {
       try {

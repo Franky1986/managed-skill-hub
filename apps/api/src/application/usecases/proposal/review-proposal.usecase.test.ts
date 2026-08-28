@@ -78,6 +78,24 @@ describe('ReviewProposalUseCase', () => {
     expect(audit.entries.some((entry) => entry.action === 'convert_proposal')).toBe(true);
   });
 
+  it.each([
+    ['in_upload', () => Proposal.create({ title: 'Open proposal', description: 'Must not materialize', category: 'automation', submittedBy: 'agent' })],
+    ['rejected', () => Proposal.create({ title: 'Rejected proposal', description: 'Must not materialize', category: 'automation', submittedBy: 'agent' }).finalizeUpload().reject('rejected for test')],
+  ])('does not materialize a skill or side effects when converting a %s proposal', async (_status, createProposal) => {
+    const repo = new ReviewRepo();
+    const storage = new ReviewStorage();
+    const audit = new ReviewAudit();
+    const proposal = createProposal();
+    await repo.saveProposal(proposal);
+    const useCase = new ReviewProposalUseCase(repo, storage, audit, new CreateSkillUseCase(repo, storage, audit));
+
+    await expect(useCase.convertProposal(proposal.id, 'admin')).rejects.toThrow();
+
+    expect(repo.skills.size).toBe(0);
+    expect(storage.files.size).toBe(0);
+    expect(audit.entries).toHaveLength(0);
+  });
+
   it('reuses an unchanged proposal judgement through conversion without calling the provider', async () => {
     const repo = new ReviewRepo();
     const storage = new ReviewStorage();
