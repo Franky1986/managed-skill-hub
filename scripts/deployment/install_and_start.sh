@@ -90,12 +90,15 @@ prepare_release() {
   )
   log_step "3/4" "Production build successful."
 
-  log_step "4/4" "Planning, backing up when required, and applying catalog migrations ..."
+}
+
+migrate_release() {
+  log_step "migration" "Planning, backing up when required, and applying catalog migrations ..."
   (
     cd "$PROJECT_ROOT"
     node apps/api/dist/infrastructure/migrations/run-catalog-migrations.js
   )
-  log_step "4/4" "Catalog schema migrations verified."
+  log_step "migration" "Catalog schema migrations verified."
 }
 
 start_release() {
@@ -108,6 +111,14 @@ start_release() {
     bash scripts/deployment/restart-server.sh
   )
   echo "[start] Stack is healthy."
+}
+
+quiesce_release() {
+  echo "[quiesce] Stopping recorded active processes before catalog migration ..."
+  (
+    cd "$PROJECT_ROOT"
+    bash scripts/deployment/restart-server.sh stop
+  )
 }
 
 case "$ACTION" in
@@ -125,6 +136,13 @@ case "$ACTION" in
     echo ""
     start_release
     ;;
+  migrate)
+    echo "============================================"
+    echo " managed-skill-hub Catalog Migration"
+    echo "============================================"
+    echo ""
+    migrate_release
+    ;;
   all)
     echo "============================================"
     echo " managed-skill-hub Install, Build, and Start"
@@ -132,10 +150,14 @@ case "$ACTION" in
     echo ""
     prepare_release
     echo ""
+    quiesce_release
+    echo ""
+    migrate_release
+    echo ""
     start_release
     ;;
   *)
-    echo "ERROR: unsupported action '${ACTION}'. Use prepare, start, or all." >&2
+    echo "ERROR: unsupported action '${ACTION}'. Use prepare, migrate, start, or all." >&2
     exit 1
     ;;
 esac

@@ -43,7 +43,7 @@ export class JudgeProposalUseCase {
         files: proposal.files.map((file) => ({ path: file.path, role: file.path === entrypoint ? 'entrypoint' : 'attachment',
           mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256 })),
       });
-      judgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope);
+      judgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope, this.judger.modelIdentity ?? null);
     } catch (error) {
       await this.audit.append(AuditEntry.create({
         proposalId,
@@ -105,7 +105,7 @@ export class JudgeProposalUseCase {
         text: truncateJudgementText(scanned.text), mimeType: stored.mimeType, sizeBytes: file.sizeBytes,
         sha256: file.sha256, extractedBy: scanned.extractedBy,
       });
-      const judgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope);
+      const judgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope, this.judger.modelIdentity ?? null);
       const updated = proposal.addJudgement(judgement);
       await this.repo.saveProposal(updated);
       await this.audit.append(AuditEntry.create({
@@ -127,7 +127,7 @@ export class JudgeProposalUseCase {
         proposalId,
         action: 'file_judgement_failed',
         actor: 'system',
-        after: { file: file.path, error: (error as Error).message },
+        after: { file: file.path, errorCategory: judgementErrorCategory(error) },
       }));
       this.judgementEvents?.({
         event: 'judgement_execution',
@@ -199,7 +199,7 @@ export class JudgeProposalUseCase {
           `File: ${file.path}`,
           `MIME: ${stored.mimeType}`,
           `Size bytes: ${file.sizeBytes}`,
-          `[FILE CONTENT COULD NOT BE EXTRACTED: ${(error as Error).message}]`,
+          `[FILE CONTENT COULD NOT BE EXTRACTED: ${judgementErrorCategory(error)}]`,
         ].join('\n'));
       }
     }

@@ -11,6 +11,20 @@ export interface JudgementRuntimeEvent {
 
 export type JudgementRuntimeEventSink = (event: JudgementRuntimeEvent) => void;
 
+const SAFE_ERROR_CATEGORIES = new Set([
+  'Error',
+  'TypeError',
+  'RangeError',
+  'SyntaxError',
+  'ValidationError',
+  'NotFoundError',
+  'ForbiddenError',
+  'ConflictError',
+  'StorageError',
+]);
+
 export function judgementErrorCategory(error: unknown): string {
-  return error instanceof Error && error.name ? error.name : 'UnknownError';
+  return error instanceof Error && SAFE_ERROR_CATEGORIES.has(error.name)
+    ? error.name
+    : 'UnexpectedError';
 }

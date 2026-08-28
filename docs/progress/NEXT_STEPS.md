@@ -10,6 +10,8 @@
       per API process.
 - [x] Introduce append-only SQLite/MySQL catalog migrations with a frozen
       legacy baseline, provider locks, and conditional pre-migration backups.
+- [x] Harden migration backup artifacts and audit error persistence so backup
+      contents and provider/scanner diagnostics are not exposed unnecessarily.
 - [ ] Exercise the public staged installer against copies of an existing
       SQLite catalog and, when used, a MySQL catalog before a production rollout.
 

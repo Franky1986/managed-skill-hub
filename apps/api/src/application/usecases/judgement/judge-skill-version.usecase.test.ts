@@ -10,6 +10,14 @@ import { Proposal } from '../../../domain/proposal/Proposal';
 import { Judgement, JudgementRisk } from '../../../domain/judgement/Judgement';
 import { SkillFileStoragePort, StoredExtractedContent, StoredFile } from '../../ports/outbound/file-storage.port';
 import { FileScannerPort, ScannedContent } from '../../ports/outbound/file-scanner.port';
+import { buildGlobalJudgementTarget, withJudgementInputFingerprint } from './judgement-input';
+import { judgementErrorCategory } from './judgement-runtime-event';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { FileSystemAuditLog } from '../../../adapters/outbound/audit/filesystem/file-system.audit';
+import { DatabaseAuditLog } from '../../../adapters/outbound/audit/database/database.audit';
+import { SqliteContentDb } from '../../../adapters/outbound/persistence/database/sqlite-content-db';
 
 describe('JudgeSkillVersionUseCase', () => {
   it('uses sqlite-projected skill version metadata when available', async () => {
@@ -121,6 +129,137 @@ describe('JudgeSkillVersionUseCase', () => {
       errorCategory: 'Error',
     }]);
   });
+
+  it('reuses a canonically matching proposal judgement during conversion without calling the provider', async () => {
+    const catalogVersion = createCatalogVersion({ version: '1.0.1' });
+    const reusableTarget = buildGlobalJudgementTarget({
+      targetType: 'proposal',
+      targetId: 'proposal-before-conversion',
+      title: catalogVersion.title,
+      description: catalogVersion.description,
+      category: catalogVersion.category,
+      tags: catalogVersion.tags,
+      capabilities: catalogVersion.capabilities,
+      useWhen: catalogVersion.useWhen,
+      doNotUseWhen: catalogVersion.doNotUseWhen,
+      entrypoint: catalogVersion.entrypoint,
+      files: [{ path: 'README.md', role: 'entrypoint', mimeType: 'text/markdown', sizeBytes: 12, sha256: 'sha' }],
+    });
+    const proposalJudgement = withJudgementInputFingerprint(
+      Judgement.create({
+        id: 'proposal-global-judgement',
+        targetType: 'proposal',
+        targetId: reusableTarget.id,
+        summary: 'reusable proposal judgement',
+        model: 'stub-judger',
+        createdAt: new Date('2026-07-02T00:00:00.000Z'),
+        dimensions: {
+          harmful: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' },
+          promptInjection: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' },
+          dataExfiltration: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' },
+          policyViolation: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' },
+        },
+      }),
+      reusableTarget
+    );
+    const judger: SkillJudgerPort = {
+      modelIdentity: 'stub-judger',
+      judge: async () => { throw new Error('provider must not run for a matching input'); },
+    };
+    const audit = new AuditStub();
+    const useCase = new JudgeSkillVersionUseCase(new RepoStub(), judger, audit, new CatalogStub(catalogVersion));
+
+    const judgement = await useCase.execute('catalog-skill', '1.0.1', { reuseJudgements: [proposalJudgement] });
+
+    expect(judgement.targetType).toBe('skill');
+    expect(judgement.targetId).toBe('catalog-skill:1.0.1');
+    expect(judgement.summary).toBe('reusable proposal judgement');
+    expect(audit.entries.some((entry) => entry.action === 'reuse_skill_judgement')).toBe(true);
+  });
+
+  it('does not persist a raw file-judge error in audit history', async () => {
+    const audit = new AuditStub();
+    const useCase = new JudgeSkillVersionUseCase(
+      new RepoStub(),
+      new JudgerStub(),
+      audit,
+      new CatalogStub(createCatalogVersion({ version: '1.0.1' })),
+      new FailingFileStorageStub(),
+      new FailingScannerStub()
+    );
+
+    await useCase.execute('catalog-skill', '1.0.1');
+
+    const failed = audit.entries.find((entry) => entry.action === 'judge_skill_file_failed');
+    expect(failed?.after).toEqual({ file: 'unsafe.pdf', errorCategory: 'UnexpectedError' });
+    expect(JSON.stringify(failed)).not.toContain('sensitive-provider-detail');
+    expect(JSON.stringify(failed)).not.toContain('SENTINEL_SECRET');
+  });
+
+  it('keeps a scanner sentinel out of the raw filesystem audit representation', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'judgement-audit-sentinel-'));
+    try {
+      const useCase = new JudgeSkillVersionUseCase(
+        new RepoStub(), new JudgerStub(), new FileSystemAuditLog(dataDir),
+        new CatalogStub(createCatalogVersion({ version: '1.0.1' })),
+        new FailingFileStorageStub(), new FailingScannerStub()
+      );
+      await useCase.execute('catalog-skill', '1.0.1');
+      const raw = readFileSync(path.join(dataDir, 'audit', 'catalog-skill.jsonl'), 'utf8');
+      expect(raw).toContain('errorCategory');
+      expect(raw).not.toContain('sensitive-provider-detail');
+      expect(raw).not.toContain('SENTINEL_SECRET');
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a scanner sentinel out of the raw database audit representation', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'judgement-db-audit-sentinel-'));
+    const contentDb = new SqliteContentDb(path.join(dataDir, 'content.db'));
+    try {
+      const useCase = new JudgeSkillVersionUseCase(
+        new RepoStub(), new JudgerStub(), new DatabaseAuditLog(contentDb),
+        new CatalogStub(createCatalogVersion({ version: '1.0.1' })),
+        new FailingFileStorageStub(), new FailingScannerStub()
+      );
+      await useCase.execute('catalog-skill', '1.0.1');
+      const row = await contentDb.queryOne<{ after_json: string }>("SELECT after_json FROM content_audit_entries WHERE action = 'judge_skill_file_failed'");
+      expect(row?.after_json).toContain('errorCategory');
+      expect(row?.after_json).not.toContain('sensitive-provider-detail');
+      expect(row?.after_json).not.toContain('SENTINEL_SECRET');
+    } finally {
+      contentDb.close();
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not turn an adapter-controlled error name into persisted audit data', () => {
+    const adapterError = Object.assign(new Error('sensitive-provider-detail'), { name: 'SENTINEL_SECRET' });
+
+    expect(judgementErrorCategory(adapterError)).toBe('UnexpectedError');
+    expect(judgementErrorCategory(adapterError)).not.toContain('SENTINEL_SECRET');
+  });
+
+  it('keeps legacy context text in the canonical target and therefore does not reuse a context-free judgement', async () => {
+    const catalogVersion = createCatalogVersion({ version: '1.0.1' });
+    const target = buildGlobalJudgementTarget({
+      targetType: 'proposal', targetId: 'proposal-context-free', title: catalogVersion.title,
+      description: catalogVersion.description, category: catalogVersion.category, tags: catalogVersion.tags,
+      capabilities: catalogVersion.capabilities, useWhen: catalogVersion.useWhen,
+      doNotUseWhen: catalogVersion.doNotUseWhen, entrypoint: catalogVersion.entrypoint,
+      files: [{ path: 'README.md', role: 'entrypoint', mimeType: 'text/markdown', sizeBytes: 12, sha256: 'sha' }],
+    });
+    const sourceJudger = new JudgerStub();
+    const reusable = withJudgementInputFingerprint(await sourceJudger.judge(target), target);
+    const judger = new JudgerStub();
+    const useCase = new JudgeSkillVersionUseCase(new RepoStub(), judger, new AuditStub(), new CatalogStub(catalogVersion));
+
+    await useCase.execute('catalog-skill', '1.0.1', { contextText: 'legacy conversion context', reuseJudgements: [reusable] });
+
+    expect(judger.targets).toHaveLength(1);
+    expect(judger.targets[0]?.text).toContain('legacy conversion context');
+  });
 });
 
 class RepoStub implements SkillRepositoryPort {
@@ -140,6 +279,7 @@ class RepoStub implements SkillRepositoryPort {
 }
 
 class JudgerStub implements SkillJudgerPort {
+  readonly modelIdentity = 'stub-judger';
   targets: JudgementTarget[] = [];
 
   async judge(target: JudgementTarget): Promise<Judgement> {
@@ -211,6 +351,16 @@ class PythonStorageStub implements SkillFileStoragePort {
   async readProposalFileExtract(): Promise<StoredExtractedContent | null> { return null; }
 }
 
+class FailingFileStorageStub extends PythonStorageStub {
+  async readSkillFile(): Promise<{ content: Buffer; mimeType: string } | null> {
+    return { content: Buffer.from('binary'), mimeType: 'application/pdf' };
+  }
+
+  async listSkillFiles(): Promise<StoredFile[]> {
+    return [{ path: 'unsafe.pdf', mimeType: 'application/pdf', sizeBytes: 6, sha256: 'unsafe', updatedAt: null }];
+  }
+}
+
 class ScannerStub implements FileScannerPort {
   async scan(content: Buffer): Promise<ScannedContent> {
     return { text: content.toString('utf-8'), metadata: {}, extractedBy: 'scanner-stub' };
@@ -218,6 +368,12 @@ class ScannerStub implements FileScannerPort {
 
   supports(): boolean {
     return true;
+  }
+}
+
+class FailingScannerStub extends ScannerStub {
+  async scan(): Promise<ScannedContent> {
+    throw Object.assign(new Error('sensitive-provider-detail'), { name: 'SENTINEL_SECRET' });
   }
 }
 

@@ -35,6 +35,13 @@ JUDGER_ADAPTER_PATH=./path/to/custom.adapter.ts
 - relative path against repository root
 - extension fallback for module files (`.ts`, `.js`, `.mjs`, `.cjs`, `.mts`, `.cts`) when no extension is set
 
+### Reuse identity
+
+An adapter may expose `readonly modelIdentity?: string | null`. It must be a
+stable identity for the effective provider model and judging policy. Judgement
+reuse requires an exact match; omitting it deliberately disables reuse for that
+adapter and is the safe default for model aliases that can change.
+
 ## Adapter Contract (agent-friendly)
 
 ### Input to `judge`

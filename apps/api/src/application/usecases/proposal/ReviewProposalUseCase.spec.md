@@ -39,6 +39,11 @@ metadata, and clean up abandoned uploads.
   directly from SQLite metadata when catalog projection exists.
 - With existing `proposal.skillId`, create a new draft version for the skill.
 - Write audit entries for reject/convert including optional review comment.
+- Pass proposal judgements to the converted skill-version judge as reuse
+  candidates. Only candidates with an identical canonical fingerprint, model,
+  prompt version, and reuse scope are reused; changed inputs are judged again.
+- Record conversion-time judgement or extraction failures by error category,
+  not raw provider or filesystem error text.
 - Allow an authenticated admin to delete an abandoned `in_upload` proposal
   regardless of its submitting actor, without weakening public submitter
   ownership checks.

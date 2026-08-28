@@ -44,11 +44,16 @@ export class JudgeSkillVersionUseCase {
         capabilities: target.capabilities, useWhen: target.useWhen, doNotUseWhen: target.doNotUseWhen,
         entrypoint: target.entrypoint, files: target.files,
       });
-      const reusable = findReusableJudgement(globalTarget, options.reuseJudgements ?? [], this.judgementReuseScope);
+      // Kept for programmatic legacy callers. Context becomes part of the
+      // canonical input, so it cannot accidentally reuse a different prompt.
+      const effectiveTarget = options.contextText?.trim()
+        ? { ...globalTarget, text: `${globalTarget.text}\n\n---\n${options.contextText.trim()}` }
+        : globalTarget;
+      const reusable = findReusableJudgement(effectiveTarget, options.reuseJudgements ?? [], this.judgementReuseScope, this.judger.modelIdentity ?? null);
       reusedGlobal = reusable !== null;
       judgement = reusable
-        ? cloneJudgementForTarget(reusable, 'skill', globalTarget.id)
-        : withJudgementInputFingerprint(await this.judger.judge(globalTarget), globalTarget, this.judgementReuseScope);
+        ? cloneJudgementForTarget(reusable, 'skill', effectiveTarget.id)
+        : withJudgementInputFingerprint(await this.judger.judge(effectiveTarget), effectiveTarget, this.judgementReuseScope, this.judger.modelIdentity ?? null);
     } catch (error) {
       await this.audit.append(AuditEntry.create({
         skillId,
@@ -107,7 +112,10 @@ export class JudgeSkillVersionUseCase {
     const storage = this.storage;
     const scanner = this.scanner;
     const files = await storage.listSkillFiles(skillId, version);
-    await Promise.all(files.map(async (file) => {
+    // Keep read/extract/scan bounded as well as provider calls. Provider calls
+    // are globally limited by BoundedSkillJudger; sequential local work avoids
+    // a large artifact upload creating an unbounded Buffer/scan fan-out.
+    for (const file of files) {
       const stored = await storage.readSkillFile(skillId, version, file.path);
       if (!stored) {
         return;
@@ -124,10 +132,10 @@ export class JudgeSkillVersionUseCase {
         const target = buildFileJudgementTarget({ targetId: `${skillId}:${version}:${file.path}`, path: file.path,
           text: truncateJudgementText(scanned.text), mimeType: stored.mimeType, sizeBytes: file.sizeBytes,
           sha256: file.sha256, extractedBy: scanned.extractedBy });
-        const reusable = findReusableJudgement(target, reuseJudgements, this.judgementReuseScope);
+        const reusable = findReusableJudgement(target, reuseJudgements, this.judgementReuseScope, this.judger.modelIdentity ?? null);
         const fileJudgement = reusable
           ? cloneJudgementForTarget(reusable, 'file', target.id)
-          : withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope);
+          : withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope, this.judger.modelIdentity ?? null);
         await this.catalog?.upsertSkillJudgement(skillId, version, fileJudgement);
         await this.audit.append(
           AuditEntry.create({
@@ -158,7 +166,7 @@ export class JudgeSkillVersionUseCase {
             skillVersion: version,
             action: 'judge_skill_file_failed',
             actor,
-            after: { file: file.path, error: (error as Error).message },
+            after: { file: file.path, errorCategory: judgementErrorCategory(error) },
           })
         );
         this.judgementEvents?.({
@@ -171,7 +179,7 @@ export class JudgeSkillVersionUseCase {
           errorCategory: judgementErrorCategory(error),
         });
       }
-    }));
+    }
   }
 
   private async resolveRepositoryTarget(skillId: string, version: string) {

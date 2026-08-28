@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, readFile, rm } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { FileSystemAuditLog } from './file-system.audit';
@@ -95,6 +95,22 @@ describe('FileSystemAuditLog', () => {
     expect(loaded.map((entry) => entry.id)).toEqual(['audit-skill', 'audit-global', 'audit-proposal']);
     expect(loaded.find((entry) => entry.id === 'audit-global')?.skillId).toBeNull();
     expect(loaded.find((entry) => entry.id === 'audit-global')?.proposalId).toBeNull();
+  });
+
+  it('persists only the safe error category, never a provider error sentinel', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-audit-'));
+    tempDirs.push(dataDir);
+    const audit = new FileSystemAuditLog(dataDir);
+    await audit.append(AuditEntry.create({
+      id: 'audit-safe-error', skillId: 'history-skill', skillVersion: '1.0.0',
+      action: 'judge_skill_file_failed', actor: 'system',
+      after: { file: 'unsafe.pdf', errorCategory: 'UnexpectedError' },
+    }));
+
+    const raw = await readFile(path.join(dataDir, 'audit', 'history-skill.jsonl'), 'utf8');
+    expect(raw).toContain('UnexpectedError');
+    expect(raw).not.toContain('SENTINEL_SECRET');
+    expect(raw).not.toContain('sensitive-provider-detail');
   });
 });
 

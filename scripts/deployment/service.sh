@@ -86,7 +86,7 @@ require_active_source() {
 }
 
 run_with_runtime_environment() {
-  exec env \
+  env \
     MANAGED_SKILL_HUB_RUNTIME_ROOT="$SOURCE_DIR" \
     MANAGED_SKILL_HUB_SECRETS_FILE="$SECRETS_FILE" \
     "$@"
@@ -98,6 +98,14 @@ case "$ACTION" in
     require_regular_file "$SECRETS_FILE"
     require_regular_file "$START_SCRIPT"
     run_with_runtime_environment bash "$START_SCRIPT" start
+    ;;
+  migrate)
+    require_active_source
+    require_regular_file "$SECRETS_FILE"
+    require_regular_file "$START_SCRIPT"
+    require_regular_file "$RUNTIME_SCRIPT"
+    run_with_runtime_environment bash "$RUNTIME_SCRIPT" stop
+    run_with_runtime_environment bash "$START_SCRIPT" migrate
     ;;
   stop|status)
     require_active_source
@@ -125,7 +133,7 @@ case "$ACTION" in
     printf 'logFile=%s\n' "$LOG_FILE"
     ;;
   *)
-    echo "Usage: bash ./service.sh {start|restart|stop|status|health|logs|config}" >&2
+    echo "Usage: bash ./service.sh {start|restart|migrate|stop|status|health|logs|config}" >&2
     exit 2
     ;;
 esac

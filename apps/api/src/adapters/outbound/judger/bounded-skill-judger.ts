@@ -3,12 +3,14 @@ import { Judgement } from '../../../domain/judgement/Judgement';
 
 /** A process-wide FIFO limiter shared by every operation of one judger instance. */
 export class BoundedSkillJudger implements SkillJudgerPort {
+  readonly modelIdentity: string | null;
   private active = 0;
   private readonly waiting: Array<() => void> = [];
   readonly classifyAutoPublishCategory?: (input: AutoPublishCategoryCheckInput) => Promise<AutoPublishCategoryCheckResult>;
   readonly assessDuplicateSimilarity?: (input: SemanticDuplicateInput) => Promise<SemanticDuplicateResult>;
 
   constructor(private readonly delegate: SkillJudgerPort, private readonly maxConcurrency: number) {
+    this.modelIdentity = delegate.modelIdentity ?? null;
     if (delegate.classifyAutoPublishCategory) this.classifyAutoPublishCategory = (input) => this.run(() => delegate.classifyAutoPublishCategory!(input));
     if (delegate.assessDuplicateSimilarity) this.assessDuplicateSimilarity = (input) => this.run(() => delegate.assessDuplicateSimilarity!(input));
   }
@@ -23,8 +25,11 @@ export class BoundedSkillJudger implements SkillJudgerPort {
   private async acquire(): Promise<void> {
     if (this.active < this.maxConcurrency) { this.active += 1; return; }
     await new Promise<void>((resolve) => this.waiting.push(resolve));
-    this.active += 1;
   }
 
-  private release(): void { this.active -= 1; this.waiting.shift()?.(); }
+  private release(): void {
+    const waiter = this.waiting.shift();
+    if (waiter) { waiter(); return; }
+    this.active -= 1;
+  }
 }

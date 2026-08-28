@@ -16,6 +16,10 @@ adapter construction and make a backup only for pending changes to an existing
 catalog. Proposal artifact views remain proposal-backed while metadata editing
 is enabled.
 
+Migration backups are created with owner-only archive permissions and exclude
+the backup directory itself. Judgement, extraction, and conversion audit paths
+store a stable error category rather than raw provider or filesystem messages.
+
 `managed-skill-hub` is a self-hosted, agent-facing skill registry. It exposes
 published skills through public read endpoints, provides a protected admin
 workbench for skill/proposal review, and stores managed content through configurable filesystem or database-backed adapters with relational metadata/search projections for read paths.

@@ -135,7 +135,7 @@ export class ReviewProposalUseCase {
             skillVersion: targetVersion,
             action: 'convert_proposal_skill_judgement_failed',
             actor,
-            after: { error: (error as Error).message },
+            after: { errorCategory: judgementErrorCategory(error) },
           })
         );
         this.judgementEvents?.({
@@ -186,7 +186,7 @@ export class ReviewProposalUseCase {
             skillVersion: version,
             action: 'extract_skill_file_failed',
             actor,
-            after: { path: file.path, error: (error as Error).message },
+            after: { path: file.path, errorCategory: judgementErrorCategory(error) },
           })
         );
       }

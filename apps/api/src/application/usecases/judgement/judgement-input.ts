@@ -60,20 +60,21 @@ export function buildFileJudgementTarget(input: {
   } };
 }
 
-export function withJudgementInputFingerprint(judgement: Judgement, target: JudgementTarget, reuseScope = 'default'): Judgement {
+export function withJudgementInputFingerprint(judgement: Judgement, target: JudgementTarget, reuseScope = 'default', reuseIdentity: string | null = judgement.model): Judgement {
   return Judgement.create({
     id: judgement.id, targetType: judgement.targetType, targetId: judgement.targetId,
     dimensions: judgement.dimensions, overallRisk: judgement.overallRisk, summary: judgement.summary,
     skillPurposeSummary: judgement.skillPurposeSummary, model: judgement.model,
-    inputFingerprint: computeJudgementInputFingerprint(target, judgement.model, reuseScope),
+    inputFingerprint: computeJudgementInputFingerprint(target, reuseIdentity, reuseScope),
     promptVersion: promptVersionFor(reuseScope), createdAt: judgement.createdAt,
   });
 }
 
-export function findReusableJudgement(target: JudgementTarget, judgements: Judgement[], reuseScope = 'default'): Judgement | null {
-  return judgements.find((judgement) => judgement.model !== null && judgement.model !== 'noop'
+export function findReusableJudgement(target: JudgementTarget, judgements: Judgement[], reuseScope = 'default', expectedModel: string | null | undefined = undefined): Judgement | null {
+  if (expectedModel === null) return null;
+  return judgements.find((judgement) => judgement.model !== 'noop' && (expectedModel !== undefined || judgement.model !== null)
     && judgement.promptVersion === promptVersionFor(reuseScope)
-    && judgement.inputFingerprint === computeJudgementInputFingerprint(target, judgement.model, reuseScope)) ?? null;
+    && judgement.inputFingerprint === computeJudgementInputFingerprint(target, expectedModel === undefined ? judgement.model : expectedModel, reuseScope)) ?? null;
 }
 
 export function cloneJudgementForTarget(source: Judgement, targetType: Judgement['targetType'], targetId: string): Judgement {

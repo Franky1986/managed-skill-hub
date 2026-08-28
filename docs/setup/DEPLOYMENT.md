@@ -1,5 +1,13 @@
 # Deployment
 
+## Catalog migration cutover
+
+For a release with pending catalog migrations, build the staged release first,
+then stop the recorded active release, activate the staged source, run
+`bash service.sh migrate`, and start it. Do not run a schema migration while
+the previous release may still write the catalog. The migration command creates
+one backup only when an existing catalog has pending migrations.
+
 > Warning: production deployment is not automated. This document describes the
 > manual process.
 
@@ -107,9 +115,11 @@ wrapper around these public artifacts.
    untracked/ignored runtime data and secrets. Commit the reviewed release state
    before creating the archive.
 
-3. Copy the archive to the server:
+3. Copy the archive and its checksum to the server:
    ```bash
-   scp .tmp/deploy/managed-skill-hub-deploy.tar.gz "${REMOTE_USER}@${REMOTE_HOST}:/path/to/deploy-root/"
+   scp .tmp/deploy/managed-skill-hub-deploy.tar.gz \
+     .tmp/deploy/managed-skill-hub-deploy.tar.gz.sha256 \
+     "${REMOTE_USER}@${REMOTE_HOST}:/path/to/deploy-root/"
    ```
 
 ## Server Setup: One-Time
@@ -119,16 +129,52 @@ ssh "${REMOTE_USER}@${REMOTE_HOST}"
 sudo mkdir -p /path/to/deploy-root
 sudo chown $(id -un):$(id -gn) /path/to/deploy-root
 mkdir -p /path/to/deploy-root/data/{skills,proposals,index,audit,backups,uploads}
+install -m 600 /dev/null /path/to/deploy-root/.env
+# Populate /path/to/deploy-root/.env and create .env.secrets from the archived
+# .env.example and .env.secrets.example before the first staged deployment.
 ```
 
-## Extract And Start
+## Staged Extract, Migration And Start
 
 ```bash
 ssh "${REMOTE_USER}@${REMOTE_HOST}"
 cd /path/to/deploy-root
-tar -xzf managed-skill-hub-deploy.tar.gz -C src
-bash src/scripts/deployment/install_and_start.sh
+shasum -a 256 -c managed-skill-hub-deploy.tar.gz.sha256
+mkdir -p .releases
+STAGE_DIR="$(mktemp -d .deploy-stage.XXXXXX)"
+mkdir -p "$STAGE_DIR/src"
+tar -xzf managed-skill-hub-deploy.tar.gz -C "$STAGE_DIR/src"
+cp .env "$STAGE_DIR/src/.env"
+DATA_DIR="/path/to/deploy-root/data" \
+  bash "$STAGE_DIR/src/scripts/deployment/install_and_start.sh" prepare
+
+# Build is proven before downtime. An upgrade quiesces the active release;
+# a first installation has no active source or service to stop.
+PREVIOUS_SRC=""
+if [ -d src ]; then
+  MANAGED_SKILL_HUB_DEPLOYMENT_ROOT="$PWD" \
+    bash "$STAGE_DIR/src/scripts/deployment/service.sh" stop
+  PREVIOUS_SRC=".releases/src-$(date +%Y%m%d-%H%M%S)"
+  mv src "$PREVIOUS_SRC"
+fi
+mv "$STAGE_DIR/src" src
+if ! DATA_DIR="/path/to/deploy-root/data" \
+  bash src/scripts/deployment/install_and_start.sh migrate; then
+  echo "Migration failed; leave the service stopped and restore the pre-migration backup before restarting $PREVIOUS_SRC."
+  exit 1
+fi
+if ! MANAGED_SKILL_HUB_DEPLOYMENT_ROOT="$PWD" \
+  bash src/scripts/deployment/service.sh start; then
+  echo "Start failed after activation; leave the service stopped. Restore the pre-migration backup before moving $PREVIOUS_SRC back to src and restarting it."
+  exit 1
+fi
+rm -f managed-skill-hub-deploy.tar.gz managed-skill-hub-deploy.tar.gz.sha256
 ```
+
+Do not automatically restart the old application after a failed migration:
+MySQL DDL may already have changed the schema. Restore the backup created for
+that migration first, move `"$PREVIOUS_SRC"` back to `src`, then start and
+health-check the previous release.
 
 `install_and_start.sh` runs on the server:
 
@@ -136,6 +182,7 @@ bash src/scripts/deployment/install_and_start.sh
 - accepts secrets from `.env.secrets` or the exported deployment environment
 - `npm ci --include=dev --legacy-peer-deps --no-audit --no-fund`
 - `npm run build:prod`
+- quiesces recorded application processes before backup and catalog migration
 - starts the compiled API and built frontend preview with production mode
   forced, regardless of development defaults in a copied base profile
 
@@ -163,6 +210,14 @@ bash src/scripts/deployment/install_and_start.sh start
 ```
 
 ## Restart/Stop
+
+## Schema Rollback
+
+Catalog migrations are forward-only. Do not deploy an older release against a
+newer catalog schema without restoring the pre-migration backup first. The
+rollback sequence is: stop services, restore the backup created before the
+pending migration, install the previous release, then start and health-check
+it. There is intentionally no automatic destructive down-migration.
 
 ```bash
 install -m 0700 /path/to/uploaded/service.sh /path/to/deploy-root/service.sh

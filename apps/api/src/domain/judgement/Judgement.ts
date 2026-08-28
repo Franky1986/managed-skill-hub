@@ -30,7 +30,14 @@ export class Judgement {
     readonly inputFingerprint: string | null,
     readonly promptVersion: string | null,
     readonly createdAt: Date
-  ) {}
+  ) {
+    // Reuse bookkeeping is persistence/application metadata, never part of
+    // the HTTP judgement contract when a domain object is serialized.
+    Object.defineProperties(this, {
+      inputFingerprint: { enumerable: false },
+      promptVersion: { enumerable: false },
+    });
+  }
 
   static create(props: {
     id?: string;

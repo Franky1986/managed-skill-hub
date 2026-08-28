@@ -70,18 +70,26 @@ export function sendMappedApiError(
 ) {
   const mapped = mapApiError(error, options);
   const logMethod = mapped.logLevel === 'warn' ? request.log.warn.bind(request.log) : request.log.error.bind(request.log);
+  // Provider errors may contain prompts, responses, or credentials. Keep
+  // Judger telemetry categorical and do not serialize their Error objects.
+  const safeJudgerError = isJudgerError(error);
   logMethod(
     {
       requestId: request.id,
       code: mapped.code,
       statusCode: mapped.statusCode,
       details: mapped.details,
-      error: error instanceof Error ? error : undefined,
+      error: error instanceof Error && !safeJudgerError ? error : undefined,
+      errorCategory: safeJudgerError ? mapped.code : undefined,
     },
     mapped.message
   );
 
   return sendApiError(reply, request, mapped);
+}
+
+function isJudgerError(error: unknown): error is JudgerUnavailableError | JudgerTimeoutError | JudgerProtocolError {
+  return error instanceof JudgerUnavailableError || error instanceof JudgerTimeoutError || error instanceof JudgerProtocolError;
 }
 
 export function registerApiErrorHandler(app: FastifyInstance): void {

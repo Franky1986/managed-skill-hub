@@ -1,3 +1,13 @@
+# 2026-08-27: Harden migration backup and judgement audit handling
+
+- Made filesystem backup archives owner-readable only and excluded the backup
+  directory from archive input to prevent recursive archive inclusion.
+- Replaced raw provider, scanner, and conversion error messages in judgement
+  audit records with stable error categories.
+- Added a negative test proving that a matching proposal judgement is reused
+  for conversion without a provider call, plus backup permission/self-inclusion
+  proof coverage.
+
 # 2026-08-27: Add public judgement reuse and catalog migrations
 
 - Added provider-neutral canonical judgement inputs, persisted fingerprints,

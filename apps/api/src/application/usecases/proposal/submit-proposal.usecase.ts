@@ -430,7 +430,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
         files: proposal.files.map((file) => ({ path: file.path, role: entrypoint === file.path ? 'entrypoint' : 'attachment',
           mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256 })),
       });
-      const proposalJudgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope);
+      const proposalJudgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope, this.judger.modelIdentity ?? null);
       updated = updated.addJudgement(proposalJudgement);
       await this.repo.saveProposal(updated);
       this.judgementEvents?.({
@@ -445,7 +445,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           proposalId: proposal.id,
           action: 'proposal_judgement_failed',
           ...auditActor(actor),
-          after: { error: (error as Error).message },
+          after: { errorCategory: judgementErrorCategory(error) },
         })
       );
       this.judgementEvents?.({
@@ -488,7 +488,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
             proposalId: proposal.id,
             action: 'extract_proposal_file_failed',
             ...auditActor(actor),
-            after: { file: file.path, error: (error as Error).message },
+            after: { file: file.path, errorCategory: judgementErrorCategory(error) },
           })
         );
       }
@@ -502,7 +502,10 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     actor: ReturnType<typeof normalizeProposalActor>,
     extractedByPath: Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>
   ): Promise<Proposal> {
-    const results = await Promise.all(proposal.files.map(async (file) => {
+    const results: Array<{ file: typeof proposal.files[number]; judgement: ReturnType<typeof withJudgementInputFingerprint> } | null> = [];
+    // Do not start all artifact reads and scans at once; the provider limiter
+    // alone cannot bound local Buffer allocation or extractor work.
+    for (const file of proposal.files) {
       try {
         const stored = await this.storage.readProposalFile(proposal.id, file.path);
         if (!stored) {
@@ -522,14 +525,14 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           targetId: `${proposal.id}:${file.path}`, path: file.path, text: truncateJudgementText(scanned.text),
           mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256, extractedBy: scanned.extractedBy,
         });
-        return { file, judgement: withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope) };
+        results.push({ file, judgement: withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope, this.judger.modelIdentity ?? null) });
       } catch (error) {
         await this.audit.append(
           AuditEntry.create({
             proposalId: proposal.id,
             action: 'file_judgement_failed',
             ...auditActor(actor),
-            after: { file: file.path, error: (error as Error).message },
+            after: { file: file.path, errorCategory: judgementErrorCategory(error) },
           })
         );
         this.judgementEvents?.({
@@ -540,9 +543,9 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           filePath: file.path,
           errorCategory: judgementErrorCategory(error),
         });
-        return null;
+        results.push(null);
       }
-    }));
+    }
 
     let updated = proposal;
     for (const result of results) {

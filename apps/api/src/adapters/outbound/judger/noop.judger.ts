@@ -12,6 +12,7 @@ import {
 } from '../../../domain/judgement/Judgement';
 
 export class NoopSkillJudger implements SkillJudgerPort {
+  readonly modelIdentity = 'noop';
   async judge(target: JudgementTarget): Promise<Judgement> {
     return Judgement.create({
       targetType: target.type,

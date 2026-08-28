@@ -24,4 +24,14 @@ describe('judgement input fingerprints', () => {
     expect(findReusableJudgement(input, [Judgement.create({ targetType: 'proposal', targetId: 'proposal-1', model: 'test-model',
       dimensions: { safety: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' } } })], 'test')).toBeNull();
   });
+
+  it('does not reuse a judgement when the configured model changed or is unknown', () => {
+    const input = target();
+    const source = withJudgementInputFingerprint(Judgement.create({ targetType: 'proposal', targetId: 'proposal-1', model: 'model-a',
+      dimensions: { safety: { risk: JudgementRisk.LOW, score: 0, reason: 'safe' } } }), input, 'test');
+
+    expect(findReusableJudgement(input, [source], 'test', 'model-a')).toBe(source);
+    expect(findReusableJudgement(input, [source], 'test', 'model-b')).toBeNull();
+    expect(findReusableJudgement(input, [source], 'test', null)).toBeNull();
+  });
 });

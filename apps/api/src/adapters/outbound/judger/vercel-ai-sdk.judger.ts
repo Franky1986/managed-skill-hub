@@ -49,10 +49,12 @@ type GenerateObjectCaller = (options: {
 }) => Promise<{ object: unknown }>;
 
 export class VercelAiSdkSkillJudger implements SkillJudgerPort {
+  readonly modelIdentity: string;
   private readonly model: LanguageModel;
   private readonly generateObject: GenerateObjectCaller;
 
   constructor(private readonly config: VercelAiSdkSkillJudgerConfig) {
+    this.modelIdentity = `vercel-ai-sdk:${config.model}`;
     try {
       this.model = resolveVercelAiModel(this.config.model);
     } catch (error) {
@@ -79,11 +81,9 @@ export class VercelAiSdkSkillJudger implements SkillJudgerPort {
         throw new JudgerTimeoutError(`Vercel AI SDK judger timed out after ${this.config.timeoutMs} ms`);
       }
       if (isProtocolError(error)) {
-        throw new JudgerProtocolError(`Vercel AI SDK output does not match the judgement schema: ${(error as Error).message}`);
+        throw new JudgerProtocolError('Vercel AI SDK output does not match the judgement schema');
       }
-      throw new JudgerUnavailableError(
-        `Vercel AI SDK judger request failed: ${(error as Error).message}`
-      );
+      throw new JudgerUnavailableError('Vercel AI SDK judger request failed');
     }
 
     const parsed = parseJudgementOutput(output, `Vercel AI SDK (${this.config.model})`);
@@ -108,13 +108,9 @@ export class VercelAiSdkSkillJudger implements SkillJudgerPort {
         throw new JudgerTimeoutError(`Vercel AI SDK auto-publish classifier timed out after ${this.config.timeoutMs} ms`);
       }
       if (isProtocolError(error)) {
-        throw new JudgerProtocolError(
-          `Vercel AI SDK auto-publish classifier output does not match the schema: ${(error as Error).message}`
-        );
+        throw new JudgerProtocolError('Vercel AI SDK auto-publish classifier output does not match the schema');
       }
-      throw new JudgerUnavailableError(
-        `Vercel AI SDK auto-publish classifier request failed: ${(error as Error).message}`
-      );
+      throw new JudgerUnavailableError('Vercel AI SDK auto-publish classifier request failed');
     }
 
     return parseAutoPublishCategoryOutput(output, `Vercel AI SDK (${this.config.model})`, `vercel-ai-sdk:${this.config.model}`);
@@ -138,13 +134,9 @@ export class VercelAiSdkSkillJudger implements SkillJudgerPort {
         throw new JudgerTimeoutError(`Vercel AI SDK duplicate similarity check timed out after ${this.config.timeoutMs} ms`);
       }
       if (isProtocolError(error)) {
-        throw new JudgerProtocolError(
-          `Vercel AI SDK duplicate similarity output does not match the schema: ${(error as Error).message}`
-        );
+        throw new JudgerProtocolError('Vercel AI SDK duplicate similarity output does not match the schema');
       }
-      throw new JudgerUnavailableError(
-        `Vercel AI SDK duplicate similarity request failed: ${(error as Error).message}`
-      );
+      throw new JudgerUnavailableError('Vercel AI SDK duplicate similarity request failed');
     }
 
     return parseDuplicateSimilarityOutput(output, `Vercel AI SDK (${this.config.model})`, `vercel-ai-sdk:${this.config.model}`);
