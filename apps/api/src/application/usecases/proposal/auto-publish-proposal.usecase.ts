@@ -14,6 +14,7 @@ import { ProposalDuplicateCheckUseCase } from './duplicate-check.usecase';
 import { isExtractableArtifact } from '../skill/public-metadata';
 import { isSystemManagedSkillCandidate } from '../skill/skill-hub-meta';
 import { JudgementRisk } from '../../../domain/judgement/Judgement';
+import { judgementErrorCategory } from '../judgement/judgement-runtime-event';
 
 export type AutoPublishBlockedReason =
   | 'incomplete_upload'
@@ -294,7 +295,7 @@ export class AutoPublishProposalUseCase {
             action: 'auto_publish_failed',
             actor: AUTO_PUBLISH_ACTOR,
             after: {
-              error: (error as Error).message,
+              errorCategory: judgementErrorCategory(error),
             },
           })
         );
@@ -310,7 +311,7 @@ export class AutoPublishProposalUseCase {
         eligible: false,
         blockedReason: 'classifier_failed',
         blockedByCategory: null,
-        classifierReason: (error as Error).message,
+        classifierReason: judgementErrorCategory(error),
         matchedExcludedCategory: null,
         autoPublished: false,
         publishedSkillId: null,

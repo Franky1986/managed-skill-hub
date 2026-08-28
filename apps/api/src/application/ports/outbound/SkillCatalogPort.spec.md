@@ -14,6 +14,8 @@ and files.
 - Read published versions and file metadata from the catalog projection.
 - Read proposal metadata, proposal files, proposal judgements, and review-pending
   proposal counts.
+- Persist judgement input fingerprints and prompt versions for both proposal and
+  skill-version judgements so compatible conversion judgements can be reused.
 - Trigger full projection rebuild from existing skills.
 
 ## Non-Scope

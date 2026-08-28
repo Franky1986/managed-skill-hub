@@ -17,6 +17,7 @@ import { JudgeSkillVersionUseCase } from '../judgement/judge-skill-version.useca
 import { buildSkillAggregateFromCatalog } from '../skill/catalog-skill-hydrator';
 import { buildProposalAggregateFromCatalog } from './catalog-proposal-hydrator';
 import { JudgementRuntimeEventSink, judgementErrorCategory } from '../judgement/judgement-runtime-event';
+import { resolveEffectiveEntrypoint } from '../judgement/judgement-input';
 
 interface ProposalMetadataUpdate {
   title?: string;
@@ -108,9 +109,7 @@ export class ReviewProposalUseCase {
     await this.repo.saveProposal(converted);
     if (this.judgeSkillVersion) {
       try {
-        const contextText = this.buildGlobalJudgementContext(proposal);
         await this.judgeSkillVersion.execute(skill.id.toString(), targetVersion, {
-          contextText,
           contextMetadata: {
             proposalId: proposal.id,
             proposalStatus: converted.status,
@@ -118,6 +117,7 @@ export class ReviewProposalUseCase {
             nextVersion: targetVersion,
           },
           actor,
+          reuseJudgements: proposal.judgements,
         });
         this.judgementEvents?.({
           event: 'judgement_execution',
@@ -135,7 +135,7 @@ export class ReviewProposalUseCase {
             skillVersion: targetVersion,
             action: 'convert_proposal_skill_judgement_failed',
             actor,
-            after: { error: (error as Error).message },
+            after: { errorCategory: judgementErrorCategory(error) },
           })
         );
         this.judgementEvents?.({
@@ -186,7 +186,7 @@ export class ReviewProposalUseCase {
             skillVersion: version,
             action: 'extract_skill_file_failed',
             actor,
-            after: { path: file.path, error: (error as Error).message },
+            after: { path: file.path, errorCategory: judgementErrorCategory(error) },
           })
         );
       }
@@ -243,7 +243,7 @@ export class ReviewProposalUseCase {
           category: proposal.category,
           tags: proposal.tags,
           capabilities: proposal.capabilities,
-          entrypoint: proposal.entrypoint ?? files[0]?.path ?? 'README.md',
+          entrypoint: resolveEffectiveEntrypoint(proposal.entrypoint, files),
           files,
         },
         actor
@@ -252,6 +252,7 @@ export class ReviewProposalUseCase {
 
     const existing = await this.loadSkill(proposal.skillId);
     if (!existing) {
+      const files = await this.loadProposalFiles(proposal);
       return this.createSkill.createSkill(
         {
           id: proposal.skillId,
@@ -260,8 +261,8 @@ export class ReviewProposalUseCase {
           category: proposal.category,
           tags: proposal.tags,
           capabilities: proposal.capabilities,
-          entrypoint: proposal.entrypoint ?? 'README.md',
-          files: await this.loadProposalFiles(proposal),
+          entrypoint: resolveEffectiveEntrypoint(proposal.entrypoint, files),
+          files,
         },
         actor
       );
@@ -318,6 +319,7 @@ export class ReviewProposalUseCase {
   }
 
   private async loadProposalFiles(proposal: Proposal): Promise<Array<{ path: string; content: Buffer; mimeType: string; role: FileRole }>> {
+    const entrypoint = resolveEffectiveEntrypoint(proposal.entrypoint, proposal.files);
     return Promise.all(
       proposal.files.map(async (file) => {
         const stored = await this.storage.readProposalFile(proposal.id, file.path);
@@ -328,7 +330,7 @@ export class ReviewProposalUseCase {
           path: file.path,
           content: stored.content,
           mimeType: stored.mimeType,
-          role: proposal.entrypoint === file.path ? FileRole.ENTRYPOINT : FileRole.ATTACHMENT,
+          role: entrypoint === file.path ? FileRole.ENTRYPOINT : FileRole.ATTACHMENT,
         };
       })
     );
@@ -372,7 +374,7 @@ export class ReviewProposalUseCase {
           category: proposal.category,
           tags: proposal.tags,
           capabilities: proposal.capabilities,
-          entrypoint: proposal.entrypoint ?? files[0]?.path ?? 'README.md',
+          entrypoint: resolveEffectiveEntrypoint(proposal.entrypoint, files),
           files: manifestFiles,
         }),
       })

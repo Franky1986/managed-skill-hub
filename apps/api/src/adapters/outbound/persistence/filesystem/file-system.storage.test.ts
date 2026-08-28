@@ -86,4 +86,18 @@ describe('FileSystemSkillStorage', () => {
     await expect(storage.readSkillFile('../skill-a', '1.0.0', 'README.md')).rejects.toBeInstanceOf(StorageError);
     await expect(storage.readSkillFile('skill-a', '../1.0.0', 'README.md')).rejects.toBeInstanceOf(StorageError);
   });
+
+  it('does not expose the repository-owned root skill.yaml as a skill artifact', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-storage-'));
+    tempDirs.push(dataDir);
+    const storage = new FileSystemSkillStorage(dataDir);
+    await storage.storeSkillFile('skill-a', '1.0.0', 'SKILL.md', Buffer.from('# Skill'), 'text/markdown');
+    await storage.storeSkillFile('skill-a', '1.0.0', 'docs/skill.yaml', Buffer.from('nested: authored'), 'text/yaml');
+    // This filename is repository metadata, written by the repository adapter in real operation.
+    await storage.storeSkillFile('skill-a', '1.0.0', 'skill.yaml', Buffer.from('repository: metadata'), 'text/yaml');
+
+    expect((await storage.listSkillFiles('skill-a', '1.0.0')).map((file) => file.path)).toEqual([
+      'SKILL.md', 'docs/skill.yaml',
+    ]);
+  });
 });

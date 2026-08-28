@@ -4,6 +4,7 @@ import { SkillDetail, SkillFile } from '../../api/skills';
 import {
     buildReferenceToCurrentDiff,
     hasSelectedFileSource,
+    isProposalArtifactView,
     mapProposalFilesToSkillFiles,
     selectAvailableComparisonVersions,
     selectCreatedProposalVersion,
@@ -202,6 +203,14 @@ describe('AdminSkillPage proposal context defaults', () => {
                 extractable: true,
             },
         ]);
+    });
+
+    it('keeps proposal artifacts selected when an administrator enables metadata editing', () => {
+        const proposal = { id: 'proposal-1', files: [], entrypoint: null } as ProposalDetail;
+        // Editing changes metadata controls, never the artifact source.
+        expect(isProposalArtifactView(true, proposal)).toBe(true);
+        expect(isProposalArtifactView(false, proposal)).toBe(false);
+        expect(isProposalArtifactView(true, null)).toBe(false);
     });
 
     it('excludes the selected version for normal skill-version comparisons', () => {

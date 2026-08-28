@@ -49,6 +49,8 @@ export interface SemanticDuplicateResult {
 }
 
 export interface SkillJudgerPort {
+  /** Stable identifier of the configured model. Unknown identities disable reuse. */
+  readonly modelIdentity?: string | null;
   judge(target: JudgementTarget): Promise<Judgement>;
   classifyAutoPublishCategory?(input: AutoPublishCategoryCheckInput): Promise<AutoPublishCategoryCheckResult>;
   assessDuplicateSimilarity?(input: SemanticDuplicateInput): Promise<SemanticDuplicateResult>;

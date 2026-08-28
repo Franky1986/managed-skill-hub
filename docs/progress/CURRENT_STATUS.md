@@ -6,6 +6,20 @@
 
 ## Project State
 
+Judgements now use canonical, fingerprinted global and per-file inputs. During
+proposal conversion, unchanged real judgements are reused without a second
+provider call; legacy records without fingerprints are judged once. The public
+runtime bounds provider calls through `JUDGER_MAX_CONCURRENCY` (default 4 per
+API process), and `JUDGER_POLICY_REVISION` invalidates reuse after policy or
+prompt changes. Public-native SQLite/MySQL catalog migrations run before
+adapter construction and make a backup only for pending changes to an existing
+catalog. Proposal artifact views remain proposal-backed while metadata editing
+is enabled.
+
+Migration backups are created with owner-only archive permissions and exclude
+the backup directory itself. Judgement, extraction, and conversion audit paths
+store a stable error category rather than raw provider or filesystem messages.
+
 `managed-skill-hub` is a self-hosted, agent-facing skill registry. It exposes
 published skills through public read endpoints, provides a protected admin
 workbench for skill/proposal review, and stores managed content through configurable filesystem or database-backed adapters with relational metadata/search projections for read paths.

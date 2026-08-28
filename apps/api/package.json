@@ -27,6 +27,7 @@
     "js-yaml": "4.3.1",
     "jsonwebtoken": "9.0.3",
     "jszip": "3.10.1",
+    "knex": "^3.3.0",
     "mysql2": "3.22.6",
     "openid-client": "6.8.4",
     "tsx": "4.23.1",

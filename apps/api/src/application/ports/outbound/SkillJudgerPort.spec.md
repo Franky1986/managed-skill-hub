@@ -35,6 +35,11 @@ LLM.
 - Inputs: object plus extracted texts/metadata
 - Outputs: `Judgement`
 - Duplicate output: score in `[0,1]`, high-level reason, optional model metadata
+- `modelIdentity` is an optional, stable identifier for the model/configuration
+  currently used by the adapter. An adapter must omit it when it cannot be
+  stated reliably; unknown identity deliberately disables judgement reuse.
+  Reuse is allowed only when the stored identity exactly matches the configured
+  identity in addition to the canonical input, prompt revision, and reuse scope.
 
 ## Dependencies
 
@@ -54,6 +59,7 @@ LLM.
 - Provider adapters share the same judgement prompt/output contract so risk
   and quality-fit dimensions and score normalization do not diverge.
 - Results are stored in proposal/skill.
+- A changed or unknown `modelIdentity` never reuses a prior judgement.
 - custom judger adapter can use alias, procedure, or version route depending on
   configuration.
 

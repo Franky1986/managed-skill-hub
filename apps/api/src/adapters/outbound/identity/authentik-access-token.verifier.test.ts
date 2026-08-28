@@ -8,6 +8,8 @@ import { AuthorizationPolicy } from '../../../application/security/authorization
 import { PrincipalProjectionService } from '../../../application/security/principal-projection.service';
 import { AppConfig } from '../../../infrastructure/config';
 import { SqliteIdentityPersistence } from './sqlite-identity.persistence';
+import Database from 'better-sqlite3';
+import { ensureSqliteCatalogSchema } from '../catalog/sqlite/sqlite.catalog-schema';
 import {
   AuthentikAccessTokenVerifier,
   OidcSecurityEvent,
@@ -49,7 +51,11 @@ describe('AuthentikAccessTokenVerifier', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-token-'));
-    persistence = new SqliteIdentityPersistence(path.join(directory, 'catalog.db'));
+    const databasePath = path.join(directory, 'catalog.db');
+    const database = new Database(databasePath);
+    ensureSqliteCatalogSchema(database);
+    database.close();
+    persistence = new SqliteIdentityPersistence(databasePath);
   });
 
   afterEach(async () => {

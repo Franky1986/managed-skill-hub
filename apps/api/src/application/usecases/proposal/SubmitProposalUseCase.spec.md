@@ -74,6 +74,10 @@ unprocessed proposals, including explicit upload finalization.
 - Delete only proposals in status `in_upload`; after finalization public
   deletion is blocked.
 - Write audit entries for submit, file attachment, delete, and judger errors.
+- Persist only categorized automatic-judgement, scan, and extraction failures;
+  raw error messages are not audit data.
+- Schedule automatic file judgements through the configured bounded concurrency
+  limiter (`JUDGER_MAX_CONCURRENCY`).
 
 ## Inputs / Outputs
 

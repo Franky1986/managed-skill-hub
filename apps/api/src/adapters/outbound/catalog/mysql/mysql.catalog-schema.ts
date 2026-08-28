@@ -1,6 +1,8 @@
 import { MysqlClient } from '../../mysql/mysql.connection';
 
-export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<void> {
+type MysqlSchemaExecutor = Pick<MysqlClient, 'query' | 'execute'>;
+
+export async function ensureMysqlCatalogSchema(client: MysqlSchemaExecutor, includeJudgementReuse = true): Promise<void> {
   const schemaSql = `
     CREATE TABLE IF NOT EXISTS skill_catalog_versions (
       skill_id VARCHAR(255) NOT NULL,
@@ -236,10 +238,14 @@ export async function ensureMysqlCatalogSchema(client: MysqlClient): Promise<voi
   await ensureMysqlColumn(client, 'agent_sessions', 'created_by_ip', 'VARCHAR(64) NULL AFTER last_used_at');
   await ensureMysqlColumn(client, 'agent_sessions', 'last_used_ip', 'VARCHAR(64) NULL AFTER created_by_ip');
   await ensureMysqlColumn(client, 'agent_sessions', 'user_agent', 'TEXT NULL AFTER last_used_ip');
+  if (includeJudgementReuse) {
+    await ensureMysqlColumn(client, 'skill_catalog_judgements', 'input_fingerprint', 'CHAR(64) NULL AFTER model');
+    await ensureMysqlColumn(client, 'skill_catalog_judgements', 'prompt_version', 'VARCHAR(255) NULL AFTER input_fingerprint');
+  }
 }
 
 async function ensureMysqlColumn(
-  client: MysqlClient,
+  client: MysqlSchemaExecutor,
   table: string,
   column: string,
   definition: string
@@ -255,7 +261,7 @@ async function ensureMysqlColumn(
 }
 
 async function ensureMysqlIndex(
-  client: MysqlClient,
+  client: MysqlSchemaExecutor,
   table: string,
   index: string,
   column: string,
@@ -274,7 +280,7 @@ async function ensureMysqlIndex(
 }
 
 async function ensureMysqlStringColumn(
-  client: MysqlClient,
+  client: MysqlSchemaExecutor,
   table: string,
   column: string,
   minimumLength: number,

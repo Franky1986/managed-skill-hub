@@ -8,6 +8,8 @@ import { IdentityProviderPort } from '../../../application/ports/outbound/identi
 import { AuthorizationPolicy } from '../../../application/security/authorization-policy';
 import { PrincipalProjectionService } from '../../../application/security/principal-projection.service';
 import { SqliteIdentityPersistence } from '../../outbound/identity/sqlite-identity.persistence';
+import Database from 'better-sqlite3';
+import { ensureSqliteCatalogSchema } from '../../outbound/catalog/sqlite/sqlite.catalog-schema';
 import { AppConfig } from '../../../infrastructure/config';
 import { registerAdminAuthRoutes } from './admin-auth.controller';
 import { registerApiErrorHandler } from './error-response';
@@ -46,7 +48,11 @@ describe('OIDC administrator routes', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-admin-oidc-'));
-    persistence = new SqliteIdentityPersistence(path.join(directory, 'catalog.db'));
+    const databasePath = path.join(directory, 'catalog.db');
+    const database = new Database(databasePath);
+    ensureSqliteCatalogSchema(database);
+    database.close();
+    persistence = new SqliteIdentityPersistence(databasePath);
   });
 
   afterEach(async () => {

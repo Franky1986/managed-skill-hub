@@ -309,6 +309,16 @@ async function main(): Promise<void> {
   assert(publicPublished.statusCode === 200, 'published converted skill must be public');
   results.push({ id: 'admin-publish-converted-skill', status: publishSkill.statusCode, passed: true });
 
+  const searchPublished = await app.inject({ method: 'GET', url: '/skills/search?q=lifecycle-proof-skill' });
+  assert(searchPublished.statusCode === 200, 'published skill search status');
+  assert(json(searchPublished.payload).items.some((item: { id: string }) => item.id === 'lifecycle-proof-skill'), 'published skill must be searchable');
+  results.push({ id: 'search-published-skill', status: searchPublished.statusCode, passed: true });
+
+  const packagePublished = await app.inject({ method: 'GET', url: '/skills/lifecycle-proof-skill/package' });
+  assert(packagePublished.statusCode === 200, 'published skill package retrieval status');
+  assert(String(packagePublished.headers['content-type']).includes('application/zip'), 'published package must be ZIP');
+  results.push({ id: 'retrieve-published-package', status: packagePublished.statusCode, passed: true });
+
   const rejectedProposal = await createFinalizedProposal(app, 'Lifecycle Reject Skill', 'lifecycle-agent');
   const reject = await app.inject({ method: 'POST', url: '/admin/proposals/' + rejectedProposal.proposalId + '/reject', headers: { cookie: adminCookie }, payload: { reason: 'Lifecycle proof rejection.' } });
   assert(reject.statusCode === 200, 'admin reject status');

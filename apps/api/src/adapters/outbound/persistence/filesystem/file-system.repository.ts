@@ -80,6 +80,8 @@ interface ProposalYaml {
     summary: string;
     skillPurposeSummary?: string | null;
     model: string | null;
+    inputFingerprint?: string | null;
+    promptVersion?: string | null;
     createdAt: string;
   }[];
 }
@@ -240,6 +242,8 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
         summary: judgement.summary,
         skillPurposeSummary: judgement.skillPurposeSummary,
         model: judgement.model,
+        inputFingerprint: judgement.inputFingerprint,
+        promptVersion: judgement.promptVersion,
         createdAt: judgement.createdAt.toISOString(),
       })),
     };
@@ -272,6 +276,8 @@ export class FileSystemSkillRepository implements SkillRepositoryPort {
             summary: judgement.summary,
             skillPurposeSummary: judgement.skillPurposeSummary ?? null,
             model: judgement.model,
+            inputFingerprint: judgement.inputFingerprint ?? null,
+            promptVersion: judgement.promptVersion ?? null,
             createdAt: new Date(judgement.createdAt),
           })
         ),

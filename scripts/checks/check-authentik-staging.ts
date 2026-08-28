@@ -1,9 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { AdminOidcIdentityProvider } from '../../apps/api/src/adapters/outbound/identity/admin-oidc.identity-provider';
 import { AuthentikAccessTokenVerifier } from '../../apps/api/src/adapters/outbound/identity/authentik-access-token.verifier';
 import { SqliteIdentityPersistence } from '../../apps/api/src/adapters/outbound/identity/sqlite-identity.persistence';
+import { ensureSqliteCatalogSchema } from '../../apps/api/src/adapters/outbound/catalog/sqlite/sqlite.catalog-schema';
 import { AuthorizationPolicy } from '../../apps/api/src/application/security/authorization-policy';
 import { PrincipalProjectionService } from '../../apps/api/src/application/security/principal-projection.service';
 import { loadConfig } from '../../apps/api/src/infrastructure/config';
@@ -75,7 +77,11 @@ async function run(): Promise<void> {
   await adminProvider.initialize();
 
   const directory = await mkdtemp(path.join(os.tmpdir(), 'managed-skill-hub-authentik-gate-'));
-  const persistence = new SqliteIdentityPersistence(path.join(directory, 'identity.db'));
+  const databasePath = path.join(directory, 'identity.db');
+  const database = new Database(databasePath);
+  ensureSqliteCatalogSchema(database);
+  database.close();
+  const persistence = new SqliteIdentityPersistence(databasePath);
   try {
     const policy = new AuthorizationPolicy(config);
     const verifier = new AuthentikAccessTokenVerifier(

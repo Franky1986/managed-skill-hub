@@ -47,7 +47,7 @@ prepare_release() {
   local data_dir
   data_dir="$(resolve_data_dir)"
 
-  log_step "1/3" "Checking runtime prerequisites and layered environment ..."
+  log_step "1/4" "Checking runtime prerequisites and layered environment ..."
   require_command node
   require_command npm
   require_minimum_major node 20
@@ -72,23 +72,33 @@ prepare_release() {
     "${data_dir}/audit" \
     "${data_dir}/backups" \
     "${data_dir}/uploads"
-  log_step "1/3" "Prerequisites, environment, and data directories are ready."
+  log_step "1/4" "Prerequisites, environment, and data directories are ready."
   echo ""
 
-  log_step "2/3" "Installing the locked dependency graph ..."
+  log_step "2/4" "Installing the locked dependency graph ..."
   (
     cd "$PROJECT_ROOT"
     npm ci --include=dev --legacy-peer-deps --no-audit --no-fund
   )
-  log_step "2/3" "Locked dependencies installed."
+  log_step "2/4" "Locked dependencies installed."
   echo ""
 
-  log_step "3/3" "Creating production build ..."
+  log_step "3/4" "Creating production build ..."
   (
     cd "$PROJECT_ROOT"
     npm run build:prod
   )
-  log_step "3/3" "Production build successful."
+  log_step "3/4" "Production build successful."
+
+}
+
+migrate_release() {
+  log_step "migration" "Planning, backing up when required, and applying catalog migrations ..."
+  (
+    cd "$PROJECT_ROOT"
+    node apps/api/dist/infrastructure/migrations/run-catalog-migrations.js
+  )
+  log_step "migration" "Catalog schema migrations verified."
 }
 
 start_release() {
@@ -101,6 +111,14 @@ start_release() {
     bash scripts/deployment/restart-server.sh
   )
   echo "[start] Stack is healthy."
+}
+
+quiesce_release() {
+  echo "[quiesce] Stopping recorded active processes before catalog migration ..."
+  (
+    cd "$PROJECT_ROOT"
+    bash scripts/deployment/restart-server.sh stop
+  )
 }
 
 case "$ACTION" in
@@ -118,6 +136,13 @@ case "$ACTION" in
     echo ""
     start_release
     ;;
+  migrate)
+    echo "============================================"
+    echo " managed-skill-hub Catalog Migration"
+    echo "============================================"
+    echo ""
+    migrate_release
+    ;;
   all)
     echo "============================================"
     echo " managed-skill-hub Install, Build, and Start"
@@ -125,10 +150,14 @@ case "$ACTION" in
     echo ""
     prepare_release
     echo ""
+    quiesce_release
+    echo ""
+    migrate_release
+    echo ""
     start_release
     ;;
   *)
-    echo "ERROR: unsupported action '${ACTION}'. Use prepare, start, or all." >&2
+    echo "ERROR: unsupported action '${ACTION}'. Use prepare, migrate, start, or all." >&2
     exit 1
     ;;
 esac

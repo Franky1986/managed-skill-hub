@@ -23,15 +23,18 @@ proposal state plus audit entry.
   SQLite metadata, proposal files, and projected judgements.
 - Call judger with proposal core data: `title`, `description`, `groups`,
   `capabilities`.
-- Include attached proposal file metadata and extracted text in the proposal
-  judgement context when storage/scanner dependencies are available, so the
-  proposal-level judgement can explain content-level fit issues.
+- Include attached proposal file metadata and content hashes in the canonical
+  proposal-level judgement context. Extracted artifact text is assessed by the
+  separate per-file judgement target, preserving a stable reusable global
+  input while retaining content-level findings.
 - Persist updated proposal with new judgement through repository.
 - Write audit entry for proposal judgement.
 - Re-run judgement for one stored proposal file, including extraction where
   needed, and persist an auditable failure when the provider call fails.
 - Emit structured runtime events without including proposal content or raw
   provider errors.
+- Fingerprint each canonical global or file input with the configured prompt
+  version and reuse scope before persistence.
 
 ## Inputs / Outputs
 
@@ -58,8 +61,9 @@ proposal state plus audit entry.
 - Proposal is stored as `judged` after a successful run.
 - Existing proposal files and already projected judgements remain preserved when
   loading through the catalog.
-- Proposal re-judgement can include attached file content and should surface
-  proposal-level quality-fit issues found in those files.
+- Proposal re-judgement uses canonical metadata and file descriptors; separate
+  file judgements assess attached artifact content and surface content-level
+  quality-fit issues.
 - With catalog projection available, the use case does not need repository
   rehydration for proposal basis.
 - The new judgement is referenced in audit.

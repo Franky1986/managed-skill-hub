@@ -10,6 +10,7 @@ import { SkillFileStoragePort } from '../../ports/outbound/file-storage.port';
 import { FileScannerPort } from '../../ports/outbound/file-scanner.port';
 import { isTextLikeArtifact } from '../skill/public-metadata';
 import { JudgementRuntimeEventSink, judgementErrorCategory } from './judgement-runtime-event';
+import { buildFileJudgementTarget, buildGlobalJudgementTarget, resolveEffectiveEntrypoint, truncateJudgementText, withJudgementInputFingerprint } from './judgement-input';
 
 const MAX_PROPOSAL_FILE_TEXT_CHARS = 8000;
 
@@ -21,7 +22,8 @@ export class JudgeProposalUseCase {
     private readonly catalog?: SkillCatalogPort,
     private readonly storage?: SkillFileStoragePort,
     private readonly scanner?: FileScannerPort,
-    private readonly judgementEvents?: JudgementRuntimeEventSink
+    private readonly judgementEvents?: JudgementRuntimeEventSink,
+    private readonly judgementReuseScope = 'default'
   ) {}
 
   async execute(proposalId: string) {
@@ -32,22 +34,16 @@ export class JudgeProposalUseCase {
 
     let judgement;
     try {
-      judgement = await this.judger.judge({
-        type: 'proposal',
-        id: proposal.id,
+      const entrypoint = resolveEffectiveEntrypoint(proposal.entrypoint, proposal.files);
+      const target = buildGlobalJudgementTarget({
+        targetType: 'proposal', targetId: proposal.id,
         title: proposal.title,
-        text: await this.buildProposalJudgementText(proposal),
-        metadata: {
-          groups: proposal.groups,
-          capabilities: proposal.capabilities,
-          files: proposal.files.map((file) => ({
-            path: file.path,
-            mimeType: file.mimeType,
-            sizeBytes: file.sizeBytes,
-            sha256: file.sha256,
-          })),
-        },
+        description: proposal.description, category: proposal.category, tags: proposal.tags,
+        capabilities: proposal.capabilities, entrypoint,
+        files: proposal.files.map((file) => ({ path: file.path, role: file.path === entrypoint ? 'entrypoint' : 'attachment',
+          mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256 })),
       });
+      judgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope, this.judger.modelIdentity ?? null);
     } catch (error) {
       await this.audit.append(AuditEntry.create({
         proposalId,
@@ -105,18 +101,11 @@ export class JudgeProposalUseCase {
       const scanned = isTextLikeArtifact(stored.mimeType, file.path)
         ? { text: stored.content.toString('utf-8'), extractedBy: 'native' }
         : await this.scanner.scan(stored.content, stored.mimeType, file.path);
-      const judgement = await this.judger.judge({
-        type: 'file',
-        id: `${proposal.id}:${file.path}`,
-        title: file.path,
-        text: truncate(scanned.text, MAX_PROPOSAL_FILE_TEXT_CHARS),
-        metadata: {
-          mimeType: stored.mimeType,
-          sizeBytes: file.sizeBytes,
-          sha256: file.sha256,
-          extractedBy: scanned.extractedBy,
-        },
+      const target = buildFileJudgementTarget({ targetId: `${proposal.id}:${file.path}`, path: file.path,
+        text: truncateJudgementText(scanned.text), mimeType: stored.mimeType, sizeBytes: file.sizeBytes,
+        sha256: file.sha256, extractedBy: scanned.extractedBy,
       });
+      const judgement = withJudgementInputFingerprint(await this.judger.judge(target), target, this.judgementReuseScope, this.judger.modelIdentity ?? null);
       const updated = proposal.addJudgement(judgement);
       await this.repo.saveProposal(updated);
       await this.audit.append(AuditEntry.create({
@@ -138,7 +127,7 @@ export class JudgeProposalUseCase {
         proposalId,
         action: 'file_judgement_failed',
         actor: 'system',
-        after: { file: file.path, error: (error as Error).message },
+        after: { file: file.path, errorCategory: judgementErrorCategory(error) },
       }));
       this.judgementEvents?.({
         event: 'judgement_execution',
@@ -210,7 +199,7 @@ export class JudgeProposalUseCase {
           `File: ${file.path}`,
           `MIME: ${stored.mimeType}`,
           `Size bytes: ${file.sizeBytes}`,
-          `[FILE CONTENT COULD NOT BE EXTRACTED: ${(error as Error).message}]`,
+          `[FILE CONTENT COULD NOT BE EXTRACTED: ${judgementErrorCategory(error)}]`,
         ].join('\n'));
       }
     }
