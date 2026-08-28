@@ -118,7 +118,7 @@ export class JudgeSkillVersionUseCase {
     for (const file of files) {
       const stored = await storage.readSkillFile(skillId, version, file.path);
       if (!stored) {
-        return;
+        continue;
       }
 
       try {

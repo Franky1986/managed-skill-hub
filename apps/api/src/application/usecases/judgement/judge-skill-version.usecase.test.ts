@@ -75,6 +75,22 @@ describe('JudgeSkillVersionUseCase', () => {
     expect(audit.entries.some((entry) => entry.action === 'judge_skill_file')).toBe(true);
   });
 
+  it('continues judging later files when a catalogued file is absent from storage', async () => {
+    const judger = new JudgerStub();
+    const audit = new AuditStub();
+    const useCase = new JudgeSkillVersionUseCase(
+      new RepoStub(), judger, audit, new CatalogStub(createCatalogVersion({ version: '1.0.1' })), new MissingFirstStorageStub(), new ScannerStub()
+    );
+
+    await useCase.execute('catalog-skill', '1.0.1', { actor: 'admin' });
+
+    expect(judger.targets.map((target) => target.id)).toEqual([
+      'catalog-skill:1.0.1',
+      'catalog-skill:1.0.1:present.md',
+    ]);
+    expect(audit.entries.filter((entry) => entry.action === 'judge_skill_file')).toHaveLength(1);
+  });
+
   it('judges python files as text-like artifacts even when their mime type is text/x-python', async () => {
     const catalogVersion = createCatalogVersion({ version: '1.0.1' });
     const repo = new RepoStub();
@@ -324,6 +340,20 @@ class StorageStub implements SkillFileStoragePort {
   async listProposalFiles(): Promise<StoredFile[]> { return []; }
   async storeProposalFileExtract(): Promise<StoredExtractedContent> { throw new Error('not implemented'); }
   async readProposalFileExtract(): Promise<StoredExtractedContent | null> { return null; }
+}
+
+class MissingFirstStorageStub extends StorageStub {
+  override async readSkillFile(_skillId: string, _version: string, path: string): Promise<{ content: Buffer; mimeType: string } | null> {
+    if (path === 'missing.md') return null;
+    return { content: Buffer.from('# present\ncontent'), mimeType: 'text/markdown' };
+  }
+
+  override async listSkillFiles(): Promise<StoredFile[]> {
+    return [
+      { path: 'missing.md', mimeType: 'text/markdown', sizeBytes: 0, sha256: 'missing', updatedAt: null },
+      { path: 'present.md', mimeType: 'text/markdown', sizeBytes: 17, sha256: 'present', updatedAt: null },
+    ];
+  }
 }
 
 class PythonStorageStub implements SkillFileStoragePort {
