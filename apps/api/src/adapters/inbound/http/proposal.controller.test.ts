@@ -581,6 +581,28 @@ describe('registerProposalRoutes', () => {
       'agent'
     );
   });
+
+  it('requeues an authenticated resumable finalization checkpoint', async () => {
+    const validateUpload = vi.fn().mockResolvedValue({ proposalId: 'prop-1', status: 'judged', valid: true, canFinalize: true, blockingFindingCount: 0, nextAction: 'finalize_upload', fileCount: 1, checkedTextFileCount: 0, findings: [] });
+    const start = vi.fn().mockResolvedValue({ id: 'operation-1' });
+    const container = {
+      config: { proposalAuthMode: 'none' },
+      proposalCommand: { validateUpload },
+      operations: { start },
+    } as unknown as Container;
+    const app = await buildApp(container);
+
+    const response = await app.inject({ method: 'POST', url: '/proposals/prop-1/finalize-upload' });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      status: 'judged',
+      uploadFinalized: true,
+      judgementStatus: 'completed',
+      autoPublishStatus: 'pending',
+    });
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ kind: 'finalize_proposal_upload', proposalId: 'prop-1' }));
+  });
 });
 
 function oidcPrincipal(principalId: string, clientId: string): AuthenticatedPrincipal {

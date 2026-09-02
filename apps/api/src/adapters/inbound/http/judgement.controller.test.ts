@@ -109,6 +109,19 @@ function buildContainer(): Container {
         }),
       ],
     },
+    proposalRead: {
+      getDetail: async (proposalId: string) => proposalId === 'proposal-1'
+        ? { id: 'proposal-1', files: [{ id: 'SKILL.md', path: 'SKILL.md' }] }
+        : null,
+    },
+    adminSkillRead: {
+      getSkillDetail: async (skillId: string) => skillId === 'skill-a'
+        ? { id: 'skill-a', versions: [{ version: '1.0.0' }] }
+        : null,
+    },
+    operations: {
+      start: async (input: { kind: string }) => ({ id: 'operation-1', kind: input.kind, state: 'queued', phase: 'queued', message: 'Queued', completed: 0, total: 0, proposalId: null, skillId: null, skillVersion: null, filePath: null, errorCode: null, createdAt: new Date(), startedAt: null, finishedAt: null, updatedAt: new Date(), payload: { secret: 'must-not-leak' }, requestedBy: 'private-worker', dedupeKey: 'private-key' }),
+    },
   } as unknown as Container;
 }
 
@@ -217,7 +230,7 @@ describe('registerJudgementRoutes', () => {
     });
   });
 
-  it('returns on-demand skill judgements for authenticated admins', async () => {
+  it('accepts an asynchronous skill judgement operation for authenticated admins', async () => {
     const appConfig = config();
     const app = await buildApp(appConfig);
 
@@ -229,13 +242,29 @@ describe('registerJudgementRoutes', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      id: 'judgement-skill',
-      targetType: 'skill',
-      targetId: 'skill-a:1.0.0',
-      summary: 'skill judgement',
+      id: 'operation-1',
+      kind: 'rejudge_skill_version',
+      state: 'queued',
     });
+    expect(response.json()).not.toHaveProperty('payload');
+    expect(response.json()).not.toHaveProperty('requestedBy');
+    expect(response.json()).not.toHaveProperty('dedupeKey');
+  });
+
+  it('returns a synchronous 404 before queuing a judgement for an unknown proposal', async () => {
+    const appConfig = config();
+    const app = await buildApp(appConfig);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/admin/proposals/missing/judge',
+      headers: { cookie: signAdminCookie(appConfig) },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('re-runs a stored proposal file judgement for authenticated admins', async () => {
@@ -248,11 +277,10 @@ describe('registerJudgementRoutes', () => {
       headers: { cookie: signAdminCookie(appConfig) },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      id: 'judgement-proposal-file',
-      targetType: 'file',
-      targetId: 'proposal-1:SKILL.md',
+      id: 'operation-1',
+      kind: 'rejudge_proposal_file',
     });
   });
 });

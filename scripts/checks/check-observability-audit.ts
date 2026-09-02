@@ -80,6 +80,15 @@ function json(payload: string): any {
   return JSON.parse(payload);
 }
 
+async function waitForFinalization(app: FastifyInstance, proposalId: string): Promise<void> {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const response = await app.inject({ method: 'GET', url: `/proposals/${proposalId}/status` });
+    if (json(response.payload).finalizeRequired === false) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error('proposal finalization did not complete');
+}
+
 function multipartPayload(pathValue: string, filename: string, contentType: string, content: string) {
   const boundary = '----msh-observability-audit-boundary';
   const payload = [
@@ -168,7 +177,8 @@ async function createFinalizedProposal(app: FastifyInstance, title: string, acto
     url: '/proposals/' + proposalId + '/finalize-upload',
     headers: { 'x-actor': actor },
   });
-  assert(finalized.statusCode === 200, title + ' finalize status');
+  assert(finalized.statusCode === 202, title + ' finalize status');
+  await waitForFinalization(app, proposalId);
   return { proposalId };
 }
 
@@ -216,7 +226,8 @@ async function main(): Promise<void> {
     url: '/proposals/' + proposalId + '/finalize-upload',
     headers: { 'x-actor': 'observability-agent' },
   });
-  assert(finalized.statusCode === 200, 'finalize status');
+  assert(finalized.statusCode === 202, 'finalize status');
+  await waitForFinalization(app, proposalId);
   results.push({ id: 'proposal-finalized', status: finalized.statusCode, passed: true });
 
   const login = await app.inject({ method: 'POST', url: '/admin/login', payload: { username: 'admin', password: 'admin' } });
@@ -258,7 +269,7 @@ async function main(): Promise<void> {
     url: '/admin/skills/' + convertedSkillId + '/publish?version=1.0.0',
     headers: { cookie: adminCookie },
   });
-  assert(publish.statusCode === 200, 'admin publish status');
+  assert(publish.statusCode === 202, 'admin publish status');
   results.push({ id: 'admin-publish-recorded', status: publish.statusCode, passed: true });
 
   const rejectedProposal = await createFinalizedProposal(app, 'Observability Reject Proof Skill', 'observability-reject-agent');

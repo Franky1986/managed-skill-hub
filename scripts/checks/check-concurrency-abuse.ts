@@ -238,7 +238,7 @@ async function checkHttpUploadBoundaries(): Promise<CheckResult[]> {
   assert(duplicateFiles[0]?.path === 'SKILL.md', 'same-path replacement must preserve relative path');
   assert(duplicateFiles[0]?.sizeBytes === 9, 'same-path replacement must expose replacement metadata');
   const finalizeDuplicate = await duplicateApp.app.inject({ method: 'POST', url: '/proposals/' + duplicateProposalId + '/finalize-upload' });
-  assert(finalizeDuplicate.statusCode === 200, 'proposal remains finalizable after same-path replacement');
+  assert(finalizeDuplicate.statusCode === 202, 'proposal finalization is accepted after same-path replacement');
   await duplicateApp.app.close();
 
   const limitDataDir = '.tmp/concurrency-abuse-limit-data';
@@ -259,7 +259,7 @@ async function checkHttpUploadBoundaries(): Promise<CheckResult[]> {
   await limitApp.app.close();
 
   return [
-    { id: 'same-path-file-upload-replaces-cleanly', detail: 'same path replaced with HTTP 200 and proposal remains finalizable', result: 'PASS' },
+    { id: 'same-path-file-upload-replaces-cleanly', detail: 'same path replaced with HTTP 200 and finalization is accepted asynchronously', result: 'PASS' },
     { id: 'http-file-count-limit-enforced', detail: 'HTTP 422 PROPOSAL_FILE_LIMIT_EXCEEDED', result: 'PASS' },
     { id: 'http-file-size-limit-enforced', detail: 'HTTP 413', result: 'PASS' },
   ];

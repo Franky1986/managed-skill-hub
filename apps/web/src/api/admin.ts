@@ -1,4 +1,4 @@
-import { apiClient, buildApiUrl } from './client';
+import { apiClient, buildApiUrl, UPLOAD_TIMEOUT_MS } from './client';
 import { ArtifactProbeResponse, ExtractedSkillFileContent, SkillDetail, SkillFile } from './skills';
 import { SkillSummary } from './skills';
 import type { ProposalDetail, ProposalSummary, ProposalUpdatePayload } from './proposals';
@@ -100,8 +100,30 @@ export interface ProposalNotice {
         in_upload: number;
         submitted: number;
         judged: number;
+        approved: number;
+        rejected: number;
         converted: number;
     };
+}
+
+export interface AsyncOperation {
+    id: string;
+    kind: 'finalize_proposal_upload' | 'rejudge_proposal' | 'rejudge_proposal_file' | 'rejudge_skill_version' | 'publish_skill_version';
+    state: 'queued' | 'running' | 'completed' | 'failed';
+    proposalId: string | null;
+    skillId: string | null;
+    skillVersion: string | null;
+    filePath: string | null;
+    phase: string;
+    message: string;
+    completed: number;
+    total: number;
+    currentTarget: string | null;
+    errorCode: string | null;
+    createdAt: string;
+    startedAt: string | null;
+    finishedAt: string | null;
+    updatedAt: string;
 }
 
 export const adminApi = {
@@ -112,8 +134,8 @@ export const adminApi = {
     login: (username: string, password: string) =>
         apiClient.post('/admin/login', { username, password }),
     logout: () => apiClient.post('/admin/logout', {}, { headers: { 'Content-Type': 'application/json' } }),
-    listSkills: () => apiClient.get<{ items: SkillSummary[]; total: number }>('/admin/skills'),
-    getSkill: (id: string) => apiClient.get<SkillDetail>(`/admin/skills/${id}`),
+    listSkills: (signal?: AbortSignal) => apiClient.get<{ items: SkillSummary[]; total: number }>('/admin/skills', { signal }),
+    getSkill: (id: string, signal?: AbortSignal) => apiClient.get<SkillDetail>(`/admin/skills/${id}`, { signal }),
     listSkillFiles: (id: string, version?: string) =>
         apiClient.get<{ items: SkillFile[] }>(`/admin/skills/${id}/files`, { params: { version } }),
     getSkillFileContent: (id: string, fileId: string, version?: string) =>
@@ -149,6 +171,7 @@ export const adminApi = {
         return apiClient.post<{ id: string; version: string }>(`/admin/skills/${id}/files`, form, {
             params: { version },
             headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: UPLOAD_TIMEOUT_MS,
         });
     },
     moveSkillFile: (id: string, version: string, fileId: string, path: string) =>
@@ -189,7 +212,7 @@ export const adminApi = {
     approve: (id: string, version: string) =>
         apiClient.post(`/admin/skills/${id}/approve`, {}, { params: { version }, headers: { 'Content-Type': 'application/json' } }),
     publish: (id: string, version: string, judgementOverrideReason?: string) =>
-        apiClient.post(
+        apiClient.post<AsyncOperation>(
             `/admin/skills/${id}/publish`,
             judgementOverrideReason ? { judgementOverrideReason } : {},
             { params: { version }, headers: { 'Content-Type': 'application/json' } }
@@ -204,7 +227,7 @@ export const adminApi = {
             headers: { 'Content-Type': 'application/json' },
         }),
     rejudgeSkillVersion: (id: string, version: string) =>
-        apiClient.post<JudgementRecord>(`/admin/skills/${id}/versions/${encodeURIComponent(version)}/re-judge`, {}, {
+        apiClient.post<AsyncOperation>(`/admin/skills/${id}/versions/${encodeURIComponent(version)}/re-judge`, {}, {
             headers: { 'Content-Type': 'application/json' },
         }),
     reindexSearch: () =>
@@ -219,13 +242,15 @@ export const adminApi = {
     listJudgements: (targetType: 'proposal' | 'skill' | 'file', targetId: string) =>
         apiClient.get<{ items: JudgementRecord[] }>(`/admin/judgements/${targetType}/${encodeURIComponent(targetId)}`),
     judgeProposal: (proposalId: string) =>
-        apiClient.post<JudgementRecord>(`/admin/proposals/${proposalId}/judge`, {}, { headers: { 'Content-Type': 'application/json' } }),
+        apiClient.post<AsyncOperation>(`/admin/proposals/${proposalId}/judge`, {}, { headers: { 'Content-Type': 'application/json' } }),
     judgeProposalFile: (proposalId: string, fileId: string) =>
-        apiClient.post<JudgementRecord>(
+        apiClient.post<AsyncOperation>(
             `/admin/proposals/${proposalId}/files/${encodeURIComponent(fileId)}/judge`,
             {},
             { headers: { 'Content-Type': 'application/json' } }
         ),
+    getOperation: (operationId: string, signal?: AbortSignal) =>
+        apiClient.get<AsyncOperation>(`/admin/operations/${encodeURIComponent(operationId)}`, { signal }),
     listProposals: (skillId?: string, status?: string, signal?: AbortSignal) =>
         apiClient.get<{ items: ProposalSummary[]; total: number }>('/admin/proposals', { params: { skillId, status }, signal }),
     proposalNotice: (signal?: AbortSignal) =>

@@ -8,6 +8,7 @@ import {
   InvalidStateError,
   JudgerProtocolError,
   JudgementRequiredError,
+  JudgementOverrideReasonRequiredError,
   JudgerTimeoutError,
   JudgerUnavailableError,
   NotFoundError,
@@ -130,6 +131,10 @@ function mapApiError(error: unknown, options: { admin?: boolean }): ApiErrorDefi
       details: { missingTargets: error.missingTargets },
       logLevel: 'warn',
     };
+  }
+
+  if (error instanceof JudgementOverrideReasonRequiredError) {
+    return { statusCode: 409, code: 'JUDGEMENT_OVERRIDE_REQUIRED', message: error.message, logLevel: 'warn' };
   }
 
   if (error instanceof ProposalFileLimitExceededError) {

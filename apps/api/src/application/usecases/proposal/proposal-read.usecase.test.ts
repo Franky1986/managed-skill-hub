@@ -77,7 +77,7 @@ describe('ProposalReadUseCase', () => {
     expect(summaries.items[0]?.latestJudgement?.summary).toBe('Safe proposal');
     expect(summaries.items[0]?.latestJudgement?.dimensions.qualityFit?.risk).toBe('low');
     expect(summaries.items[0]?.labels).toContain('safe');
-    expect(notice).toEqual({ hasNewProposals: true, totalPending: 1, counts: { in_upload: 0, submitted: 1, judged: 0, converted: 0 } });
+    expect(notice).toEqual({ hasNewProposals: true, totalPending: 1, counts: { in_upload: 0, submitted: 1, judged: 0, approved: 0, rejected: 0, converted: 0 } });
   });
 
   it('uses catalog review metadata for detail reads when available', async () => {
@@ -187,7 +187,7 @@ describe('ProposalReadUseCase', () => {
 
     expect(summaries).toEqual({ items: [], total: 0 });
     expect(detail?.title).toBe(proposal.title);
-    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 } });
+    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, approved: 0, rejected: 0, converted: 0 } });
     expect(detail?.review.labels).toContain('needs_review');
   });
 
@@ -209,7 +209,7 @@ describe('ProposalReadUseCase', () => {
 
     const notice = await useCase.getNotice();
 
-    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 1, submitted: 0, judged: 0, converted: 0 } });
+    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 1, submitted: 0, judged: 0, approved: 0, rejected: 0, converted: 0 } });
   });
 
   it('returns only currently valid admin next steps for each proposal status', async () => {
@@ -310,6 +310,24 @@ describe('ProposalReadUseCase', () => {
       skillVersion: '1.0.0',
       comment: 'accepted',
     });
+    expect(detail?.convertedVersion).toBe('1.0.0');
+  });
+
+  it('keeps finalization required until automatic judgement has been persisted', async () => {
+    const submitted = createProposal();
+    const judged = submitted.addJudgement(createLowRiskJudgement(submitted.id));
+
+    for (const [proposal, expected] of [[submitted, true], [judged, false]] as const) {
+      const repo = new ProposalRepo([proposal]);
+      const useCase = new ProposalReadUseCase(
+        repo,
+        new ProposalStorage(),
+        new ExtractProposalFileContentUseCase(repo, new ProposalStorage(), new Scanner()),
+        new FakeAudit()
+      );
+
+      expect((await useCase.getPublicStatus(proposal.id))?.finalizeRequired).toBe(expected);
+    }
   });
 
   it('includes rejection time in proposal summaries', async () => {
@@ -345,6 +363,36 @@ describe('ProposalReadUseCase', () => {
     });
   });
 
+  it('uses the audited conversion version in summaries instead of a live next-version preview', async () => {
+    const proposal = createProposal().approve().convert();
+    const audit = new FakeAudit();
+    audit.entries.push(
+      AuditEntry.create({
+        proposalId: proposal.id,
+        skillId: 'catalog-proposal',
+        skillVersion: '1.0.0',
+        action: 'convert_proposal',
+        actor: 'admin',
+        after: { status: 'converted', skillId: 'catalog-proposal', version: '1.0.0' },
+      })
+    );
+    const repo = new ProposalRepo([proposal]);
+    const storage = new ProposalStorage();
+    const useCase = new ProposalReadUseCase(
+      repo,
+      storage,
+      new ExtractProposalFileContentUseCase(repo, storage, new Scanner()),
+      audit
+    );
+
+    const summaries = await useCase.listSummaries();
+
+    expect(summaries.items[0]).toMatchObject({
+      status: 'converted',
+      convertedVersion: '1.0.0',
+    });
+  });
+
   it('treats empty catalog notice and summary reads as authoritative without repository fallback', async () => {
     const repo = new ThrowingProposalRepo();
     const storage = new ProposalStorage();
@@ -360,7 +408,7 @@ describe('ProposalReadUseCase', () => {
     const notice = await useCase.getNotice();
 
     expect(summaries).toEqual({ items: [], total: 0 });
-    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, converted: 0 } });
+    expect(notice).toEqual({ hasNewProposals: false, totalPending: 0, counts: { in_upload: 0, submitted: 0, judged: 0, approved: 0, rejected: 0, converted: 0 } });
   });
 
   it('reads proposal file content from storage', async () => {

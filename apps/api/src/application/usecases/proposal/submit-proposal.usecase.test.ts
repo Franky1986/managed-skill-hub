@@ -403,6 +403,62 @@ describe('SubmitProposalUseCase', () => {
     expect(judger.judge).toHaveBeenCalledTimes(2);
   });
 
+  it('resumes finalization from the durable submitted checkpoint after a worker interruption', async () => {
+    const repo = new InMemorySkillRepository();
+    const storage = new InMemoryStorage();
+    const audit = new InMemoryAuditLog();
+    const judger = {
+      judge: vi
+        .fn()
+        .mockResolvedValueOnce(createJudgement('proposal-judgement', 'proposal', 'proposal-id'))
+        .mockResolvedValueOnce(createJudgement('file-judgement', 'file', 'proposal-id:README.md')),
+    } satisfies SkillJudgerPort;
+    const useCase = new SubmitProposalUseCase(repo, storage, audit, judger, new StubScanner());
+    const proposal = await useCase.submitProposal({
+      title: 'Resumable finalization', description: 'The submitted checkpoint is retry-safe.', category: 'automation',
+    }, 'agent');
+    const uploaded = await useCase.attachFile(proposal.id, {
+      path: 'README.md', content: Buffer.from('# checkpoint'), mimeType: 'text/markdown',
+    }, 'agent');
+
+    // Simulate a process crash immediately after the status transition was persisted.
+    await repo.saveProposal(uploaded.finalizeUpload());
+
+    const finalized = await useCase.finalizeUpload(proposal.id, 'agent');
+
+    expect(finalized.proposal.status).toBe('judged');
+    expect(judger.judge).toHaveBeenCalledTimes(2);
+    expect(audit.entries.filter((entry) => entry.action === 'resume_proposal_finalization')).toHaveLength(1);
+  });
+
+  it('resumes after a persisted proposal judgement without reporting the already-applied work as failed', async () => {
+    const repo = new InMemorySkillRepository();
+    const judger = {
+      judge: vi.fn().mockResolvedValue(createJudgement('file-judgement', 'file', 'proposal-id:README.md')),
+    } satisfies SkillJudgerPort;
+    const useCase = new SubmitProposalUseCase(repo, new InMemoryStorage(), new InMemoryAuditLog(), judger, new StubScanner());
+    const proposal = await useCase.submitProposal({ title: 'Judged checkpoint', description: 'Resume safely.', category: 'automation' }, 'agent');
+    const uploaded = await useCase.attachFile(proposal.id, { path: 'README.md', content: Buffer.from('# checkpoint'), mimeType: 'text/markdown' }, 'agent');
+    await repo.saveProposal(uploaded.finalizeUpload().addJudgement(createJudgement('proposal-judgement', 'proposal', 'proposal-id')));
+
+    const finalized = await useCase.finalizeUpload(proposal.id, 'agent');
+
+    expect(finalized.proposal.status).toBe('judged');
+    expect(judger.judge).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not write an artifact after finalization has started', async () => {
+    const repo = new InMemorySkillRepository();
+    const storage = new InMemoryStorage();
+    const useCase = new SubmitProposalUseCase(repo, storage, new InMemoryAuditLog(), { judge: vi.fn() } satisfies SkillJudgerPort, new StubScanner());
+    const proposal = await useCase.submitProposal({ title: 'Immutable upload', description: 'No late files.', category: 'automation' }, 'agent');
+    const uploaded = await useCase.attachFile(proposal.id, { path: 'README.md', content: Buffer.from('# initial'), mimeType: 'text/markdown' }, 'agent');
+    await repo.saveProposal(uploaded.finalizeUpload());
+
+    await expect(useCase.attachFile(proposal.id, { path: 'late.md', content: Buffer.from('# late'), mimeType: 'text/markdown' }, 'agent')).rejects.toMatchObject({ name: 'ProposalUploadNotOpenError' });
+    expect(await storage.readProposalFile(proposal.id, 'late.md')).toBeNull();
+  });
+
   it('persists extracted content for extractable proposal files during finalize-upload and judges that extracted text', async () => {
     const repo = new InMemorySkillRepository();
     const storage = new InMemoryStorage();

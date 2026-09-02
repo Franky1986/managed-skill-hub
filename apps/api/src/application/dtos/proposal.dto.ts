@@ -37,6 +37,8 @@ export interface ProposalSummaryDto {
   latestJudgementRisk: JudgementOverallRisk | null;
   latestJudgement: JudgementDto | null;
   labels: ReviewLabel[];
+  /** Immutable version created by this conversion, when available. */
+  convertedVersion: string | null;
   conversion?: ProposalConversionPreviewDto;
 }
 
@@ -78,6 +80,8 @@ export interface ProposalDetailDto {
   judgement: JudgementExecutionStatus;
   rejectionReason: string | null;
   review: ProposalReviewDto;
+  /** Immutable version actually created by conversion; never use the live preview for history links. */
+  convertedVersion: string | null;
   conversion: ProposalConversionPreviewDto;
   lifecycle: ProposalLifecycleEventDto[];
   uploadFinalized: boolean;
@@ -147,8 +151,8 @@ export interface ProposalFinalizeUploadResponseDto {
   statusUrl: string;
   checkUrl: string;
   uploadFinalized: boolean;
-  judgementStatus: 'completed' | 'partial' | 'unavailable' | 'failed';
-  autoPublishStatus: 'disabled' | 'skipped' | 'published';
+  judgementStatus: 'pending' | 'completed' | 'partial' | 'unavailable' | 'failed';
+  autoPublishStatus: 'pending' | 'disabled' | 'skipped' | 'published';
   autoPublishBlockedReason: string | null;
 }
 

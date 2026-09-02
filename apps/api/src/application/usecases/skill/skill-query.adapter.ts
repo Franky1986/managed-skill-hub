@@ -46,7 +46,7 @@ export class SkillQueryAdapter implements SkillQueryPort {
   async discover(): Promise<DiscoveryResponse> {
     return {
       name: 'managed-skill-hub',
-      version: '0.1.0',
+      version: '0.2.0',
       readAuthRequired: false,
       entrypoints: ['/skills', '/skills/search', '/skills/suggest-name', '/categories', '/tags', '/proposals/notice'],
     };

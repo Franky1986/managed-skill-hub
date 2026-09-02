@@ -5,7 +5,7 @@ import { AgentApiAuth, getAgentAuthContext } from './agent-api-auth';
 import { resolveArtifactMimeType } from '../../../domain/files/artifact-mime';
 import { ProposalActor } from '../../../application/ports/inbound/proposal-command.port';
 import { ProposalArtifactDecision } from '../../../domain/proposal/Proposal';
-import { deriveFinalizeJudgementStatus } from '../../../application/usecases/judgement/judgement-execution-status';
+import { ProposalUploadValidationError } from '../../../domain/errors';
 
 export type ProposalRateLimiter = ReturnType<typeof createProposalRateLimiter>;
 
@@ -227,29 +227,32 @@ export function registerProposalRoutes(
     try {
       const { proposalId } = request.params as { proposalId: string };
       const actor = resolveProposalActor(request);
-      const result = await container.proposalCommand.finalizeUpload(proposalId, actor);
-      const proposal = result.proposal;
+      // Preserve immediate ownership, lifecycle, and package-validation feedback;
+      // only extraction and judgement move to the durable background operation.
+      const validation = await container.proposalCommand.validateUpload(proposalId, actor);
+      if (!validation.valid) {
+        throw new ProposalUploadValidationError(proposalId, validation.findings);
+      }
+      const operation = await container.operations.start({
+        kind: 'finalize_proposal_upload',
+        proposalId,
+        requestedBy: typeof actor === 'string' ? actor : actor.label,
+        payload: { actor },
+      });
       const rawUrl = request.url ?? request.raw.url ?? `/proposals/${proposalId}/finalize-upload`;
       const prefix = rawUrl.startsWith('/api/') ? '/api' : '';
-      const statusPath = `${prefix}/proposals/${proposal.id}/status`;
-      const autoPublishStatus = !result.autoPublish.enabled
-        ? 'disabled'
-        : result.autoPublish.autoPublished
-        ? 'published'
-        : 'skipped';
-      const judgementStatus = deriveFinalizeJudgementStatus(proposal);
-      return reply.send({
-        id: proposal.id,
-        status: proposal.status,
-        message: judgementStatus === 'completed'
-          ? 'Proposal upload finalized and all automatic judgements completed.'
-          : 'Proposal upload finalized, but one or more automatic judgements are unavailable or failed. Review the admin judgement status before publishing.',
+      const statusPath = `${prefix}/proposals/${proposalId}/status`;
+      return reply.code(202).send({
+        id: proposalId,
+        status: validation.status,
+        message: 'Proposal finalization was accepted and is processing asynchronously. Poll the proposal status until finalization completes.',
         statusUrl: statusPath,
         checkUrl: statusPath,
-        uploadFinalized: true,
-        judgementStatus,
-        autoPublishStatus,
-        autoPublishBlockedReason: result.autoPublish.blockedReason,
+        operationId: operation.id,
+        uploadFinalized: validation.status !== 'in_upload',
+        judgementStatus: ['judged', 'approved', 'rejected', 'converted'].includes(validation.status) ? 'completed' : 'pending',
+        autoPublishStatus: validation.status === 'converted' ? 'skipped' : 'pending',
+        autoPublishBlockedReason: null,
       });
     } catch (error) {
       return sendMappedApiError(reply, request, error);

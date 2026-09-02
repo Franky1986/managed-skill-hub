@@ -68,6 +68,13 @@ unprocessed proposals, including explicit upload finalization.
 - During `finalizeUpload`, persist extracted content for every extractable
   proposal artifact before running file judgements so extracted binary content
   such as `.pptx` is immediately available to the UI and the file judge.
+- `finalizeUpload` accepts the open-upload state and the persisted
+  `submitted`, `judged`, or `converted` checkpoints. Retrying after a worker interruption resumes
+  extraction and judgement without repeating the status transition, and writes
+  a `resume_proposal_finalization` audit entry for the recovery path.
+- Submitter polling must keep `finalizeRequired` true after the upload has
+  transitioned to `submitted`, until automatic judgement has persisted and the
+  proposal reaches a finalization-complete lifecycle state.
 - For mutating proposal operations, load the repository aggregate first because
   it is the source of truth. Catalog projection may only be used as a fallback
   when the repository has no aggregate.

@@ -66,7 +66,9 @@ logic.
   derived from persisted judgements and failure audit events. Absence of a
   result must not be presented as successful judgement.
 - Derive conversion preview with target skill, mode, and next version for admin
-  review flow.
+  review flow. For converted summaries, additionally expose the immutable
+  created version from the `convert_proposal` audit event; never relabel a
+  live preview as the version that was created.
 - Treat empty proposal notice/summary results from SQLite as valid truth.
 - Fall back to repository rehydration only where a concrete detail read has no
   usable SQLite projection.
@@ -114,6 +116,8 @@ logic.
   metadata where available.
 - `GET /admin/proposals` summaries expose the latest proposal-level judgement
   with dimensions, model, summary, risk, and timestamp when one exists.
+- Converted summaries expose the immutable version created at conversion when
+  the conversion audit event contains it.
 - Proposal detail can include persisted review metadata such as labels and
   latest judgement.
 - Proposal detail can include file metadata and proposal/file judgements from

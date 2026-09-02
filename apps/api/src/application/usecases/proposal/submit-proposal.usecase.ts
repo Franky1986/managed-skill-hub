@@ -3,6 +3,7 @@ import { Proposal, ProposalArtifactDecision } from '../../../domain/proposal/Pro
 import {
   FinalizeProposalUploadResult,
   ProposalCommandPort,
+  ProposalOperationProgress,
   ProposalMetadataUpdate,
   ProposalActor,
   ProposalUploadFinding,
@@ -250,14 +251,17 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
     return updated;
   }
 
-  async finalizeUpload(proposalId: string, actor: ProposalActor): Promise<FinalizeProposalUploadResult> {
+  async finalizeUpload(proposalId: string, actor: ProposalActor, progress?: ProposalOperationProgress): Promise<FinalizeProposalUploadResult> {
     const actorContext = normalizeProposalActor(actor);
     const proposal = await this.loadProposal(proposalId);
     if (!proposal) {
       throw new ValidationError(`Proposal ${proposalId} not found`);
     }
     this.assertProposalOwner(proposal, actorContext);
-    if (proposal.status !== 'in_upload') {
+    // A durable operation can resume after the state transition was persisted
+    // but before extraction/judgement completed. `submitted` is therefore a
+    // resumable checkpoint, not a terminal duplicate-finalization error.
+    if (!['in_upload', 'submitted', 'judged', 'converted'].includes(proposal.status)) {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
     if (proposal.files.length === 0) {
@@ -266,26 +270,60 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
         'Proposal upload cannot be finalized without at least one file.'
       );
     }
-    const validation = await this.validateUpload(proposalId, actor);
-    if (!validation.valid) {
-      throw new ProposalUploadValidationError(proposalId, validation.findings);
+    if (proposal.status === 'converted') {
+      // A process may crash after auto-publish converted the proposal but
+      // before the operation record was marked complete. This terminal
+      // checkpoint must complete recovery without repeating side effects.
+      return {
+        proposal,
+        autoPublish: {
+          enabled: false, eligible: null, blockedReason: null, blockedByCategory: null,
+          classifierReason: null, matchedExcludedCategory: null, autoPublished: true,
+          publishedSkillId: proposal.skillId, publishedVersion: null,
+        },
+      };
+    }
+    let updated = proposal;
+    if (proposal.status === 'in_upload') {
+      await progress?.report({ phase: 'validating', message: 'Validating uploaded package.', completed: 0, total: proposal.files.length });
+      const validation = await this.validateUpload(proposalId, actor);
+      if (!validation.valid) {
+        throw new ProposalUploadValidationError(proposalId, validation.findings);
+      }
+
+      await progress?.report({ phase: 'finalizing', message: 'Finalizing proposal upload.', completed: 0, total: proposal.files.length });
+      updated = proposal.finalizeUpload();
+      await this.repo.saveProposal(updated);
+      await this.audit.append(
+        AuditEntry.create({
+          proposalId,
+          action: 'finalize_proposal_upload',
+          ...auditActor(actorContext),
+          before: { status: proposal.status, fileCount: proposal.files.length },
+          after: { status: updated.status, fileCount: updated.files.length },
+        })
+      );
+    } else {
+      await this.audit.append(
+        AuditEntry.create({
+          proposalId,
+          action: 'resume_proposal_finalization',
+          ...auditActor(actorContext),
+          after: { status: proposal.status, fileCount: proposal.files.length },
+        })
+      );
     }
 
-    let updated = proposal.finalizeUpload();
-    await this.repo.saveProposal(updated);
-    await this.audit.append(
-      AuditEntry.create({
-        proposalId,
-        action: 'finalize_proposal_upload',
-        ...auditActor(actorContext),
-        before: { status: proposal.status, fileCount: proposal.files.length },
-        after: { status: updated.status, fileCount: updated.files.length },
-      })
-    );
-
-    const extractedByPath = await this.extractProposalArtifacts(updated, actorContext);
-    updated = await this.judgeProposalText(updated, actorContext);
-    updated = await this.judgeProposalFiles(updated, actorContext, extractedByPath);
+    const extractedByPath = await this.extractProposalArtifacts(updated, actorContext, progress);
+    await progress?.report({ phase: 'judging_proposal', message: 'Judging proposal metadata.', completed: 0, total: 1 });
+    if (!updated.judgements.some((judgement) => judgement.targetType === 'proposal')) {
+      updated = await this.judgeProposalText(updated, actorContext);
+    }
+    const judgedFiles = new Set(updated.judgements.filter((judgement) => judgement.targetType === 'file').map((judgement) => judgement.targetId));
+    if (updated.files.some((file) => !judgedFiles.has(`${updated.id}:${file.path}`))) {
+      updated = await this.judgeProposalFiles(updated, actorContext, extractedByPath, progress);
+    }
+    await progress?.report({ phase: 'auto_publishing', message: 'Checking automatic publication policy.', completed: 0, total: 1 });
     const autoPublish = this.autoPublish
       ? await this.autoPublish.execute(updated.id)
       : {
@@ -313,6 +351,19 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
       throw new ValidationError(`Proposal ${proposalId} not found`);
     }
     this.assertProposalOwner(proposal, actorContext);
+    if (['submitted', 'judged', 'converted'].includes(proposal.status)) {
+      return {
+        proposalId,
+        status: proposal.status,
+        valid: true,
+        canFinalize: true,
+        blockingFindingCount: 0,
+        nextAction: 'finalize_upload',
+        fileCount: proposal.files.length,
+        checkedTextFileCount: 0,
+        findings: [],
+      };
+    }
     if (proposal.status !== 'in_upload') {
       throw new ProposalUploadNotOpenError(proposalId, proposal.status);
     }
@@ -461,13 +512,17 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
 
   private async extractProposalArtifacts(
     proposal: Proposal,
-    actor: ReturnType<typeof normalizeProposalActor>
+    actor: ReturnType<typeof normalizeProposalActor>,
+    progress?: ProposalOperationProgress
   ): Promise<Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>> {
     const extractedByPath = new Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>();
 
+    let completed = 0;
     for (const file of proposal.files) {
+      await progress?.report({ phase: 'extracting', message: `Extracting ${file.path}.`, completed, total: proposal.files.length, currentTarget: file.path });
       const stored = await this.storage.readProposalFile(proposal.id, file.path);
       if (!stored || !isExtractableArtifact(stored.mimeType, file.path)) {
+        completed += 1;
         continue;
       }
 
@@ -492,6 +547,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
           })
         );
       }
+      completed += 1;
     }
 
     return extractedByPath;
@@ -500,12 +556,15 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
   private async judgeProposalFiles(
     proposal: Proposal,
     actor: ReturnType<typeof normalizeProposalActor>,
-    extractedByPath: Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>
+    extractedByPath: Map<string, { text: string; metadata: Record<string, unknown>; extractedBy: string }>,
+    progress?: ProposalOperationProgress
   ): Promise<Proposal> {
     const results: Array<{ file: typeof proposal.files[number]; judgement: ReturnType<typeof withJudgementInputFingerprint> } | null> = [];
     // Do not start all artifact reads and scans at once; the provider limiter
     // alone cannot bound local Buffer allocation or extractor work.
+    let completed = 0;
     for (const file of proposal.files) {
+      await progress?.report({ phase: 'judging_files', message: `Judging ${file.path}.`, completed, total: proposal.files.length, currentTarget: file.path });
       try {
         const stored = await this.storage.readProposalFile(proposal.id, file.path);
         if (!stored) {
@@ -545,6 +604,7 @@ export class SubmitProposalUseCase implements ProposalCommandPort {
         });
         results.push(null);
       }
+      completed += 1;
     }
 
     let updated = proposal;

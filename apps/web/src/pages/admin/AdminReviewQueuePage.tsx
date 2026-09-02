@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SkillSummary } from '../../api/skills';
 import { adminApi } from '../../api/admin';
 import { handleApiError } from '../../api/client';
 import { useLanguage } from '../../i18n';
+import { useBackgroundPolling } from '../../hooks/useBackgroundPolling';
 
 export function AdminReviewQueuePage() {
     const { language, t } = useLanguage();
@@ -12,29 +13,26 @@ export function AdminReviewQueuePage() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+    const refreshReviewQueue = useCallback(async (signal: AbortSignal) => {
         setLoading(true);
-        setError(null);
-        adminApi
-            .listSkills()
-            .then((res) => setSkills(res.data.items ?? []))
-            .catch((loadError) => setError(handleApiError(loadError, language)))
-            .finally(() => setLoading(false));
+        try {
+            const response = await adminApi.listSkills(signal);
+            setSkills(response.data.items ?? []);
+            setError(null);
+        } catch (loadError) {
+            if (!signal.aborted) setError(handleApiError(loadError, language));
+        } finally {
+            if (!signal.aborted) setLoading(false);
+        }
     }, [language]);
+    useBackgroundPolling(refreshReviewQueue);
 
     if (loading) {
         return <p>{t('adminReview.loading')}</p>;
     }
 
-    const items = skills.filter((skill) => {
-        if (filter === 'active') {
-            return ['in_review', 'approved'].includes(skill.status);
-        }
-        if (filter === 'all') {
-            return ['in_review', 'approved', 'rejected'].includes(skill.status);
-        }
-        return skill.status === filter;
-    });
+    const items = filterReviewSkills(skills, filter);
+    const counts = countReviewSkills(skills);
 
     return (
         <div className="space-y-4">
@@ -53,14 +51,11 @@ export function AdminReviewQueuePage() {
                                         : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
                                 }`}
                             >
-                                {t(`adminReview.filter.${item}`)}
+                                {t(`adminReview.filter.${item}`)}{counts[item] > 0 ? ` (${counts[item]})` : ''}
                             </button>
                         ))}
                     </div>
-                    <Link to="/admin/drafts" className="text-blue-600 hover:underline">
-                        {t('adminReview.drafts')}
-                    </Link>
-                    <Link to="/admin/proposals" className="text-blue-600 hover:underline">
+                    <Link to="/admin/proposals?filter=review" className="text-blue-600 hover:underline">
                         {t('adminReview.openProposals')}
                     </Link>
                 </div>
@@ -79,7 +74,7 @@ export function AdminReviewQueuePage() {
                                     </Link>
                                     <p className="mt-1 text-sm text-gray-600">{skill.description}</p>
                                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
-                                        <span>{t('adminDrafts.version')}: {skill.version}</span>
+                                        <span>{t('adminReview.version')}: {skill.version}</span>
                                         <span>{t('proposalDetail.category')}: {skill.category}</span>
                                         <span>{t('common.status')}: {skill.status}</span>
                                     </div>
@@ -101,4 +96,22 @@ export function AdminReviewQueuePage() {
             )}
         </div>
     );
+}
+
+export type ReviewFilter = 'active' | 'in_review' | 'approved' | 'rejected' | 'all';
+
+export function filterReviewSkills(skills: SkillSummary[], filter: ReviewFilter): SkillSummary[] {
+    if (filter === 'active') return skills.filter((skill) => ['draft', 'in_review', 'approved'].includes(skill.status));
+    if (filter === 'all') return skills.filter((skill) => ['draft', 'in_review', 'approved', 'rejected'].includes(skill.status));
+    return skills.filter((skill) => skill.status === filter);
+}
+
+export function countReviewSkills(skills: SkillSummary[]): Record<ReviewFilter, number> {
+    return {
+        active: filterReviewSkills(skills, 'active').length,
+        in_review: filterReviewSkills(skills, 'in_review').length,
+        approved: filterReviewSkills(skills, 'approved').length,
+        rejected: filterReviewSkills(skills, 'rejected').length,
+        all: filterReviewSkills(skills, 'all').length,
+    };
 }

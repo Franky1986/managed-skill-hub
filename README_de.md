@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img alt="Managed Skill Hub" src="https://img.shields.io/badge/Managed%20Skill%20Hub-0.1.0-6f42c1">
+  <img alt="Managed Skill Hub" src="https://img.shields.io/badge/Managed%20Skill%20Hub-0.2.0-6f42c1">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.7.3-3178C6?logo=typescript&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
@@ -63,13 +63,7 @@ Kein Entwickler? Du musst die API nicht direkt aufrufen – sag einfach deinem
 Coding-Agenten (z. B. Cursor, Claude, Codex) in normaler Sprache, was du
 willst.
 
-**Einen Skill herunterladen und nutzen** *(Diagramme auf Englisch)*
-
-![Download and use a skill](./docs/product/diagrams/user-en-skill-download.svg)
-
-**Einen Skill vorschlagen** *(Diagramme auf Englisch)*
-
-![Propose a skill](./docs/product/diagrams/user-en-skill-propose.svg)
+![Find, use and share a skill](./docs/product/diagrams/user-en-skill-hub-lifecycle.svg)
 
 Die vollständige technische Erklärung dieser Abläufe (API-Endpunkte,
 optionaler Judger, `skill-hub-meta.json`) steht in

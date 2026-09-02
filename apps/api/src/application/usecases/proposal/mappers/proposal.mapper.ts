@@ -51,6 +51,7 @@ export function mapProposalToSummary(
     latestJudgementRisk: review.latestJudgementRisk,
     latestJudgement: proposal.judgements[proposal.judgements.length - 1] ?? null,
     labels: review.labels,
+    convertedVersion: findConvertedVersion(lifecycle),
     conversion,
   };
 }
@@ -106,6 +107,7 @@ export function mapProposalToDetail(
     }),
     rejectionReason: proposal.rejectionReason,
     review,
+    convertedVersion: findConvertedVersion(lifecycle),
     conversion,
     lifecycle,
     uploadFinalized: augmentation.uploadFinalized,
@@ -144,12 +146,18 @@ export function mapCatalogProposalToSummary(
     latestJudgementRisk: proposal.latestJudgementRisk,
     latestJudgement: latestJudgement ? mapCatalogJudgementToDto(latestJudgement) : null,
     labels: proposal.labels,
+    convertedVersion: findConvertedVersion(lifecycle),
     conversion,
   };
 }
 
 function findLifecycleEvent(events: ProposalLifecycleEventDto[], action: string): ProposalLifecycleEventDto | null {
   return [...events].reverse().find((event) => event.action === action) ?? null;
+}
+
+/** A conversion preview is live; this value instead records the version actually created. */
+function findConvertedVersion(events: ProposalLifecycleEventDto[]): string | null {
+  return findLifecycleEvent(events, 'convert_proposal')?.skillVersion ?? null;
 }
 
 export function mapCatalogProposalToReview(proposal: CatalogProposalRecord): ProposalReviewMetadata {
@@ -214,6 +222,7 @@ export function mapCatalogProposalToDetail(
     }),
     rejectionReason: proposal.rejectionReason,
     review: mapCatalogProposalToReview(proposal),
+    convertedVersion: findConvertedVersion(lifecycle),
     conversion,
     lifecycle,
     uploadFinalized: augmentation.uploadFinalized,

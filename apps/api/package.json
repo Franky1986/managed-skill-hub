@@ -1,6 +1,6 @@
 {
   "name": "@managed-skill-hub/api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "TMPDIR=/tmp bash ../../scripts/lib/run-with-env.sh tsx watch src/server.ts",

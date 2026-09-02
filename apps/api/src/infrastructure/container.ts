@@ -74,6 +74,8 @@ import { SqliteIdentityPersistence } from '../adapters/outbound/identity/sqlite-
 import { MysqlIdentityPersistence } from '../adapters/outbound/identity/mysql-identity.persistence';
 import { AuthorizationPolicy } from '../application/security/authorization-policy';
 import { PrincipalProjectionService } from '../application/security/principal-projection.service';
+import { AsyncOperationService } from '../application/usecases/operation/async-operation.service';
+import { OperationCommandPort } from '../application/ports/inbound/operation-command.port';
 
 export interface Container {
   config: AppConfig;
@@ -88,7 +90,7 @@ export interface Container {
   principalProjection: PrincipalProjectionService;
   createSkill: SkillCommandPort;
   updateSkill: SkillCommandPort;
-  reviewSkill: SkillCommandPort;
+  reviewSkill: ReviewSkillUseCase;
   skillQuery: SkillQueryPort;
   proposalCommand: ProposalCommandPort;
   proposalRead: ProposalReadUseCase;
@@ -111,6 +113,7 @@ export interface Container {
   observability: ObservabilityPort;
   readObservability: ReadObservabilityUseCase;
   exportObservability: ExportObservabilityUseCase;
+  operations: OperationCommandPort;
   shutdown(): Promise<void>;
 }
 
@@ -217,6 +220,24 @@ export async function buildContainer(
     catalog,
     proposalDuplicateCheck
   );
+  const proposalCommand = new SubmitProposalUseCase(repo, storage, audit, judger, scanner, catalog, {
+    maxFiles: config.proposalMaxFiles,
+    maxFileSizeBytes: config.proposalMaxFileSizeBytes,
+    disallowedPathPrefixes: config.proposalDisallowedPaths,
+  }, autoPublishProposal, options.recordJudgementEvent, config.judgerReuseScope);
+  const judgeProposal = new JudgeProposalUseCase(
+    repo,
+    judger,
+    audit,
+    catalog,
+    storage,
+    scanner,
+    options.recordJudgementEvent,
+    config.judgerReuseScope
+  );
+  const operations = new AsyncOperationService(catalog, proposalCommand, judgeProposal, judgeSkillVersion, reviewSkill);
+  await operations.resume();
+  operations.startWorker();
 
   return {
     config,
@@ -233,11 +254,7 @@ export async function buildContainer(
     updateSkill: new UpdateSkillUseCase(repo, storage, audit, catalog),
     reviewSkill,
     skillQuery: query,
-    proposalCommand: new SubmitProposalUseCase(repo, storage, audit, judger, scanner, catalog, {
-      maxFiles: config.proposalMaxFiles,
-      maxFileSizeBytes: config.proposalMaxFileSizeBytes,
-      disallowedPathPrefixes: config.proposalDisallowedPaths,
-    }, autoPublishProposal, options.recordJudgementEvent, config.judgerReuseScope),
+    proposalCommand,
     proposalRead: new ProposalReadUseCase(
       repo,
       storage,
@@ -253,16 +270,7 @@ export async function buildContainer(
     proposalDuplicateCheck,
     reviewProposal,
     nameSuggestion: new SuggestSkillNameUseCase(repo),
-    judgeProposal: new JudgeProposalUseCase(
-      repo,
-      judger,
-      audit,
-      catalog,
-      storage,
-      scanner,
-      options.recordJudgementEvent,
-      config.judgerReuseScope
-    ),
+    judgeProposal,
     judgeFile: new JudgeFileUseCase(scanner, judger),
     judgeSkillVersion,
     listJudgements: new ListJudgementsUseCase(repo, audit, catalog),
@@ -278,7 +286,9 @@ export async function buildContainer(
     observability,
     readObservability: new ReadObservabilityUseCase(observability),
     exportObservability: new ExportObservabilityUseCase(observability),
+    operations,
     async shutdown(): Promise<void> {
+      operations.stopWorker();
       contentDb?.close();
       if (identityPersistence instanceof SqliteIdentityPersistence) {
         identityPersistence.close();

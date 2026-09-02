@@ -40,6 +40,7 @@ function container() {
     reviewSkill: {
       approve: vi.fn().mockResolvedValue(skill),
       publish: vi.fn().mockResolvedValue(skill),
+      assertCanPublish: vi.fn().mockResolvedValue(undefined),
     },
     reindexSkillSearch: {
       execute: vi.fn().mockResolvedValue({ indexed: 1 }),
@@ -55,6 +56,12 @@ function container() {
     proposalRead: {
       getDetail: vi.fn().mockResolvedValue({ id: 'proposal-1', status: 'rejected' }),
       getNotice: vi.fn().mockResolvedValue({ hasNewProposals: true, totalPending: 1, counts: { in_upload: 0, submitted: 1, judged: 0, converted: 0 } }),
+    },
+    adminSkillRead: {
+      getSkillDetail: vi.fn().mockResolvedValue({ versions: [{ version: '1.0.0' }] }),
+    },
+    operations: {
+      start: vi.fn().mockResolvedValue({ id: 'operation-1', state: 'queued', phase: 'queued', message: 'Queued', completed: 0, total: 0 }),
     },
   } as unknown as Container;
 }
@@ -97,19 +104,14 @@ describe('administrator role route wiring', () => {
     const approve = await app.inject({ method: 'POST', url: '/admin/skills/skill-1/approve?version=1.0.0' });
     const reindex = await app.inject({ method: 'POST', url: '/admin/search/reindex' });
 
-    expect(publish.statusCode).toBe(200);
+    expect(publish.statusCode).toBe(202);
     expect(convert.statusCode).toBe(200);
     expect(notice.statusCode).toBe(403);
     expect(approve.statusCode).toBe(403);
     expect(reindex.statusCode).toBe(403);
     expect(testContainer.reviewSkill.approve).not.toHaveBeenCalled();
     expect(testContainer.reindexSkillSearch.execute).not.toHaveBeenCalled();
-    expect(testContainer.reviewSkill.publish).toHaveBeenCalledWith(
-      'skill-1',
-      '1.0.0',
-      expect.any(String),
-      expect.objectContaining({ judgementOverrideAllowed: false })
-    );
+    expect(testContainer.operations.start).toHaveBeenCalledWith(expect.objectContaining({ kind: 'publish_skill_version', skillId: 'skill-1' }));
   });
 
   it('lets administrators satisfy specialized and admin-only routes', async () => {
@@ -120,16 +122,11 @@ describe('administrator role route wiring', () => {
       method: 'POST',
       url: '/admin/skills/skill-1/publish?version=1.0.0',
       payload: { judgementOverrideReason: 'Manual security review completed' },
-    })).statusCode).toBe(200);
+    })).statusCode).toBe(202);
     expect((await app.inject({ method: 'POST', url: '/admin/search/reindex' })).statusCode).toBe(200);
-    expect(testContainer.reviewSkill.publish).toHaveBeenCalledWith(
-      'skill-1',
-      '1.0.0',
-      expect.any(String),
-      expect.objectContaining({
-        judgementOverrideAllowed: true,
-        judgementOverrideReason: 'Manual security review completed',
-      })
-    );
+    expect(testContainer.operations.start).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'publish_skill_version',
+      payload: expect.objectContaining({ judgementOverrideAllowed: true, judgementOverrideReason: 'Manual security review completed' }),
+    }));
   });
 });

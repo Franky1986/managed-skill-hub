@@ -152,6 +152,11 @@ export class Skill {
     return { skill: this, entry };
   }
 
+  /** Validates a publication transition without changing this aggregate. */
+  assertVersionPublishable(version: string, actor: string, at: Date = new Date()): void {
+    this.getVersion(version).publish(actor, at);
+  }
+
   rejectVersion(version: string, actor: string, reason: string, at: Date = new Date()): { skill: Skill; entry: AuditEntry } {
     const v = this.getVersion(version);
     const previousStatus = v.status;

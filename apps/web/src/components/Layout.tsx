@@ -5,6 +5,7 @@ import { hasAdminRole, useAuthStore } from '../store/auth';
 import { useLanguage, type LanguageCode } from '../i18n';
 import { useBackgroundPolling } from '../hooks/useBackgroundPolling';
 import { agentSessionsApi } from '../api/agent-sessions';
+import type { SkillSummary } from '../api/skills';
 
 interface LayoutProps {
     children: ReactNode;
@@ -12,22 +13,32 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
     const [proposalNotice, setProposalNotice] = useState<ProposalNotice | null>(null);
+    const [versionedProposalNameCount, setVersionedProposalNameCount] = useState(0);
+    const [activeReviewCount, setActiveReviewCount] = useState(0);
     const [agentAuthAreas, setAgentAuthAreas] = useState<string[]>([]);
     const location = useLocation();
     const navigate = useNavigate();
     const { isAuthenticated, isLoading, checkSession, logout, roles } = useAuthStore();
     const canReview = hasAdminRole(roles, 'reviewer');
+    const canReadReviewQueue = canReview || hasAdminRole(roles, 'publisher');
     const { language, setLanguage, t } = useLanguage();
 
     const refreshProposalNotice = useCallback(async (signal: AbortSignal) => {
-        try {
-            const response = await adminApi.proposalNotice(signal);
-            setProposalNotice(response.data);
-        } catch {
-            if (!signal.aborted) {
-                setProposalNotice(null);
-            }
+        const [noticeResult, proposalsResult] = await Promise.allSettled([
+            adminApi.proposalNotice(signal),
+            adminApi.listProposals(undefined, undefined, signal),
+        ]);
+        if (noticeResult.status === 'fulfilled') {
+            setProposalNotice(noticeResult.value.data);
         }
+        if (proposalsResult.status === 'fulfilled') {
+            setVersionedProposalNameCount(new Set(
+                (proposalsResult.value.data.items ?? [])
+                    .filter((proposal) => proposal.status === 'converted')
+                    .map((proposal) => proposal.skillId ?? proposal.title.trim().toLowerCase())
+            ).size);
+        }
+        // Preserve each last successful value if its independent poll fails.
     }, []);
 
     useEffect(() => {
@@ -43,6 +54,17 @@ export function Layout({ children }: LayoutProps) {
     const shouldPollProposalNotice = !isLoading && isAuthenticated && canReview;
     useBackgroundPolling(refreshProposalNotice, shouldPollProposalNotice);
 
+    const refreshReviewCount = useCallback(async (signal: AbortSignal) => {
+        try {
+            const response = await adminApi.listSkills(signal);
+            setActiveReviewCount(countActiveReviewSkills(response.data.items ?? []));
+        } catch {
+            // Keep the last successful count visible during transient background failures.
+        }
+    }, []);
+    const shouldPollReviewCount = !isLoading && isAuthenticated && canReadReviewQueue;
+    useBackgroundPolling(refreshReviewCount, shouldPollReviewCount);
+
     useEffect(() => {
         if (shouldPollProposalNotice) {
             return;
@@ -50,6 +72,10 @@ export function Layout({ children }: LayoutProps) {
 
         setProposalNotice(null);
     }, [shouldPollProposalNotice]);
+
+    useEffect(() => {
+        if (!shouldPollReviewCount) setActiveReviewCount(0);
+    }, [shouldPollReviewCount]);
 
     const navLinkClass = (path: string) => {
         const active = location.pathname === path;
@@ -121,27 +147,21 @@ export function Layout({ children }: LayoutProps) {
                             (isAuthenticated ? (
                                 <>
                                     {canReview && <Link
-                                        to="/admin/proposals"
+                                        to="/admin/proposals?filter=review"
                                         title={proposalNotice ? t('app.nav.openProposalsBreakdown', proposalNotice.counts) : t('app.nav.openProposals', { count: 0 })}
                                         className="bg-surface text-on-surface border border-outline-variant px-3 py-2 rounded-lg font-body text-small font-semibold hover:opacity-90 transition-opacity active:scale-95 duration-150 whitespace-nowrap"
                                     >
                                         {t('app.nav.openProposalsBadge', {
-                                            open: (proposalNotice?.counts.submitted ?? 0) + (proposalNotice?.counts.judged ?? 0),
-                                            in_upload: proposalNotice?.counts.in_upload ?? 0,
-                                            converted: proposalNotice?.counts.converted ?? 0,
+                                            uploads: proposalNotice?.counts.in_upload ?? 0,
+                                            review: (proposalNotice?.counts.judged ?? 0) + (proposalNotice?.counts.approved ?? 0),
+                                            all: versionedProposalNameCount,
                                         })}
                                     </Link>}
-                                    <Link
-                                        to="/admin/drafts"
-                                        className="bg-surface text-on-surface border border-outline-variant px-3 py-2 rounded-lg font-body text-small font-semibold hover:opacity-90 transition-opacity active:scale-95 duration-150"
-                                    >
-                                        {t('app.nav.drafts')}
-                                    </Link>
                                     <Link
                                         to="/admin/review"
                                         className="bg-surface text-on-surface border border-outline-variant px-3 py-2 rounded-lg font-body text-small font-semibold hover:opacity-90 transition-opacity active:scale-95 duration-150"
                                     >
-                                        {t('app.nav.review')}
+                                        {t('app.nav.review')}{activeReviewCount > 0 ? ` (${activeReviewCount})` : ''}
                                     </Link>
                                     <button
                                         type="button"
@@ -188,4 +208,8 @@ export function Layout({ children }: LayoutProps) {
             </footer>
         </div>
     );
+}
+
+function countActiveReviewSkills(skills: SkillSummary[]): number {
+    return skills.filter((skill) => ['draft', 'in_review', 'approved'].includes(skill.status)).length;
 }

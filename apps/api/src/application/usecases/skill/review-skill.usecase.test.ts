@@ -165,6 +165,25 @@ describe('ReviewSkillUseCase', () => {
     expect(audit.entries[0]?.after).toMatchObject({ reason: 'Provider outage reviewed manually' });
     expect(repo.saved[0]?.getVersion('1.0.0').status).toBe(SkillStatus.PUBLISHED);
   });
+
+  it('validates publication without mutating or recording an override audit entry', async () => {
+    const skill = createWorkflowSkill();
+    const repo = new Repo(skill);
+    const audit = new Audit();
+    const useCase = new ReviewSkillUseCase(
+      repo, audit, new Storage(), new Scanner(), new Search(), new CatalogStub(createCatalogVersion({})), undefined, 'required'
+    );
+
+    await useCase.assertCanPublish('workflow-skill', '1.0.0', 'admin', {
+      judgementOverrideAllowed: true,
+      judgementOverrideReason: 'Manual security review completed',
+    });
+
+    expect(repo.saved).toHaveLength(0);
+    expect(audit.entries).toHaveLength(0);
+    expect(skill.getVersion('1.0.0').status).toBe(SkillStatus.APPROVED);
+    expect(skill.getLatestPublishedVersion()).toBeNull();
+  });
 });
 
 class Repo implements SkillRepositoryPort {

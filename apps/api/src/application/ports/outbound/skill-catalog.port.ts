@@ -9,6 +9,7 @@ import {
 } from '../../../domain/judgement/Judgement';
 import { AuditEntry } from '../../../domain/audit/AuditEntry';
 import { ReviewLabel } from '../../usecases/proposal/review-metadata';
+import { OperationStorePort } from './operation-store.port';
 
 export interface CatalogSkillRef {
   skillId: string;
@@ -122,7 +123,7 @@ export interface CatalogProposalFileRecord {
   sha256: string | null;
 }
 
-export interface SkillCatalogPort {
+export interface SkillCatalogPort extends OperationStorePort {
   upsertSkill(skill: Skill): Promise<void>;
   upsertProposal(proposal: Proposal): Promise<void>;
   findProposalByContentDigest(contentDigest: string, excludeId?: string): Promise<CatalogProposalRecord | null>;

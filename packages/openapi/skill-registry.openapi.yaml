@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: ManagedSkillHub API
   description: Self-hosted skill registry for AI agents.
-  version: 0.1.0
+  version: 0.2.0
 servers:
 - url: http://localhost:3040
   description: Local API server
@@ -1326,8 +1326,8 @@ paths:
           type: string
           format: uuid
       responses:
-        '200':
-          description: Upload finalized
+        '202':
+          description: Upload finalization accepted; extraction and judgement continue asynchronously
           content:
             application/json:
               schema:
@@ -1344,6 +1344,34 @@ paths:
           $ref: '#/components/responses/ConflictError'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /admin/operations/{operationId}:
+    get:
+      operationId: adminGetOperation
+      tags:
+      - Admin Operations
+      summary: Get durable asynchronous review-operation progress
+      security:
+      - adminSession: []
+      parameters:
+      - name: operationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Operation progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
   /admin/proposals/{proposalId}/judge:
     post:
       operationId: judgeProposal
@@ -1360,12 +1388,12 @@ paths:
           type: string
           format: uuid
       responses:
-        '200':
-          description: Judgement result
+        '202':
+          description: Judgement operation accepted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JudgementResponse'
+                $ref: '#/components/schemas/OperationResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
@@ -2061,12 +2089,12 @@ paths:
                   description: Audited administrator-only reason for overriding a
                     required judgement policy.
       responses:
-        '200':
-          description: Published
+        '202':
+          description: Publication operation accepted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SkillResponse'
+                $ref: '#/components/schemas/OperationResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '409':
@@ -2208,12 +2236,12 @@ paths:
         schema:
           type: string
       responses:
-        '200':
-          description: Judgement result
+        '202':
+          description: Judgement operation accepted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JudgementResponse'
+                $ref: '#/components/schemas/OperationResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
@@ -2646,12 +2674,12 @@ paths:
         schema:
           type: string
       responses:
-        '200':
-          description: Judgement result
+        '202':
+          description: Judgement operation accepted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JudgementResponse'
+                $ref: '#/components/schemas/OperationResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
@@ -4327,6 +4355,7 @@ components:
       - judgements
       - judgement
       - review
+      - convertedVersion
       - conversion
       - lifecycle
       - uploadFinalized
@@ -4396,6 +4425,10 @@ components:
           $ref: '#/components/schemas/JudgementExecutionStatus'
         review:
           $ref: '#/components/schemas/ProposalReview'
+        convertedVersion:
+          type: string
+          nullable: true
+          description: Immutable version created by conversion, derived from the conversion audit event.
         conversion:
           $ref: '#/components/schemas/ProposalConversionPreview'
         lifecycle:
@@ -4526,6 +4559,7 @@ components:
       - latestJudgementRisk
       - latestJudgement
       - labels
+      - convertedVersion
       properties:
         id:
           type: string
@@ -4573,6 +4607,10 @@ components:
           type: array
           items:
             type: string
+        convertedVersion:
+          type: string
+          nullable: true
+          description: Immutable version created by the conversion, derived from the conversion audit event.
         conversion:
           $ref: '#/components/schemas/ProposalConversionPreview'
     ProposalConversionPreview:
@@ -4942,6 +4980,7 @@ components:
       - message
       - statusUrl
       - checkUrl
+      - operationId
       - uploadFinalized
       - judgementStatus
       - autoPublishStatus
@@ -4952,6 +4991,7 @@ components:
         status:
           type: string
           enum:
+          - in_upload
           - submitted
           - judged
           - approved
@@ -4965,11 +5005,15 @@ components:
           type: string
         checkUrl:
           type: string
+        operationId:
+          type: string
+          format: uuid
         uploadFinalized:
           type: boolean
         judgementStatus:
           type: string
           enum:
+          - pending
           - completed
           - partial
           - unavailable
@@ -4977,6 +5021,7 @@ components:
         autoPublishStatus:
           type: string
           enum:
+          - pending
           - disabled
           - skipped
           - published
@@ -5056,7 +5101,7 @@ components:
             not called finalize-upload yet.
         finalizeRequired:
           type: boolean
-          description: True while the submitter still has to call finalize-upload.
+          description: True while asynchronous finalization, including automatic judgement, is still incomplete. It is not merely an upload-finalization flag.
         autoPublishEnabled:
           type: boolean
         autoPublishEligible:
@@ -5098,6 +5143,8 @@ components:
           - in_upload
           - submitted
           - judged
+          - approved
+          - rejected
           - converted
           properties:
             in_upload:
@@ -5107,6 +5154,12 @@ components:
               type: integer
               minimum: 0
             judged:
+              type: integer
+              minimum: 0
+            approved:
+              type: integer
+              minimum: 0
+            rejected:
               type: integer
               minimum: 0
             converted:
@@ -5243,6 +5296,79 @@ components:
           type: boolean
         judgement:
           $ref: '#/components/schemas/JudgementExecutionStatus'
+    OperationResponse:
+      type: object
+      required:
+      - id
+      - kind
+      - state
+      - phase
+      - message
+      - completed
+      - total
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - finalize_proposal_upload
+          - rejudge_proposal
+          - rejudge_proposal_file
+          - rejudge_skill_version
+          - publish_skill_version
+        state:
+          type: string
+          enum:
+          - queued
+          - running
+          - completed
+          - failed
+        proposalId:
+          type: string
+          nullable: true
+        skillId:
+          type: string
+          nullable: true
+        skillVersion:
+          type: string
+          nullable: true
+        filePath:
+          type: string
+          nullable: true
+        phase:
+          type: string
+        message:
+          type: string
+        completed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+        currentTarget:
+          type: string
+          nullable: true
+        errorCode:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
     JudgementExecutionStatus:
       type: object
       required:

@@ -37,6 +37,16 @@ export interface FinalizeProposalUploadResult {
   autoPublish: AutoPublishEvaluation;
 }
 
+export interface ProposalOperationProgress {
+  report(progress: {
+    phase: 'validating' | 'finalizing' | 'extracting' | 'judging_proposal' | 'judging_files' | 'auto_publishing';
+    message: string;
+    completed: number;
+    total: number;
+    currentTarget?: string | null;
+  }): Promise<void>;
+}
+
 export interface ValidateProposalUploadResult {
   proposalId: string;
   status: string;
@@ -79,7 +89,7 @@ export interface ProposalCommandPort {
   updateProposalMetadata(proposalId: string, update: ProposalMetadataUpdate, actor: ProposalActor): Promise<Proposal>;
   attachFile(proposalId: string, file: { path: string; content: Buffer; mimeType: string }, actor: ProposalActor): Promise<Proposal>;
   validateUpload(proposalId: string, actor: ProposalActor): Promise<ValidateProposalUploadResult>;
-  finalizeUpload(proposalId: string, actor: ProposalActor): Promise<FinalizeProposalUploadResult>;
+  finalizeUpload(proposalId: string, actor: ProposalActor, progress?: ProposalOperationProgress): Promise<FinalizeProposalUploadResult>;
   deleteProposal(proposalId: string, actor: ProposalActor): Promise<void>;
   rejectProposal?(proposalId: string, actor: string, reason?: string | null, comment?: string | null): Promise<Proposal>;
   convertProposal?(proposalId: string, actor: string, comment?: string | null): Promise<Skill>;

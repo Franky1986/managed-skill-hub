@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ArtifactProbeResponse, ExtractedSkillFileContent, SkillDetail, SkillFile, skillsApi } from '../api/skills';
 import { handleApiError } from '../api/client';
 import { SkillFileTree } from '../components/SkillFileTree';
@@ -159,6 +159,12 @@ export function SkillDetailPage() {
                     <p>{t('skillDetail.latestPublishedVersion')}: <code>{skill.latestPublishedVersion ?? '—'}</code></p>
                     <p>{t('common.entrypoint')}: <code>{skill.entrypoint}</code></p>
                 </div>
+                <Link
+                    to={`/admin/skills/${encodeURIComponent(skill.id)}${skill.latestPublishedVersion ? `?version=${encodeURIComponent(skill.latestPublishedVersion)}` : ''}`}
+                    className="inline-flex w-fit rounded border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-900 hover:bg-indigo-100"
+                >
+                    {t('skillDetail.openAdminWorkbench')}
+                </Link>
                 {skill.capabilities.length > 0 && (
                     <div>
                         <h2 className="text-sm font-medium text-gray-900">{t('skillDetail.capabilities')}</h2>

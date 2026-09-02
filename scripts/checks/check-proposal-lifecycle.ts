@@ -40,6 +40,25 @@ function config(dataDir: string): AppConfig {
   });
 }
 
+async function waitForFinalization(app: any, proposalId: string): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const response = await app.inject({ method: 'GET', url: `/proposals/${proposalId}/status` });
+    const body = json(response.payload) as Record<string, unknown>;
+    if (body.finalizeRequired === false) return body;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error('proposal finalization did not complete');
+}
+
+async function waitForPublishedSkill(app: any, skillId: string): Promise<void> {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const response = await app.inject({ method: 'GET', url: `/skills/${skillId}` });
+    if (response.statusCode === 200) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error('skill publication did not complete');
+}
+
 async function buildApp(dataDir: string) {
   const c = await buildContainer(config(dataDir));
   const app = Fastify({ logger: false });
@@ -116,7 +135,8 @@ async function createFinalizedProposal(app: any, title: string, actor: string, s
   });
   assert(uploaded.statusCode === 200, title + ' upload status');
   const finalized = await app.inject({ method: 'POST', url: '/proposals/' + proposalId + '/finalize-upload', headers: { 'x-actor': actor } });
-  assert(finalized.statusCode === 200, title + ' finalize status');
+  assert(finalized.statusCode === 202, title + ' finalize status');
+  await waitForFinalization(app, proposalId);
   return { proposalId };
 }
 
@@ -255,18 +275,15 @@ async function main(): Promise<void> {
   results.push({ id: 'status-before-finalize', status: openStatus.statusCode, passed: true });
 
   const finalized = await app.inject({ method: 'POST', url: '/proposals/' + proposalId + '/finalize-upload', headers: { 'x-actor': 'lifecycle-agent' } });
-  assert(finalized.statusCode === 200, 'finalize status');
+  assert(finalized.statusCode === 202, 'finalize status');
   const finalizedBody = json(finalized.payload);
-  assert(finalizedBody.uploadFinalized === true, 'finalize uploadFinalized');
-  assert(finalizedBody.autoPublishStatus === 'disabled', 'auto publish disabled');
+  assert(finalizedBody.operationId, 'finalize operation id');
   results.push({ id: 'finalize-upload', status: finalized.statusCode, passed: true, details: { proposalStatus: finalizedBody.status } });
 
-  const finalStatus = await app.inject({ method: 'GET', url: '/proposals/' + proposalId + '/status' });
-  assert(finalStatus.statusCode === 200, 'final public status response');
-  const finalStatusBody = json(finalStatus.payload);
+  const finalStatusBody = await waitForFinalization(app, proposalId);
   assert(finalStatusBody.finalizeRequired === false, 'final status finalizeRequired false');
   assert(finalStatusBody.latestJudgementRisk === 'no_judge_available', 'noop judgement public status');
-  results.push({ id: 'status-after-finalize', status: finalStatus.statusCode, passed: true, details: { latestJudgementRisk: finalStatusBody.latestJudgementRisk } });
+  results.push({ id: 'status-after-finalize', status: 200, passed: true, details: { latestJudgementRisk: finalStatusBody.latestJudgementRisk } });
 
   const login = await app.inject({
     method: 'POST',
@@ -304,7 +321,8 @@ async function main(): Promise<void> {
   const approveSkill = await app.inject({ method: 'POST', url: '/admin/skills/lifecycle-proof-skill/approve?version=1.0.0', headers: { cookie: adminCookie } });
   assert(approveSkill.statusCode === 200, 'converted skill approve status');
   const publishSkill = await app.inject({ method: 'POST', url: '/admin/skills/lifecycle-proof-skill/publish?version=1.0.0', headers: { cookie: adminCookie } });
-  assert(publishSkill.statusCode === 200, 'converted skill publish status');
+  assert(publishSkill.statusCode === 202, 'converted skill publish status');
+  await waitForPublishedSkill(app, 'lifecycle-proof-skill');
   const publicPublished = await app.inject({ method: 'GET', url: '/skills/lifecycle-proof-skill' });
   assert(publicPublished.statusCode === 200, 'published converted skill must be public');
   results.push({ id: 'admin-publish-converted-skill', status: publishSkill.statusCode, passed: true });

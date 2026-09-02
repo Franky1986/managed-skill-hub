@@ -10,6 +10,7 @@ search-index consequences.
 - `submitForReview(id, version, actor)`
 - `approve(id, version, actor)`
 - `publish(id, version, actor, options?)`
+- `assertCanPublish(id, version, actor, options?)`
 - `reject(id, version, actor, reason)`
 - `deprecate(id, version, actor)`
 
@@ -27,6 +28,9 @@ search-index consequences.
 - Persist updated skill aggregate through repository.
 - Write audit entry.
 - On `publish`, build search index with extractable file contents.
+- `assertCanPublish` applies the same domain and judgement guards without
+  changing persistence, audit history, or the search index. It supports HTTP
+  preflight before a durable publish operation is queued.
 - Before `publish`, apply `PUBLISH_JUDGEMENT_POLICY`: skip for `disabled`, audit
   and continue for `warn`, or require a real skill-version judgement plus a real
   judgement for every extractable file for `required`.

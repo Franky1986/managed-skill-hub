@@ -152,7 +152,7 @@ describe('SkillReadController /discover', () => {
     expect(response.statusCode).toBe(200);
     const payload = JSON.parse(response.payload);
     expect(payload.name).toBe('managed-skill-hub');
-    expect(payload.version).toBe('0.1.0');
+    expect(payload.version).toBe('0.2.0');
     expect(payload.description).toContain('skill registry');
     expect(payload.registryId).toBe('local');
     expect(payload.apiBaseUrl).toBe('http://localhost:3040');

@@ -1,4 +1,4 @@
-import { JudgementRequiredError, NotFoundError, ValidationError } from '../../../domain/errors';
+import { JudgementOverrideReasonRequiredError, JudgementRequiredError, NotFoundError } from '../../../domain/errors';
 import { Skill } from '../../../domain/skill/Skill';
 import { PublishSkillOptions, SkillCommandPort } from '../../ports/inbound/skill-command.port';
 import { FileScannerPort } from '../../ports/outbound/file-scanner.port';
@@ -68,11 +68,23 @@ export class ReviewSkillUseCase implements SkillCommandPort {
     return updated;
   }
 
+  /**
+   * Performs the publication guards without mutating the skill, search index,
+   * or audit trail. HTTP handlers use this before queuing background work so
+   * callers receive deterministic validation errors synchronously.
+   */
+  async assertCanPublish(id: string, version: string, actor: string, options: PublishSkillOptions = {}): Promise<void> {
+    const skill = await this.loadSkill(id);
+    skill.assertVersionPublishable(version, actor);
+    await this.enforcePublishJudgementPolicy(id, version, actor, options, false);
+  }
+
   private async enforcePublishJudgementPolicy(
     skillId: string,
     version: string,
     actor: string,
-    options: PublishSkillOptions
+    options: PublishSkillOptions,
+    recordAudit = true
   ): Promise<void> {
     if (this.publishJudgementPolicy === 'disabled') {
       return;
@@ -84,6 +96,7 @@ export class ReviewSkillUseCase implements SkillCommandPort {
     }
 
     if (this.publishJudgementPolicy === 'warn') {
+      if (!recordAudit) return;
       await this.audit.append(AuditEntry.create({
         skillId,
         skillVersion: version,
@@ -99,8 +112,9 @@ export class ReviewSkillUseCase implements SkillCommandPort {
       throw new JudgementRequiredError(missingTargets);
     }
     if (!overrideReason) {
-      throw new ValidationError('A judgement override reason is required.');
+      throw new JudgementOverrideReasonRequiredError();
     }
+    if (!recordAudit) return;
     await this.audit.append(AuditEntry.create({
       skillId,
       skillVersion: version,

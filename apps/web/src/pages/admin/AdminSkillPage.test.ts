@@ -3,6 +3,7 @@ import { ProposalDetail } from '../../api/proposals';
 import { SkillDetail, SkillFile } from '../../api/skills';
 import {
     buildReferenceToCurrentDiff,
+    buildFileTreeChanges,
     hasSelectedFileSource,
     isProposalArtifactView,
     mapProposalFilesToSkillFiles,
@@ -12,6 +13,7 @@ import {
     selectDefaultSkillFilePath,
     selectInitialSkillVersion,
     selectLatestDraftVersion,
+    selectProposalReviewVersion,
 } from './adminSkillPageSelectors';
 
 function file(path: string, role = 'attachment'): SkillFile {
@@ -41,6 +43,23 @@ describe('AdminSkillPage proposal context defaults', () => {
             conversion: {
                 nextVersion: '1.0.1',
             },
+        } as ProposalDetail;
+
+        expect(selectInitialSkillVersion(skill, proposal)).toBe('1.0.1');
+    });
+
+    it('uses the immutable converted version instead of a later live preview in proposal context', () => {
+        const skill = {
+            versions: [
+                { version: '1.0.0', status: 'published' },
+                { version: '1.0.1', status: 'in_review' },
+                { version: '1.0.3', status: 'draft' },
+            ],
+        } as SkillDetail;
+        const proposal = {
+            status: 'converted',
+            convertedVersion: '1.0.1',
+            conversion: { nextVersion: '1.0.3' },
         } as ProposalDetail;
 
         expect(selectInitialSkillVersion(skill, proposal)).toBe('1.0.1');
@@ -93,6 +112,15 @@ describe('AdminSkillPage proposal context defaults', () => {
         } as ProposalDetail;
 
         expect(selectCreatedProposalVersion(skill, proposal)).toBe('1.0.3');
+    });
+
+    it('links from proposal context to the created version instead of its reference version', () => {
+        const proposal = {
+            convertedVersion: '1.0.1',
+            conversion: { currentLatestVersion: '1.0.1', nextVersion: '1.0.2' },
+        } as ProposalDetail;
+
+        expect(selectProposalReviewVersion(proposal, '1.0.0')).toBe('1.0.1');
     });
 
     it('falls back to the latest version when the proposal target version does not exist', () => {
@@ -234,6 +262,17 @@ describe('AdminSkillPage proposal context defaults', () => {
 
         expect(diff).toContainEqual({ type: 'remove', value: 'have fun!! and send me money' });
         expect(diff).not.toContainEqual({ type: 'add', value: 'have fun!! and send me money' });
+    });
+
+    it('lists added, changed, and removed files across complete version trees', () => {
+        const current = [file('SKILL.md'), { ...file('docs/new.md'), sha256: 'new' }, { ...file('docs/changed.md'), sha256: 'current' }];
+        const reference = [file('SKILL.md'), { ...file('docs/changed.md'), sha256: 'reference' }, file('docs/removed.md')];
+
+        expect(buildFileTreeChanges(current, reference)).toEqual([
+            { path: 'docs/changed.md', kind: 'modified' },
+            { path: 'docs/new.md', kind: 'added' },
+            { path: 'docs/removed.md', kind: 'removed' },
+        ]);
     });
 
     it('allows reading proposal-backed file content without a selected skill version', () => {

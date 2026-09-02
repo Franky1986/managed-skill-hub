@@ -2,8 +2,9 @@ import { FastifyInstance } from 'fastify';
 import { Container } from '../../../infrastructure/container';
 import { AdminAuth, adminActor, adminGuard, getAdminAuthContext } from './admin-auth';
 import { sendApiError, sendMappedApiError } from './error-response';
-import { ValidationError } from '../../../domain/errors';
+import { NotFoundError, ValidationError } from '../../../domain/errors';
 import { sendArtifactResponse } from './artifact-response';
+import { operationResponse } from './operation-response';
 
 export function registerAdminSkillRoutes(app: FastifyInstance, container: Container, auth: AdminAuth): void {
   const guard = { preHandler: adminGuard(auth) };
@@ -157,8 +158,12 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
   app.post('/admin/skills/:skillId/versions/:version/re-judge', guard, async (request, reply) => {
     try {
       const { skillId, version } = request.params as { skillId: string; version: string };
-      const judgement = await container.judgeSkillVersion.execute(skillId, version);
-      return reply.send(judgement);
+      const skill = await container.adminSkillRead.getSkillDetail(skillId);
+      if (!skill.versions.some((candidate) => candidate.version === version)) throw new NotFoundError(`Skill version ${version} not found`);
+      const operation = await container.operations.start({
+        kind: 'rejudge_skill_version', skillId, skillVersion: version, requestedBy: adminActor(request),
+      });
+      return reply.code(202).send(operationResponse(operation));
     } catch (error) {
       return sendMappedApiError(reply, request, error, { admin: true });
     }
@@ -286,20 +291,30 @@ export function registerAdminSkillRoutes(app: FastifyInstance, container: Contai
   });
 
   app.post('/admin/skills/:skillId/publish', publishGuard, async (request, reply) => {
-    const { skillId } = request.params as { skillId: string };
-    const { version } = request.query as { version?: string };
-    const body = (request.body as { judgementOverrideReason?: string } | undefined) ?? {};
-    const session = getAdminAuthContext(request).session;
-    const skill = await container.reviewSkill.publish(
-      skillId,
-      version ?? '1.0.0',
-      adminActor(request),
-      {
+    try {
+      const { skillId } = request.params as { skillId: string };
+      const { version } = request.query as { version?: string };
+      const selectedVersion = version ?? '1.0.0';
+      const skill = await container.adminSkillRead.getSkillDetail(skillId);
+      if (!skill.versions.some((candidate) => candidate.version === selectedVersion)) throw new NotFoundError(`Skill version ${selectedVersion} not found`);
+      const body = (request.body as { judgementOverrideReason?: string } | undefined) ?? {};
+      const session = getAdminAuthContext(request).session;
+      const options = {
         judgementOverrideAllowed: session.roles.includes('admin'),
         judgementOverrideReason: body.judgementOverrideReason,
-      }
-    );
-    return reply.send({ id: skill.id.toString() });
+      };
+      await container.reviewSkill.assertCanPublish(skillId, selectedVersion, adminActor(request), options);
+      const operation = await container.operations.start({
+        kind: 'publish_skill_version',
+        skillId,
+        skillVersion: selectedVersion,
+        requestedBy: adminActor(request),
+        payload: options,
+      });
+      return reply.code(202).send(operationResponse(operation));
+    } catch (error) {
+      return sendMappedApiError(reply, request, error, { admin: true });
+    }
   });
 
   app.post('/admin/skills/:skillId/reject', reviewGuard, async (request, reply) => {

@@ -31,6 +31,7 @@ export class JudgeSkillVersionUseCase {
       contextMetadata?: Record<string, unknown>;
       actor?: string;
       reuseJudgements?: Judgement[];
+      progress?: (progress: { phase: 'judging_skill' | 'judging_files'; message: string; completed: number; total: number; currentTarget: string | null }) => Promise<void>;
     } = {}
   ) {
     const target = (await this.resolveCatalogTarget(skillId, version)) ?? (await this.resolveRepositoryTarget(skillId, version));
@@ -38,6 +39,7 @@ export class JudgeSkillVersionUseCase {
     let judgement: Awaited<ReturnType<SkillJudgerPort['judge']>>;
     let reusedGlobal = false;
     try {
+      await options.progress?.({ phase: 'judging_skill', message: 'Judging skill version metadata.', completed: 0, total: 1, currentTarget: null });
       const globalTarget = buildGlobalJudgementTarget({
         targetType: 'skill', targetId: `${skillId}:${version}`, title: target.title,
         description: target.description, category: target.category, tags: target.tags,
@@ -99,12 +101,18 @@ export class JudgeSkillVersionUseCase {
       version,
       proposalId: readString(options.contextMetadata, 'proposalId'),
     });
-    await this.judgeVersionFiles(skillId, version, options.actor ?? 'system', options.reuseJudgements ?? []);
+    await this.judgeVersionFiles(skillId, version, options.actor ?? 'system', options.reuseJudgements ?? [], options.progress);
 
     return judgement;
   }
 
-  private async judgeVersionFiles(skillId: string, version: string, actor: string, reuseJudgements: Judgement[]): Promise<void> {
+  private async judgeVersionFiles(
+    skillId: string,
+    version: string,
+    actor: string,
+    reuseJudgements: Judgement[],
+    progress?: (progress: { phase: 'judging_skill' | 'judging_files'; message: string; completed: number; total: number; currentTarget: string | null }) => Promise<void>
+  ): Promise<void> {
     if (!this.storage || !this.scanner) {
       return;
     }
@@ -115,9 +123,12 @@ export class JudgeSkillVersionUseCase {
     // Keep read/extract/scan bounded as well as provider calls. Provider calls
     // are globally limited by BoundedSkillJudger; sequential local work avoids
     // a large artifact upload creating an unbounded Buffer/scan fan-out.
+    let completed = 0;
     for (const file of files) {
+      await progress?.({ phase: 'judging_files', message: `Judging ${file.path}.`, completed, total: files.length, currentTarget: file.path });
       const stored = await storage.readSkillFile(skillId, version, file.path);
       if (!stored) {
+        completed += 1;
         continue;
       }
 
@@ -179,6 +190,7 @@ export class JudgeSkillVersionUseCase {
           errorCategory: judgementErrorCategory(error),
         });
       }
+      completed += 1;
     }
   }
 

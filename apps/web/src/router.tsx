@@ -7,7 +7,6 @@ import { SearchPage } from './pages/SearchPage';
 import { HowToProposePage } from './pages/HowToProposePage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
-import { AdminDraftSkillsPage } from './pages/admin/AdminDraftSkillsPage';
 import { AdminReviewQueuePage } from './pages/admin/AdminReviewQueuePage';
 import { AdminSkillCreatePage } from './pages/admin/AdminSkillCreatePage';
 import { AdminSkillPage } from './pages/admin/AdminSkillPage';
@@ -59,7 +58,6 @@ export function AppRouter() {
                         <Route path="admin/login" element={<AdminLoginPage />} />
                         <Route path="admin" element={<AdminRoute />}>
                             <Route index element={<AdminDashboardPage />} />
-                            <Route path="drafts" element={<AdminDraftSkillsPage />} />
                             <Route path="review" element={<AdminReviewQueuePage />} />
                             <Route element={<AdminRoleRoute required="admin" />}>
                                 <Route path="skills/new" element={<AdminSkillCreatePage />} />

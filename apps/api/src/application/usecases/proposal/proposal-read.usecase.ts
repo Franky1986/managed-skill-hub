@@ -64,6 +64,8 @@ export interface ProposalNoticeDto {
     in_upload: number;
     submitted: number;
     judged: number;
+    approved: number;
+    rejected: number;
     converted: number;
   };
 }
@@ -133,6 +135,8 @@ export class ProposalReadUseCase {
     }
     const adminReviewDone = proposal.status === 'approved' || proposal.status === 'rejected' || proposal.status === 'converted' || convertedSkillId !== null;
     const uploadFinalized = proposal.status !== ProposalStatus.IN_UPLOAD;
+    const finalizationCompleted = [ProposalStatus.JUDGED, ProposalStatus.APPROVED, ProposalStatus.REJECTED, ProposalStatus.CONVERTED]
+      .includes(proposal.status as ProposalStatus);
 
     let duplicateOfSkillId: string | null = null;
     if (this.catalog && proposal.contentDigest) {
@@ -157,7 +161,9 @@ export class ProposalReadUseCase {
       contentDigest: proposal.contentDigest,
       duplicateOfSkillId,
       uploadFinalized,
-      finalizeRequired: !uploadFinalized,
+      // The upload is finalized at `submitted`, but the async finalization
+      // operation remains incomplete until automatic judgement has persisted.
+      finalizeRequired: !finalizationCompleted,
       autoPublishEnabled: autoPublishState.enabled,
       autoPublishEligible: autoPublishState.eligible,
       autoPublishBlockedReason: autoPublishState.blockedReason,
@@ -209,6 +215,8 @@ export class ProposalReadUseCase {
           in_upload: byStatus.in_upload ?? 0,
           submitted: byStatus.submitted ?? 0,
           judged: byStatus.judged ?? 0,
+          approved: byStatus.approved ?? 0,
+          rejected: byStatus.rejected ?? 0,
           converted: byStatus.converted ?? 0,
         },
       };
@@ -223,7 +231,7 @@ export class ProposalReadUseCase {
         }
         return acc;
       },
-      { in_upload: 0, submitted: 0, judged: 0, converted: 0 }
+      { in_upload: 0, submitted: 0, judged: 0, approved: 0, rejected: 0, converted: 0 }
     );
     const totalPending = byStatus.submitted + byStatus.judged;
     return {

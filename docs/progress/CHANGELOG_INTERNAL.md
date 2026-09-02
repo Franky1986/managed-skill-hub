@@ -1,3 +1,87 @@
+# 2026-09-02: Clarify public-to-admin version management and publication status
+
+- Added a public skill-detail link to the protected, version-selected admin
+  workbench, so administrators can enter version management without manually
+  constructing a route.
+- The proposal `finalize and publish` shortcut now retains the queued publish
+  operation for progress polling and final-state refresh.
+- Removed redundant terminal operation wording when operation state and worker
+  phase both report `completed`.
+- Documented that deprecation is currently terminal; reversible per-version
+  disable/enable remains a separately scoped future decision.
+
+# 2026-09-02: Stabilize proposal review links and asynchronous finalization polling
+
+- Proposal detail now exposes the immutable version created by conversion, so
+  review links cannot drift to a later live next-version preview.
+- Public proposal status keeps `finalizeRequired` true until automatic
+  judgement completes, rather than stopping immediately after the upload is
+  marked `submitted`.
+
+# 2026-09-01: Link proposal context back to canonical skill review
+
+- Proposal-context skill views now expose a prominent link to the canonical
+  admin skill route, so reviewers can leave the read-only proposal artifact
+  context and continue normal version approval or publication.
+
+# 2026-09-01: Scope future artifact questions without implementing them
+
+- Recorded the deferred grounded artifact question assistant: retrieval-first
+  context assembly, cited answers, bounded asynchronous work, and read-only
+  prompt-injection-safe behavior for proposal and version review.
+- Explicitly kept model-provider choice, indexing implementation, conversation
+  persistence, and all UI/API work outside the current scope.
+
+# 2026-09-01: Correct proposal overview polling and conversion-version labels
+
+- The grouped `All` total now refreshes independently in the background while
+  any other proposal filter is open; a transient failure of one counter request
+  no longer clears the other valid count.
+- Converted proposal summaries now expose the immutable version from their
+  conversion audit event. The UI labels it as the created version and reserves
+  the live next-version preview for work that has not yet been converted.
+- The `All` group header additionally shows the current published version, so
+  the public state and a proposal's historical conversion result are not
+  conflated.
+
+# 2026-09-01: Consolidate draft and review skill work
+
+- Removed the duplicate `/admin/drafts` page and navigation entry.
+- The review queue now includes draft versions in `Active` and `All`, and its
+  background-polled tab counts plus app-header badge expose pending skill work.
+
+# 2026-09-01: Show complete proposal/version file-tree changes
+
+- The admin comparison now summarizes every manifest-level addition, removal,
+  and content change between a proposal/current version and its selected
+  reference version, including files that are absent from the current tree.
+- Conversion continues to materialize a new version strictly from the proposal
+  file set; files only present in an older version remain historical and are
+  not carried into the new manifest or package.
+
+# 2026-09-01: Make review work observable and asynchronous
+
+- Added durable SQLite/MySQL-backed operation records for proposal finalization,
+  re-judgement, and publication.
+- The admin UI now polls and renders phase, current target, file progress, and
+  terminal failure state instead of waiting on a long browser request.
+- File uploads use a scoped 120-second transport timeout; server-side review
+  work returns immediately as an asynchronous operation.
+
+# 2026-09-01: Clarify proposal queue totals
+
+- Added the rejected proposal lifecycle bucket to the notice contract.
+- The admin proposal queue now displays an `All` total derived from proposal
+  lifecycle states, explicitly excluding skill-version counts.
+
+# 2026-09-01: Consolidate the everyday-user Skill Hub visual
+
+- Replaced the separate download/use and propose SVG embeds in both README
+  variants with one end-to-end visual.
+- The new visual makes the hand-off between user, agent, optional AI judgement,
+  human review, publication and later reuse explicit for PMs and everyday
+  agent users.
+
 # 2026-08-27: Harden migration backup and judgement audit handling
 
 - Made filesystem backup archives owner-readable only and excluded the backup

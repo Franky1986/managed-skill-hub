@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img alt="Managed Skill Hub" src="https://img.shields.io/badge/Managed%20Skill%20Hub-0.1.0-6f42c1">
+  <img alt="Managed Skill Hub" src="https://img.shields.io/badge/Managed%20Skill%20Hub-0.2.0-6f42c1">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.7.3-3178C6?logo=typescript&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
@@ -59,13 +59,7 @@ Created and maintained by [Frank Richter](https://www.linkedin.com/in/frank-rich
 Not a developer? You don't need to call the API directly — just tell your
 coding agent (e.g. Cursor, Claude, Codex) what you want in plain language.
 
-**Download and use a skill**
-
-![Download and use a skill](./docs/product/diagrams/user-en-skill-download.svg)
-
-**Propose a skill**
-
-![Propose a skill](./docs/product/diagrams/user-en-skill-propose.svg)
+![Find, use and share a skill](./docs/product/diagrams/user-en-skill-hub-lifecycle.svg)
 
 For the full technical explanation of these flows (API endpoints, the optional
 judger, `skill-hub-meta.json`), see

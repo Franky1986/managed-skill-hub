@@ -47,6 +47,7 @@ interface ArtifactInlineViewerProps {
     textLoading?: boolean;
     textError?: string | null;
     showInvisible?: boolean;
+    showInvisibleControl?: boolean;
     onShowInvisibleChange?: (next: boolean) => void;
     extractedContent?: ExtractedSkillFileContent | null;
     extractedLoading?: boolean;
@@ -72,6 +73,7 @@ export function ArtifactInlineViewer(props: ArtifactInlineViewerProps) {
         textLoading,
         textError,
         showInvisible,
+        showInvisibleControl = true,
         onShowInvisibleChange,
         extractedContent,
         extractedLoading,
@@ -119,7 +121,7 @@ export function ArtifactInlineViewer(props: ArtifactInlineViewerProps) {
     return (
         <div className={`space-y-4 ${className}`}>
             <div className="space-y-3">
-                {textLike && (
+                {textLike && showInvisibleControl && (
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input
                             type="checkbox"

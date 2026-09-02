@@ -6,6 +6,28 @@ export interface DiffLine {
     value: string;
 }
 
+export type FileTreeChange = {
+    path: string;
+    kind: 'added' | 'modified' | 'removed';
+};
+
+/** Compares version manifests, so additions and removals are visible even without opening a file. */
+export function buildFileTreeChanges(currentFiles: SkillFile[], referenceFiles: SkillFile[]): FileTreeChange[] {
+    const currentByPath = new Map(currentFiles.map((file) => [file.path, file]));
+    const referenceByPath = new Map(referenceFiles.map((file) => [file.path, file]));
+    const changes: FileTreeChange[] = [];
+
+    for (const [path, current] of currentByPath) {
+        const reference = referenceByPath.get(path);
+        if (!reference) changes.push({ path, kind: 'added' });
+        else if (current.sha256 !== reference.sha256) changes.push({ path, kind: 'modified' });
+    }
+    for (const path of referenceByPath.keys()) {
+        if (!currentByPath.has(path)) changes.push({ path, kind: 'removed' });
+    }
+    return changes.sort((left, right) => left.path.localeCompare(right.path));
+}
+
 function isInternalArtifact(file: SkillFile): boolean {
     const lowerCasePath = file.path.toLowerCase();
     if (lowerCasePath === 'skill.yaml') {
@@ -22,7 +44,7 @@ export function selectInitialSkillVersion(skill: SkillDetail, proposal: Proposal
         return skill.versions[skill.versions.length - 1]?.version || '';
     }
 
-    const proposalTargetVersion = proposal.conversion.nextVersion;
+    const proposalTargetVersion = proposal.convertedVersion ?? proposal.conversion.nextVersion;
     if (
         proposal.status === 'converted'
         && proposalTargetVersion
@@ -56,6 +78,11 @@ export function selectCreatedProposalVersion(skill: SkillDetail, proposal: Propo
     }
 
     return selectLatestDraftVersion(skill)?.version ?? null;
+}
+
+/** The canonical review link must target the version created by this proposal, not its reference version. */
+export function selectProposalReviewVersion(proposal: ProposalDetail | null, selectedVersion: string): string {
+    return proposal?.convertedVersion ?? proposal?.conversion.nextVersion ?? selectedVersion;
 }
 
 export function selectDefaultSkillFilePath(files: SkillFile[], entrypoint: string | null): string | null {

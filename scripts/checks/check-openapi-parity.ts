@@ -52,7 +52,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 function responseHasUsableSuccess(operation: any): boolean {
-  const response = operation?.responses?.['200'] ?? operation?.responses?.['201'];
+  const response = operation?.responses?.['200'] ?? operation?.responses?.['201'] ?? operation?.responses?.['202'];
   return Boolean(response && typeof response === 'object' && typeof response.description === 'string' && response.description.length > 0);
 }
 

@@ -29,6 +29,8 @@ HTTP adapter for admin actions on proposals.
   the web workbench must not call the independently protected agent proposal
   notice route.
 - Deliver structured review metadata for proposal detail/list responses.
+- Deliver persisted asynchronous review-operation progress only through the
+  admin-session boundary.
 - Deliver guided conversion preview for target skill and next version.
 - Deliver structured file and judgement metadata for proposal detail.
 - Deliver proposal files for admin review as raw content/download.

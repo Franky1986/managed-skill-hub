@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, UPLOAD_TIMEOUT_MS } from './client';
 import type { JudgementRecord } from './judgements';
 import type { AgentHttpGuidance, ProposalWorkflow } from './agent-sessions';
 
@@ -26,9 +26,10 @@ export interface ProposalFinalizeUploadResponse {
     message: string;
     statusUrl: string;
     checkUrl: string;
+    operationId: string;
     uploadFinalized: boolean;
-    judgementStatus: 'completed' | 'partial' | 'unavailable' | 'failed';
-    autoPublishStatus: 'disabled' | 'skipped' | 'published';
+    judgementStatus: 'pending' | 'completed' | 'partial' | 'unavailable' | 'failed';
+    autoPublishStatus: 'pending' | 'disabled' | 'skipped' | 'published';
     autoPublishBlockedReason: string | null;
 }
 
@@ -164,6 +165,7 @@ export interface ProposalSummary {
     latestJudgementRisk: JudgementRecord['overallRisk'] | null;
     latestJudgement: JudgementRecord | null;
     labels: string[];
+    convertedVersion: string | null;
     conversion?: {
         mode: 'create_skill' | 'create_version';
         targetSkillId: string;
@@ -208,6 +210,7 @@ export interface ProposalDetail {
     judgements: JudgementRecord[];
     rejectionReason: string | null;
     review: ProposalReview;
+    convertedVersion: string | null;
     uploadFinalized: boolean;
     fileCount: number;
     maxFiles: number;
@@ -320,6 +323,7 @@ export const proposalsApi = {
         form.append('file', file);
         return apiClient.post(`/proposals/${id}/files`, form, {
             headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: UPLOAD_TIMEOUT_MS,
         });
     },
     finalizeUpload: (id: string) =>

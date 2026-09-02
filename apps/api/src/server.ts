@@ -17,6 +17,7 @@ import { registerAdminProposalRoutes } from './adapters/inbound/http/admin-propo
 import { registerApiErrorHandler } from './adapters/inbound/http/error-response';
 import { registerAdminObservabilityRoutes } from './adapters/inbound/http/admin-observability.controller';
 import { registerAgentSessionRoutes } from './adapters/inbound/http/agent-session.controller';
+import { registerAdminOperationRoutes } from './adapters/inbound/http/admin-operation.controller';
 import { registerHttpObservability } from './adapters/inbound/http/http-observability';
 import { OidcAdminAuth } from './adapters/inbound/http/oidc-admin-auth';
 import { AdminOidcIdentityProvider } from './adapters/outbound/identity/admin-oidc.identity-provider';
@@ -128,6 +129,7 @@ async function start() {
       registerAdminSkillRoutes(apiApp, container, auth);
       registerAdminProposalRoutes(apiApp, container, auth);
       registerAdminObservabilityRoutes(apiApp, container, auth);
+      registerAdminOperationRoutes(apiApp, container, auth);
       registerAgentSessionRoutes(apiApp, container, agentAuth, auth);
     }, { prefix: apiPrefix });
   }
@@ -141,6 +143,7 @@ async function start() {
   registerAdminSkillRoutes(app, container, auth);
   registerAdminProposalRoutes(app, container, auth);
   registerAdminObservabilityRoutes(app, container, auth);
+  registerAdminOperationRoutes(app, container, auth);
   registerAgentSessionRoutes(app, container, agentAuth, auth);
   registerApiErrorHandler(app);
 

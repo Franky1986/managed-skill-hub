@@ -38,6 +38,9 @@ export const apiClient: AxiosInstance = axios.create({
   withCredentials: true,
 });
 
+/** File transfer may legitimately take longer than an interactive API command. */
+export const UPLOAD_TIMEOUT_MS = 120_000;
+
 export function getApiErrorCode(error: unknown): string | null {
   if (!axios.isAxiosError(error)) {
     return null;

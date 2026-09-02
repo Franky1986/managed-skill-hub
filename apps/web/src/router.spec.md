@@ -62,7 +62,7 @@ admin pages render only for users with a valid admin session.
 
 ## Acceptance Criteria
 
-- `/admin`, `/admin/drafts`, `/admin/review`, `/admin/skills/new`,
+- `/admin`, `/admin/review`, `/admin/skills/new`,
   `/admin/skills/:id`, `/admin/proposals`, `/admin/proposals/:id`, and
   `/admin/agent-sessions` are inaccessible without a valid admin session.
 - Directly opening an admin URL without a session redirects to `/admin/login`.

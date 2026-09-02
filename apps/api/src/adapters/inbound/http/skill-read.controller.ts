@@ -461,7 +461,7 @@ async function buildDiscoveryResponse(
     registryId: authMetadata.registryId,
     registryName: authMetadata.registryName,
     apiBaseUrl: authMetadata.apiBaseUrl,
-    version: '0.1.0',
+    version: '0.2.0',
     description:
       'ManagedSkillHub skill registry for AI agents. Product managers and developers publish versioned, reviewed skills; agents discover and consume them through a stable API.',
     readAuthRequired: authMetadata.readAuthRequired,

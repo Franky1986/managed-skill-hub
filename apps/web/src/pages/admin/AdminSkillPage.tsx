@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { adminApi, JudgementRecord } from '../../api/admin';
+import { adminApi, AsyncOperation, JudgementRecord } from '../../api/admin';
 import { getApiErrorCode, handleApiError } from '../../api/client';
 import { SkillDetail, SkillFile, skillsApi } from '../../api/skills';
 import { ArtifactInlineViewer } from '../../components/ArtifactInlineViewer';
@@ -10,12 +10,15 @@ import { useLanguage } from '../../i18n';
 import { formatLocalDateTime } from '../../lib/formatLocalDateTime';
 import { formatOverallRiskLabel, isNoJudgeAvailable, noJudgeHint } from '../../lib/judgement';
 import { hasAdminRole, useAuthStore } from '../../store/auth';
+import { useBackgroundPolling } from '../../hooks/useBackgroundPolling';
 import {
     buildReferenceToCurrentDiff,
+    buildFileTreeChanges,
     hasSelectedFileSource,
     mapProposalFilesToSkillFiles,
     selectAvailableComparisonVersions,
     selectCreatedProposalVersion,
+    selectProposalReviewVersion,
     selectDefaultComparisonVersion,
     selectDefaultSkillFilePath,
     selectInitialSkillVersion,
@@ -35,6 +38,7 @@ export function AdminSkillPage() {
         location.state as { fromProposal?: boolean; proposalId?: string; mode?: 'view' | 'edit' } | null;
     const locationSearch = new URLSearchParams(location.search);
     const proposalIdFromSearch = locationSearch.get('proposalId');
+    const requestedVersion = locationSearch.get('version');
     const fromProposal =
         locationState?.fromProposal === true ||
         locationState?.proposalId != null ||
@@ -48,6 +52,9 @@ export function AdminSkillPage() {
     const fromProposalId = fromProposal
         ? (locationState?.proposalId ?? proposalIdFromSearch)
         : null;
+    const operationStorageKey = fromProposalId
+        ? `managed-skill-hub.active-admin-operation.proposal.${fromProposalId}`
+        : `managed-skill-hub.active-admin-operation.skill.${id ?? 'unknown'}`;
     const [isEditMode, setIsEditMode] = useState(initialEditable);
     const [skill, setSkill] = useState<SkillDetail | null>(null);
     const [files, setFiles] = useState<SkillFile[]>([]);
@@ -63,6 +70,17 @@ export function AdminSkillPage() {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [activeOperation, setActiveOperation] = useState<AsyncOperation | null>(() => {
+        try {
+            const saved = sessionStorage.getItem(operationStorageKey);
+            return saved ? JSON.parse(saved) as AsyncOperation : null;
+        } catch {
+            return null;
+        }
+    });
+    // Keep an operation scoped to the route that loaded it. React Router can retain this
+    // page while navigating between skills or proposal contexts.
+    const [activeOperationScopeKey, setActiveOperationScopeKey] = useState(operationStorageKey);
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
     const [editCategory, setEditCategory] = useState('');
@@ -88,6 +106,9 @@ export function AdminSkillPage() {
         Record<string, { content: string; exists: boolean; role: string | null }>
     >({});
     const [comparisonFileTargetRole, setComparisonFileTargetRole] = useState<string | null>(null);
+    const [comparisonTreeFiles, setComparisonTreeFiles] = useState<SkillFile[]>([]);
+    const [comparisonTreeLoading, setComparisonTreeLoading] = useState(false);
+    const [comparisonTreeLoaded, setComparisonTreeLoaded] = useState(false);
     const [proposalDetail, setProposalDetail] = useState<ProposalDetail | null>(null);
     const [proposalFinalizeComment, setProposalFinalizeComment] = useState('');
     const [showSelectedFileJudgements, setShowSelectedFileJudgements] = useState(false);
@@ -117,6 +138,57 @@ export function AdminSkillPage() {
     const latestProposalJudgement = sortedProposalJudgements[0] ?? null;
     const historicalProposalJudgements = sortedProposalJudgements.slice(1);
 
+    const refreshActiveOperation = useCallback(async (signal: AbortSignal) => {
+        if (!activeOperation || activeOperationScopeKey !== operationStorageKey) return;
+        const response = await adminApi.getOperation(activeOperation.id, signal);
+        const operation = response.data;
+        setActiveOperation(operation);
+        if (operation.state === 'completed') {
+            await refreshSkill();
+            setNotice(operation.kind === 'publish_skill_version'
+                ? t('adminSkill.notice.actionDone', { action: 'publish' })
+                : t('adminSkill.notice.rejudged'));
+        }
+        if (operation.state === 'failed') {
+            if (operation.errorCode === 'JUDGEMENT_OVERRIDE_REQUIRED') {
+                setShowPublishOverrideDialog(true);
+            }
+            setError(operation.message);
+        }
+    }, [activeOperation?.id, activeOperationScopeKey, operationStorageKey, t]);
+    useBackgroundPolling(
+        refreshActiveOperation,
+        activeOperationScopeKey === operationStorageKey &&
+            activeOperation !== null &&
+            ['queued', 'running'].includes(activeOperation.state),
+        1_500
+    );
+    useEffect(() => {
+        if (activeOperationScopeKey === operationStorageKey) {
+            return;
+        }
+        try {
+            const saved = sessionStorage.getItem(operationStorageKey);
+            setActiveOperation(saved ? JSON.parse(saved) as AsyncOperation : null);
+        } catch {
+            setActiveOperation(null);
+        }
+        setActiveOperationScopeKey(operationStorageKey);
+    }, [activeOperationScopeKey, operationStorageKey]);
+    useEffect(() => {
+        if (activeOperationScopeKey !== operationStorageKey) {
+            return;
+        }
+        try {
+            if (activeOperation) sessionStorage.setItem(operationStorageKey, JSON.stringify(activeOperation));
+            else sessionStorage.removeItem(operationStorageKey);
+        } catch {
+            // Progress remains available for this page session even if storage is unavailable.
+        }
+    }, [activeOperation, activeOperationScopeKey, operationStorageKey]);
+    const operationInProgress = activeOperationScopeKey === operationStorageKey &&
+        activeOperation !== null && ['queued', 'running'].includes(activeOperation.state);
+
     const selectedFileJudgements = useMemo(() => {
         if (!fromProposal || !proposalDetail || !selectedFilePath) {
             return [];
@@ -135,7 +207,7 @@ export function AdminSkillPage() {
 
     useEffect(() => {
         void refreshSkill();
-    }, [id, fromProposal, proposalIdFromSearch]);
+    }, [id, fromProposal, proposalIdFromSearch, requestedVersion]);
 
     async function resolveProposalId(skillId: string): Promise<string | null> {
         const directProposalId = fromProposalId;
@@ -186,6 +258,7 @@ export function AdminSkillPage() {
         () => skill?.versions.find((version) => version.version === selectedVersion) ?? null,
         [skill, selectedVersion]
     );
+    const proposalReviewVersion = selectProposalReviewVersion(proposalDetail, selectedVersion);
     const canRejectSelectedVersion = selectedVersionRecord !== null
         && ['draft', 'in_review', 'approved'].includes(selectedVersionRecord.status);
 
@@ -288,10 +361,60 @@ export function AdminSkillPage() {
     }, [availableComparisonVersions, selectedProposalFile, selectedVersionIndex, skill]);
 
     useEffect(() => {
+        if (!id || !comparisonVersion) {
+            setComparisonTreeFiles([]);
+            setComparisonTreeLoaded(false);
+            return;
+        }
+        let active = true;
+        setComparisonTreeLoading(true);
+        setComparisonTreeLoaded(false);
+        void adminApi.listSkillFiles(id, comparisonVersion)
+            .then((response) => {
+                if (active) {
+                    setComparisonTreeFiles(response.data.items ?? []);
+                    setComparisonTreeLoaded(true);
+                }
+            })
+            .catch(() => {
+                if (active) setComparisonTreeFiles([]);
+            })
+            .finally(() => {
+                if (active) setComparisonTreeLoading(false);
+            });
+        return () => { active = false; };
+    }, [id, comparisonVersion]);
+
+    const fileTreeChanges = useMemo(
+        () => buildFileTreeChanges(displayedFiles, comparisonTreeFiles),
+        [displayedFiles, comparisonTreeFiles]
+    );
+    const currentFileChangeKinds = useMemo(() => Object.fromEntries(
+        fileTreeChanges
+            .filter((change) => change.kind !== 'removed')
+            .map((change) => [change.path, change.kind])
+    ) as Record<string, 'added' | 'modified'>, [fileTreeChanges]);
+    const selectedFileTreeChange = useMemo(
+        () => selectedFile ? fileTreeChanges.find((change) => change.path === selectedFile.path) ?? null : null,
+        [fileTreeChanges, selectedFile]
+    );
+
+    useEffect(() => {
         setRawContent('');
         setEditableContent('');
         setExtractedContent('');
     }, [selectedVersion, selectedFilePath]);
+
+    useEffect(() => {
+        if (!selectedFile || !comparisonVersion || !comparisonTreeLoaded || !isTextLikeFile(selectedFile)) {
+            return;
+        }
+        if (!selectedFileTreeChange) {
+            setShowComparisonDiff(false);
+            return;
+        }
+        void calculateComparisonDiff(comparisonVersion);
+    }, [comparisonTreeLoaded, comparisonVersion, rawContent, selectedFile, selectedFileTreeChange]);
 
     useEffect(() => {
         setShowComparisonDiff(false);
@@ -540,7 +663,7 @@ export function AdminSkillPage() {
                                     <button
                                         type="button"
                                         onClick={() => void handleVersionAction('submit-review')}
-                                        disabled={Boolean(actionLoading)}
+                                        disabled={Boolean(actionLoading) || operationInProgress}
                                         className="rounded bg-amber-600 px-3 py-2 text-sm text-white disabled:opacity-50"
                                     >
                                         Submit Review
@@ -592,7 +715,7 @@ export function AdminSkillPage() {
                             <button
                                 type="button"
                                 onClick={() => void handleRejudge()}
-                                disabled={Boolean(actionLoading)}
+                                disabled={Boolean(actionLoading) || operationInProgress}
                                 className="rounded border px-3 py-2 text-sm disabled:opacity-50"
                             >
                                 {isReadOnlyProposalView ? t('adminSkill.rejudgeReferenceVersion') : 'Re-Judge'}
@@ -713,7 +836,7 @@ export function AdminSkillPage() {
                             <button
                                 type="button"
                                 onClick={() => void handleRejudgeProposal()}
-                                disabled={Boolean(actionLoading)}
+                                disabled={Boolean(actionLoading) || operationInProgress}
                                 className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {actionLoading === 'proposal-rejudge'
@@ -840,7 +963,36 @@ export function AdminSkillPage() {
                         <span key={tag} className="rounded bg-gray-200 px-2 py-0.5 text-xs">{tag}</span>
                     ))}
                 </div>
+                {fromProposal && id && (
+                    <Link
+                        to={`/admin/skills/${encodeURIComponent(id)}${proposalReviewVersion ? `?version=${encodeURIComponent(proposalReviewVersion)}` : ''}`}
+                        className="inline-flex rounded border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-900 hover:bg-indigo-100"
+                    >
+                        {t('adminSkill.openSkillReview')}
+                    </Link>
+                )}
                 <p className="text-gray-700">{skill.description}</p>
+                {activeOperationScopeKey === operationStorageKey && activeOperation && (
+                    <div className={`rounded border p-3 text-sm ${activeOperation.state === 'failed' ? 'border-red-200 bg-red-50 text-red-900' : activeOperation.state === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-sky-200 bg-sky-50 text-sky-900'}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-medium">
+                                {t(`adminOperation.${activeOperation.state}`)}
+                            </p>
+                            {activeOperation.total > 0 && (
+                                <p className="font-mono text-xs">{activeOperation.completed} / {activeOperation.total}</p>
+                            )}
+                        </div>
+                        {activeOperation.phase !== activeOperation.state && (
+                            <p className="mt-1">{t(`adminOperation.${activeOperation.phase}`, {}, activeOperation.message)}</p>
+                        )}
+                        {activeOperation.currentTarget && <p className="mt-1 font-mono text-xs">{activeOperation.currentTarget}</p>}
+                        {activeOperation.state === 'running' && activeOperation.total > 0 && (
+                            <div className="mt-2 h-2 overflow-hidden rounded bg-sky-100">
+                                <div className="h-full bg-sky-600 transition-all" style={{ width: `${Math.min(100, Math.round((activeOperation.completed / activeOperation.total) * 100))}%` }} />
+                            </div>
+                        )}
+                    </div>
+                )}
                 {fromProposal && proposalDetail && !proposalTargetExists && (
                     <div className="rounded border border-amber-200 bg-amber-50 p-3">
                         <p className="text-sm text-amber-900">{t('adminSkill.proposalCreatesNewSkill')}</p>
@@ -917,6 +1069,7 @@ export function AdminSkillPage() {
                         className="mt-2 w-full rounded border px-3 py-2 text-sm"
                         placeholder={t('adminSkill.finalizePlaceholder')}
                     />
+                    {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
                     <div className="mt-3 flex flex-wrap gap-2">
                         {canPublish && <button
                             type="button"
@@ -1057,7 +1210,7 @@ export function AdminSkillPage() {
                             <button
                                 type="button"
                                 onClick={() => void handleRejudge()}
-                                disabled={Boolean(actionLoading)}
+                                disabled={Boolean(actionLoading) || operationInProgress}
                                 className="rounded border px-3 py-2 text-sm disabled:opacity-50"
                             >
                                 {isReadOnlyProposalView ? t('adminSkill.rejudgeReferenceVersion') : 'Re-Judge'}
@@ -1406,7 +1559,33 @@ export function AdminSkillPage() {
                         onSelectDirectory={setSelectedDirectoryPath}
                         displayRootPath={dirname(proposalDetail?.entrypoint ?? skill?.entrypoint ?? null)}
                         emptyLabel={t('adminSkill.noFilesForVersion')}
+                        changeKindsByPath={currentFileChangeKinds}
                     />
+
+                    {comparisonVersion && (
+                        <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+                            <p className="font-medium text-slate-900">{t('adminSkill.fileTreeChanges', { version: comparisonVersion })}</p>
+                            {comparisonTreeLoading ? (
+                                <p className="mt-2 text-slate-500">{t('adminSkill.fileTreeChangesLoading')}</p>
+                            ) : fileTreeChanges.length === 0 ? (
+                                <p className="mt-2 text-slate-500">{t('adminSkill.fileTreeNoChanges')}</p>
+                            ) : (
+                                <ul className="mt-2 space-y-1 font-mono text-[11px]">
+                                    {fileTreeChanges.map((change) => (
+                                        <li key={`${change.kind}:${change.path}`} className={change.kind === 'added' ? 'text-emerald-700' : change.kind === 'removed' ? 'text-red-700' : 'text-amber-800'}>
+                                            {change.kind === 'removed' ? (
+                                                <span>− {change.path} · {t(`adminSkill.fileTreeChange.${change.kind}`)}</span>
+                                            ) : (
+                                                <button type="button" onClick={() => handleSelectFile(change.path)} className="underline decoration-dotted underline-offset-2 hover:font-semibold">
+                                                    {change.kind === 'added' ? '+' : '~'} {change.path} · {t(`adminSkill.fileTreeChange.${change.kind}`)}
+                                                </button>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
 
                     {internalFiles.length > 0 && (
                         <>
@@ -1421,6 +1600,7 @@ export function AdminSkillPage() {
                                 onSelectDirectory={setSelectedDirectoryPath}
                                 displayRootPath={dirname(proposalDetail?.entrypoint ?? skill?.entrypoint ?? null)}
                                 emptyLabel={t('adminSkill.noInternalDocuments')}
+                                changeKindsByPath={currentFileChangeKinds}
                             />
                         </>
                     )}
@@ -1530,7 +1710,7 @@ export function AdminSkillPage() {
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleRejudgeProposalFile(selectedProposalFile.id)}
-                                                            disabled={Boolean(actionLoading)}
+                                                            disabled={Boolean(actionLoading) || operationInProgress}
                                                             className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 disabled:opacity-50"
                                                         >
                                                             {actionLoading === `proposal-file-rejudge:${selectedProposalFile.id}`
@@ -1563,41 +1743,6 @@ export function AdminSkillPage() {
                                             ))}
                                         </div>
                                     </details>
-                                )}
-
-                                {(!selectedFileIsInternal && (isProposalArtifactView || !isTextLikeFile(selectedFile))) && (
-                                    <ArtifactInlineViewer
-                                        file={selectedFile}
-                                        artifactId={selectedFile.artifactId}
-                                        fileUrl={selectedProposalFile && proposalDetail
-                                            ? adminApi.getProposalFileUrl(proposalDetail.id, selectedProposalFile.id)
-                                            : adminApi.getSkillFileUrl(skill.id, selectedFile.path, selectedVersion)}
-                                        textContent={rawContent}
-                                        textLoading={false}
-                                        textError={null}
-                                        showInvisible={showInvisible}
-                                        onShowInvisibleChange={setShowInvisible}
-                                        extractedContent={selectedFile.extractable && extractedContent
-                                            ? {
-                                                text: extractedContent,
-                                                extractedBy: 'loaded',
-                                                metadata: {},
-                                            }
-                                            : null}
-                                        extractedLoading={actionLoading === 'load-extracted' || actionLoading === 'reextract'}
-                                        extractedError={error}
-                                        onLoadExtracted={selectedFile.extractable
-                                            ? () => {
-                                                void loadExtractedContent();
-                                            }
-                                            : undefined}
-                                        extractedPanelOpen={selectedFile.extractable ? Boolean(extractedContent) : false}
-                                        onExtractedPanelToggle={(isOpen) => {
-                                            if (isOpen && !extractedContent) {
-                                                void loadExtractedContent();
-                                            }
-                                        }}
-                                    />
                                 )}
 
                                 {canAdmin && !isProposalArtifactView && !selectedFileIsInternal && (
@@ -1655,13 +1800,13 @@ export function AdminSkillPage() {
 
                                 {isTextLikeFile(selectedFile) && (
                                     <div className="space-y-3">
-                                        {!selectedFileIsInternal ? (
+                                        {!selectedFileIsInternal && !isProposalArtifactView && (
                                             <div className="rounded border border-gray-200 p-4">
                                                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                                                     <h3 className="text-sm font-medium text-gray-900">
-                                                        {isProposalArtifactView ? t('adminSkill.textContent') : t('adminSkill.editTextContent')}
+                                                        {t('adminSkill.editTextContent')}
                                                     </h3>
-                                                    {canAdmin && !isProposalArtifactView && (
+                                                    {canAdmin && (
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleSaveFileContent()}
@@ -1672,24 +1817,19 @@ export function AdminSkillPage() {
                                                         </button>
                                                     )}
                                                 </div>
-                                                {isProposalArtifactView ? (
-                                                    <pre className="max-h-72 min-h-72 overflow-x-auto overflow-y-auto rounded border border-slate-200 bg-slate-950 p-4 font-mono text-sm text-slate-100 whitespace-pre-wrap break-words">
-                                                        {showInvisible ? renderVisibleText(editableContent) : editableContent}
-                                                    </pre>
-                                                ) : (
-                                                    <textarea
-                                                        value={editableContent}
-                                                        onChange={(event) => {
-                                                            setEditableContent(event.target.value);
-                                                            setShowComparisonDiff(false);
-                                                            setComparisonFileDiff([]);
-                                                        }}
-                                                        className="min-h-72 w-full rounded border px-3 py-2 font-mono text-sm"
-                                                        spellCheck={false}
-                                                    />
-                                                )}
+                                                <textarea
+                                                    value={editableContent}
+                                                    onChange={(event) => {
+                                                        setEditableContent(event.target.value);
+                                                        setShowComparisonDiff(false);
+                                                        setComparisonFileDiff([]);
+                                                    }}
+                                                    className="min-h-72 w-full rounded border px-3 py-2 font-mono text-sm"
+                                                    spellCheck={false}
+                                                />
                                             </div>
-                                        ) : (
+                                        )}
+                                        {selectedFileIsInternal && (
                                             <div className="rounded border border-gray-200 bg-slate-50 p-4">
                                                 <h3 className="text-sm font-medium text-gray-900">{t('adminSkill.internalFileText')}</h3>
                                                 <p className="mt-2 text-sm text-slate-600">
@@ -1779,7 +1919,43 @@ export function AdminSkillPage() {
                                     </div>
                                 )}
 
-                                {selectedFile.extractable && !selectedFileIsInternal && isTextLikeFile(selectedFile) && (
+                                {(!selectedFileIsInternal && (isProposalArtifactView || !isTextLikeFile(selectedFile))) && (
+                                    <ArtifactInlineViewer
+                                        file={selectedFile}
+                                        artifactId={selectedFile.artifactId}
+                                        fileUrl={selectedProposalFile && proposalDetail
+                                            ? adminApi.getProposalFileUrl(proposalDetail.id, selectedProposalFile.id)
+                                            : adminApi.getSkillFileUrl(skill.id, selectedFile.path, selectedVersion)}
+                                        textContent={rawContent}
+                                        textLoading={false}
+                                        textError={null}
+                                        showInvisible={showInvisible}
+                                        showInvisibleControl={false}
+                                        onShowInvisibleChange={setShowInvisible}
+                                        extractedContent={selectedFile.extractable && extractedContent
+                                            ? {
+                                                text: extractedContent,
+                                                extractedBy: 'loaded',
+                                                metadata: {},
+                                            }
+                                            : null}
+                                        extractedLoading={actionLoading === 'load-extracted' || actionLoading === 'reextract'}
+                                        extractedError={error}
+                                        onLoadExtracted={selectedFile.extractable
+                                            ? () => {
+                                                void loadExtractedContent();
+                                            }
+                                            : undefined}
+                                        extractedPanelOpen={selectedFile.extractable ? Boolean(extractedContent) : false}
+                                        onExtractedPanelToggle={(isOpen) => {
+                                            if (isOpen && !extractedContent) {
+                                                void loadExtractedContent();
+                                            }
+                                        }}
+                                    />
+                                )}
+
+                                {selectedFile.extractable && !selectedFileIsInternal && !isProposalArtifactView && isTextLikeFile(selectedFile) && (
                                     <details className="rounded border border-gray-200">
                                         <summary
                                             className="cursor-pointer px-4 py-3 text-sm font-medium"
@@ -1949,9 +2125,11 @@ export function AdminSkillPage() {
             const nextSkill = response.data;
             const nextVersion = preferredVersion && nextSkill.versions.some((version) => version.version === preferredVersion)
                 ? preferredVersion
-                : selectInitialSkillVersion(nextSkill, nextProposalDetail);
+                : requestedVersion && nextSkill.versions.some((version) => version.version === requestedVersion)
+                    ? requestedVersion
+                    : selectInitialSkillVersion(nextSkill, nextProposalDetail);
             setSkill(nextSkill);
-            setSelectedVersion((current) => (fromProposal ? nextVersion : current || nextVersion));
+            setSelectedVersion(nextVersion);
             setSelectedDirectoryPath((current) => current ?? dirname(nextSkill.entrypoint));
             if (nextVersion) {
                 await loadVersionContext(id, nextVersion, nextSkill.entrypoint);
@@ -2045,6 +2223,7 @@ export function AdminSkillPage() {
         setError(null);
         setNotice(null);
         const trimmedComment = proposalFinalizeComment.trim();
+        let publicationQueued = false;
         try {
             const response = await adminApi.convertProposal(
                 proposalDetail.id,
@@ -2058,20 +2237,22 @@ export function AdminSkillPage() {
             }
             if (createdVersion && target === 'publish') {
                 await adminApi.approve(targetSkillId, createdVersion);
-                await adminApi.publish(targetSkillId, createdVersion);
+                const publishResponse = await adminApi.publish(targetSkillId, createdVersion);
+                setActiveOperation(publishResponse.data);
+                publicationQueued = true;
             }
             await refreshSkill(createdVersion);
             if (createdVersion) {
                 setSelectedVersion(createdVersion);
             }
             setProposalFinalizeComment('');
-            setNotice(
-                target === 'publish'
-                    ? t('adminSkill.notice.proposalFinalizedAndPublished')
-                    : target === 'review'
+            if (!publicationQueued) {
+                setNotice(
+                    target === 'review'
                         ? t('adminSkill.notice.proposalFinalizedAndReview')
                         : t('adminSkill.notice.proposalFinalized')
-            );
+                );
+            }
             window.dispatchEvent(new Event('skillHub:proposalDecision'));
         } catch (finalizeError) {
             setError(handleApiError(finalizeError, language));
@@ -2125,7 +2306,10 @@ export function AdminSkillPage() {
             } else if (action === 'approve') {
                 await adminApi.approve(id, selectedVersionRecord.version);
             } else if (action === 'publish') {
-                await adminApi.publish(id, selectedVersionRecord.version, reason);
+                const response = await adminApi.publish(id, selectedVersionRecord.version, reason);
+                setActiveOperation(response.data);
+                setNotice(null);
+                return;
             } else if (action === 'reject') {
                 await adminApi.rejectSkillVersion(id, selectedVersionRecord.version, reason ?? '');
             } else {
@@ -2134,8 +2318,10 @@ export function AdminSkillPage() {
             setNotice(t('adminSkill.notice.actionDone', { action }));
             await refreshSkill();
         } catch (actionError) {
-            if (action === 'publish' && canAdmin && getApiErrorCode(actionError) === 'JUDGEMENT_REQUIRED') {
+            if (action === 'publish' && canAdmin && ['JUDGEMENT_REQUIRED', 'JUDGEMENT_OVERRIDE_REQUIRED'].includes(getApiErrorCode(actionError) ?? '')) {
                 setShowPublishOverrideDialog(true);
+                setError(null);
+                return;
             }
             setError(handleApiError(actionError, language));
         } finally {
@@ -2186,8 +2372,7 @@ export function AdminSkillPage() {
         setNotice(null);
         try {
             const response = await adminApi.rejudgeSkillVersion(id, selectedVersionRecord.version);
-            setJudgements((current) => [response.data, ...current]);
-            setNotice(t('adminSkill.notice.rejudged'));
+            setActiveOperation(response.data);
         } catch (actionError) {
             setError(handleApiError(actionError, language));
         } finally {
@@ -2203,10 +2388,8 @@ export function AdminSkillPage() {
         setError(null);
         setNotice(null);
         try {
-            await adminApi.judgeProposal(proposalDetail.id);
-            const response = await adminApi.getProposal(proposalDetail.id);
-            setProposalDetail(response.data);
-            setNotice(t('adminSkill.notice.proposalRejudged'));
+            const response = await adminApi.judgeProposal(proposalDetail.id);
+            setActiveOperation(response.data);
         } catch (actionError) {
             setError(handleApiError(actionError, language));
             try {
@@ -2228,10 +2411,8 @@ export function AdminSkillPage() {
         setError(null);
         setNotice(null);
         try {
-            await adminApi.judgeProposalFile(proposalDetail.id, fileId);
-            const response = await adminApi.getProposal(proposalDetail.id);
-            setProposalDetail(response.data);
-            setNotice(t('adminSkill.notice.fileRejudged'));
+            const response = await adminApi.judgeProposalFile(proposalDetail.id, fileId);
+            setActiveOperation(response.data);
         } catch (actionError) {
             setError(handleApiError(actionError, language));
             try {

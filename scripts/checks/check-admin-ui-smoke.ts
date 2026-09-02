@@ -60,8 +60,7 @@ async function main(): Promise<void> {
     evidence: includesAll(layout, [
       '!isLoading &&',
       'isAuthenticated ? (',
-      'to="/admin/proposals"',
-      'to="/admin/drafts"',
+      'to="/admin/proposals?filter=review"',
       'to="/admin/review"',
       'to="/admin/login"',
       "t('app.nav.signIn')",

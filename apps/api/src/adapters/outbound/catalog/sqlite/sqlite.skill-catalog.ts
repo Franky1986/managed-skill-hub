@@ -12,6 +12,7 @@ import {
   CatalogSkillVersionRecord,
   SkillCatalogPort,
 } from '../../../../application/ports/outbound/skill-catalog.port';
+import { CreateOperationInput, OperationRecord } from '../../../../application/ports/outbound/operation-store.port';
 import { Proposal } from '../../../../domain/proposal/Proposal';
 import { ProposalStatus } from '../../../../domain/proposal/ProposalStatus';
 import { Skill } from '../../../../domain/skill/Skill';
@@ -558,6 +559,72 @@ export class SqliteSkillCatalog implements SkillCatalogPort {
     return result;
   }
 
+  async createOperation(input: CreateOperationInput): Promise<OperationRecord> {
+    const db = this.getDb();
+    const now = new Date();
+    db.prepare(`INSERT INTO skill_catalog_operations (
+      id, kind, state, proposal_id, skill_id, skill_version, file_path, requested_by,
+      payload_json, dedupe_key, phase, message, completed, total, current_target, error_code,
+      lease_owner, lease_expires_at, created_at, started_at, finished_at, updated_at
+    ) VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL, ?)`)
+      .run(input.id, input.kind, input.proposalId ?? null, input.skillId ?? null, input.skillVersion ?? null,
+        input.filePath ?? null, input.requestedBy, JSON.stringify(input.payload ?? {}), input.dedupeKey, input.progress.phase,
+        input.progress.message, input.progress.completed, input.progress.total, input.progress.currentTarget,
+        now.toISOString(), now.toISOString());
+    return this.requireOperation(input.id);
+  }
+
+  async getOperation(id: string): Promise<OperationRecord | null> {
+    const row = this.getDb().prepare('SELECT * FROM skill_catalog_operations WHERE id = ?').get(id) as CatalogOperationRow | undefined;
+    return row ? mapCatalogOperationRow(row) : null;
+  }
+
+  async findActiveOperation(dedupeKey: string): Promise<OperationRecord | null> {
+    const row = this.getDb().prepare(`SELECT * FROM skill_catalog_operations WHERE dedupe_key = ? AND state IN ('queued', 'running')`).get(dedupeKey) as CatalogOperationRow | undefined;
+    return row ? mapCatalogOperationRow(row) : null;
+  }
+
+  async listRunnableOperations(limit: number): Promise<OperationRecord[]> {
+    const now = new Date().toISOString();
+    const rows = this.getDb().prepare(`SELECT * FROM skill_catalog_operations
+      WHERE state = 'queued' OR (state = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?)
+      ORDER BY created_at ASC LIMIT ?`).all(now, limit) as CatalogOperationRow[];
+    return rows.map(mapCatalogOperationRow);
+  }
+
+  async claimOperation(id: string, workerId: string, leaseUntil: Date): Promise<OperationRecord | null> {
+    const db = this.getDb();
+    const now = new Date().toISOString();
+    const claimed = db.prepare(`UPDATE skill_catalog_operations
+      SET state = 'running', lease_owner = ?, lease_expires_at = ?, started_at = COALESCE(started_at, ?), updated_at = ?
+      WHERE id = ? AND (state = 'queued' OR (state = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?))`)
+      .run(workerId, leaseUntil.toISOString(), now, now, id, now);
+    if (claimed.changes !== 1) return null;
+    return this.requireOperation(id);
+  }
+
+  async updateOperation(id: string, workerId: string, patch: Parameters<SkillCatalogPort['updateOperation']>[2]): Promise<OperationRecord | null> {
+    const current = await this.getOperation(id);
+    if (!current || current.state !== 'running') return null;
+    const now = new Date();
+    const state = patch.state ?? 'running';
+    const result = this.getDb().prepare(`UPDATE skill_catalog_operations SET
+      state = ?, phase = ?, message = ?, completed = ?, total = ?, current_target = ?, error_code = ?,
+      lease_expires_at = ?, finished_at = ?, updated_at = ?, dedupe_key = ?
+      WHERE id = ? AND lease_owner = ? AND state = 'running'`)
+      .run(state, patch.phase ?? current.phase, patch.message ?? current.message,
+        patch.completed ?? current.completed, patch.total ?? current.total, patch.currentTarget === undefined ? current.currentTarget : patch.currentTarget,
+        patch.errorCode ?? null, state === 'running' ? new Date(now.getTime() + 5 * 60_000).toISOString() : null,
+        state === 'running' ? null : now.toISOString(), now.toISOString(), state === 'running' ? current.dedupeKey : null, id, workerId);
+    return result.changes === 1 ? this.requireOperation(id) : null;
+  }
+
+  private requireOperation(id: string): OperationRecord {
+    const operation = this.getDb().prepare('SELECT * FROM skill_catalog_operations WHERE id = ?').get(id) as CatalogOperationRow | undefined;
+    if (!operation) throw new StorageError(`Operation ${id} was not persisted.`);
+    return mapCatalogOperationRow(operation);
+  }
+
   async rebuild(skills: Skill[], options?: { clearProjections?: boolean }): Promise<void> {
     const clearProjections = options?.clearProjections ?? false;
     const db = this.getDb();
@@ -967,6 +1034,54 @@ interface CatalogProposalFileRow {
   mime_type: string;
   size_bytes: number;
   sha256: string | null;
+}
+
+interface CatalogOperationRow {
+  id: string;
+  kind: OperationRecord['kind'];
+  state: OperationRecord['state'];
+  proposal_id: string | null;
+  skill_id: string | null;
+  skill_version: string | null;
+  file_path: string | null;
+  requested_by: string;
+  payload_json: string;
+  dedupe_key: string | null;
+  phase: string;
+  message: string;
+  completed: number;
+  total: number;
+  current_target: string | null;
+  error_code: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
+
+function mapCatalogOperationRow(row: CatalogOperationRow): OperationRecord {
+  return {
+    id: row.id,
+    kind: row.kind,
+    state: row.state,
+    proposalId: row.proposal_id,
+    skillId: row.skill_id,
+    skillVersion: row.skill_version,
+    filePath: row.file_path,
+    requestedBy: row.requested_by,
+    payload: JSON.parse(row.payload_json) as Record<string, unknown>,
+    dedupeKey: row.dedupe_key,
+    phase: row.phase,
+    message: row.message,
+    completed: row.completed,
+    total: row.total,
+    currentTarget: row.current_target,
+    errorCode: row.error_code,
+    createdAt: new Date(row.created_at),
+    startedAt: row.started_at ? new Date(row.started_at) : null,
+    finishedAt: row.finished_at ? new Date(row.finished_at) : null,
+    updatedAt: new Date(row.updated_at),
+  };
 }
 
 function mapCatalogVersionRow(row: CatalogVersionRow): CatalogSkillVersionRecord {

@@ -1,0 +1,146 @@
+<svg viewBox="0 0 1600 1040" xmlns="http://www.w3.org/2000/svg" font-family="Inter, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#475569"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#15803d"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#0f172a" flood-opacity=".10"/>
+    </filter>
+    <symbol id="person" viewBox="0 0 32 32">
+      <circle cx="16" cy="10" r="5"/><path d="M6 28c0-6 4.3-10 10-10s10 4 10 10"/>
+    </symbol>
+    <symbol id="agent" viewBox="0 0 32 32">
+      <rect x="3" y="4" width="26" height="19" rx="5"/><path d="M10 23l-3 5 8-5M16 9v9M11.5 13.5h9"/>
+    </symbol>
+    <symbol id="search" viewBox="0 0 32 32">
+      <circle cx="14" cy="14" r="8"/><path d="M20 20l7 7"/>
+    </symbol>
+    <symbol id="download" viewBox="0 0 32 32">
+      <path d="M16 4v15M10 14l6 6 6-6M6 27h20"/>
+    </symbol>
+    <symbol id="spark" viewBox="0 0 32 32">
+      <path d="M16 3l2.7 9.3L28 16l-9.3 2.7L16 28l-2.7-9.3L4 16l9.3-2.7z"/>
+    </symbol>
+    <symbol id="review" viewBox="0 0 32 32">
+      <path d="M7 4h14l4 4v20H7zM12 16l3 3 6-7"/>
+    </symbol>
+    <symbol id="check" viewBox="0 0 32 32">
+      <path d="M6 17l6 6L27 8"/>
+    </symbol>
+  </defs>
+
+  <rect width="1600" height="1040" fill="#f8fafc"/>
+  <rect x="0" y="0" width="1600" height="178" fill="#0f172a"/>
+  <circle cx="1420" cy="-30" r="220" fill="#1d4ed8" opacity=".35"/>
+  <circle cx="1525" cy="148" r="120" fill="#38bdf8" opacity=".18"/>
+  <text x="72" y="76" font-size="40" font-weight="700" fill="#ffffff">From an AI workflow to a shared team capability</text>
+  <text x="72" y="121" font-size="21" fill="#cbd5e1">Tell your agent what you need. It finds, uses and submits skills — the Skill Hub keeps the shared path governed.</text>
+  <text x="72" y="151" font-size="16" fill="#93c5fd">For product managers and everyday agent users — no API calls required.</text>
+
+  <!-- Role legend -->
+  <g transform="translate(72 216)">
+    <rect width="272" height="56" rx="28" fill="#fff" stroke="#cbd5e1"/>
+    <circle cx="31" cy="28" r="19" fill="#f1f5f9"/>
+    <g stroke="#334155" fill="none" stroke-width="2.3" stroke-linecap="round"><use href="#person" x="19" y="16" width="24" height="24"/></g>
+    <text x="61" y="33" font-size="16" font-weight="700" fill="#334155">You — intent &amp; feedback</text>
+  </g>
+  <g transform="translate(365 216)">
+    <rect width="316" height="56" rx="28" fill="#eff6ff" stroke="#93c5fd"/>
+    <circle cx="31" cy="28" r="19" fill="#fff"/>
+    <g stroke="#2563eb" fill="none" stroke-width="2.3" stroke-linecap="round"><use href="#agent" x="19" y="16" width="24" height="24"/></g>
+    <text x="61" y="33" font-size="16" font-weight="700" fill="#1d4ed8">Your agent — does the work</text>
+  </g>
+  <g transform="translate(702 216)">
+    <rect width="342" height="56" rx="28" fill="#f0fdf4" stroke="#86efac"/>
+    <circle cx="31" cy="28" r="19" fill="#fff"/>
+    <g stroke="#15803d" fill="none" stroke-width="2.3" stroke-linecap="round"><use href="#check" x="19" y="16" width="24" height="24"/></g>
+    <text x="61" y="33" font-size="16" font-weight="700" fill="#166534">Skill Hub — shared &amp; governed</text>
+  </g>
+
+  <!-- Use path -->
+  <text x="72" y="330" font-size="22" font-weight="700" fill="#1e3a8a">1. Find and use a proven workflow</text>
+  <text x="72" y="358" font-size="16" fill="#64748b">Start with the outcome you want. The agent handles discovery, versions and the technical setup.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="388" width="302" height="230" rx="18" fill="#fff" stroke="#cbd5e1" stroke-width="2"/>
+    <circle cx="116" cy="432" r="24" fill="#f1f5f9"/><g stroke="#334155" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#person" x="101" y="417" width="30" height="30"/></g>
+    <text x="150" y="427" font-size="18" font-weight="700" fill="#334155">You ask</text>
+    <text x="105" y="483" font-size="18" fill="#0f172a">“Help me validate</text>
+    <text x="105" y="510" font-size="18" fill="#0f172a">this product concept.”</text>
+    <text x="105" y="565" font-size="14" fill="#64748b">Plain language. No API.</text>
+  </g>
+  <path d="M374 503H438" stroke="#2563eb" stroke-width="3" fill="none" marker-end="url(#arrowBlue)"/>
+  <g filter="url(#shadow)">
+    <rect x="450" y="388" width="302" height="230" rx="18" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+    <circle cx="494" cy="432" r="24" fill="#fff"/><g stroke="#2563eb" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#search" x="479" y="417" width="30" height="30"/></g>
+    <text x="528" y="427" font-size="18" font-weight="700" fill="#1d4ed8">Your agent finds</text>
+    <text x="483" y="482" font-size="17" fill="#1e3a8a">Searches published skills</text>
+    <text x="483" y="508" font-size="17" fill="#1e3a8a">and suggests a fit.</text>
+    <text x="483" y="565" font-size="14" fill="#3b82f6">Only released versions.</text>
+  </g>
+  <path d="M752 503H816" stroke="#2563eb" stroke-width="3" fill="none" marker-end="url(#arrowBlue)"/>
+  <g filter="url(#shadow)">
+    <rect x="828" y="388" width="302" height="230" rx="18" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+    <circle cx="872" cy="432" r="24" fill="#fff"/><g stroke="#2563eb" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#download" x="857" y="417" width="30" height="30"/></g>
+    <text x="906" y="427" font-size="18" font-weight="700" fill="#1d4ed8">Your agent uses it</text>
+    <text x="861" y="482" font-size="17" fill="#1e3a8a">Downloads the exact</text>
+    <text x="861" y="508" font-size="17" fill="#1e3a8a">version and applies it.</text>
+    <text x="861" y="565" font-size="14" fill="#3b82f6">Source and version stay clear.</text>
+  </g>
+  <path d="M1130 503H1194" stroke="#15803d" stroke-width="3" fill="none" marker-end="url(#arrowGreen)"/>
+  <g filter="url(#shadow)">
+    <rect x="1206" y="388" width="322" height="230" rx="18" fill="#f0fdf4" stroke="#4ade80" stroke-width="2"/>
+    <circle cx="1250" cy="432" r="24" fill="#fff"/><g stroke="#15803d" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#check" x="1235" y="417" width="30" height="30"/></g>
+    <text x="1284" y="427" font-size="18" font-weight="700" fill="#166534">You get a result</text>
+    <text x="1239" y="482" font-size="17" fill="#166534">A proven workflow helps</text>
+    <text x="1239" y="508" font-size="17" fill="#166534">with your real task.</text>
+    <text x="1239" y="565" font-size="14" fill="#15803d">Ready to improve? Keep going.</text>
+  </g>
+
+  <!-- Proposal path -->
+  <path d="M1367 618V684H223V710" stroke="#475569" stroke-width="2.5" stroke-dasharray="8 8" fill="none" marker-end="url(#arrow)"/>
+  <text x="770" y="677" font-size="14" font-weight="700" fill="#64748b" text-anchor="middle">Found a better way? Share the improvement with your team.</text>
+  <text x="72" y="755" font-size="22" font-weight="700" fill="#5b21b6">2. Turn an improvement into a reusable team skill</text>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="782" width="302" height="186" rx="18" fill="#fff" stroke="#cbd5e1" stroke-width="2"/>
+    <circle cx="116" cy="826" r="24" fill="#f1f5f9"/><g stroke="#334155" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#person" x="101" y="811" width="30" height="30"/></g>
+    <text x="150" y="821" font-size="18" font-weight="700" fill="#334155">You ask</text>
+    <text x="105" y="869" font-size="16.5" fill="#0f172a">“Submit this improved</text>
+    <text x="105" y="894" font-size="16.5" fill="#0f172a">workflow to our Skill Hub.”</text>
+    <text x="105" y="935" font-size="14" fill="#64748b">You give direction — not forms.</text>
+  </g>
+  <path d="M374 875H438" stroke="#2563eb" stroke-width="3" fill="none" marker-end="url(#arrowBlue)"/>
+  <g filter="url(#shadow)">
+    <rect x="450" y="782" width="302" height="186" rx="18" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+    <circle cx="494" cy="826" r="24" fill="#fff"/><g stroke="#2563eb" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#agent" x="479" y="811" width="30" height="30"/></g>
+    <text x="528" y="821" font-size="18" font-weight="700" fill="#1d4ed8">Your agent prepares</text>
+    <text x="483" y="869" font-size="16.5" fill="#1e3a8a">Checks duplicates, packages</text>
+    <text x="483" y="894" font-size="16.5" fill="#1e3a8a">files and submits a proposal.</text>
+    <text x="483" y="935" font-size="14" fill="#3b82f6">It asks if it needs your input.</text>
+  </g>
+  <path d="M752 875H816" stroke="#7c3aed" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <g filter="url(#shadow)">
+    <rect x="828" y="782" width="302" height="186" rx="18" fill="#faf5ff" stroke="#c084fc" stroke-width="2"/>
+    <circle cx="872" cy="826" r="24" fill="#fff"/><g stroke="#7c3aed" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#spark" x="857" y="811" width="30" height="30"/></g>
+    <text x="906" y="821" font-size="18" font-weight="700" fill="#6b21a8">Skill Hub checks</text>
+    <text x="861" y="869" font-size="16.5" fill="#581c87">Validation plus optional</text>
+    <text x="861" y="894" font-size="16.5" fill="#581c87">AI judgement flag risks.</text>
+    <text x="861" y="935" font-size="14" fill="#7e22ce">AI supports — it does not decide alone.</text>
+  </g>
+  <path d="M1130 875H1194" stroke="#b45309" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <g filter="url(#shadow)">
+    <rect x="1206" y="782" width="322" height="186" rx="18" fill="#f0fdf4" stroke="#4ade80" stroke-width="2"/>
+    <circle cx="1250" cy="826" r="24" fill="#fff"/><g stroke="#15803d" fill="none" stroke-width="2.5" stroke-linecap="round"><use href="#review" x="1235" y="811" width="30" height="30"/></g>
+    <text x="1284" y="821" font-size="18" font-weight="700" fill="#166534">Reviewed &amp; published</text>
+    <text x="1239" y="869" font-size="16.5" fill="#166534">A human reviews by default;</text>
+    <text x="1239" y="894" font-size="16.5" fill="#166534">the new version is shared.</text>
+    <text x="1239" y="935" font-size="14" fill="#15803d">Now every agent can find and use it.</text>
+  </g>
+</svg>

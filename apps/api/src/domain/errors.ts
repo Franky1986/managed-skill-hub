@@ -35,6 +35,11 @@ export class JudgementRequiredError extends DomainError {
     super('Publishing requires a real judgement for the skill version and every extractable file.');
   }
 }
+export class JudgementOverrideReasonRequiredError extends DomainError {
+  constructor() {
+    super('A judgement override reason is required.');
+  }
+}
 export class ConfigurationError extends DomainError {}
 export class ProposalFileLimitExceededError extends DomainError {
   constructor(

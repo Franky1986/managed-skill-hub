@@ -1,11 +1,14 @@
 import { SkillFile } from '../api/skills';
 
+export type FileTreeChangeKind = 'added' | 'modified';
+
 type FileTreeNode = {
     name: string;
     path: string;
     fullPath: string;
     type: 'directory' | 'file';
     isEntrypoint?: boolean;
+    changeKind?: FileTreeChangeKind;
     children?: FileTreeNode[];
 };
 
@@ -17,6 +20,7 @@ export function SkillFileTree({
     onSelectDirectory,
     displayRootPath = null,
     emptyLabel = 'No files available.',
+    changeKindsByPath = {},
 }: {
     files: SkillFile[];
     selectedPath: string | null;
@@ -25,8 +29,9 @@ export function SkillFileTree({
     onSelectDirectory?: (path: string) => void;
     displayRootPath?: string | null;
     emptyLabel?: string;
+    changeKindsByPath?: Record<string, FileTreeChangeKind>;
 }) {
-    const tree = buildFileTree(files, displayRootPath);
+    const tree = buildFileTree(files, displayRootPath, changeKindsByPath);
 
     if (tree.length === 0) {
         return <p className="text-sm text-gray-500">{emptyLabel}</p>;
@@ -77,22 +82,32 @@ function renderTreeNode(
                 selectedPath === node.fullPath ? 'bg-slate-900 text-white' : 'hover:bg-gray-100'
             }`}
         >
-            {node.name}
+            <span className="flex items-center justify-between gap-2">
+                <span className="truncate">{node.name}</span>
+                {node.changeKind && (
+                    <span className={node.changeKind === 'added' ? 'rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800' : 'rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900'}>
+                        {node.changeKind === 'added' ? '+' : '~'}
+                    </span>
+                )}
+            </span>
         </button>
     );
 }
 
-function buildFileTree(files: SkillFile[], displayRootPath: string | null): FileTreeNode[] {
+function buildFileTree(files: SkillFile[], displayRootPath: string | null, changeKindsByPath: Record<string, FileTreeChangeKind>): FileTreeNode[] {
     const root = normalizePath(displayRootPath);
     return buildChildren(files.map((file) => ({
         ...file,
         displayPath: toDisplayPath(file.path, root),
+        changeKind: changeKindsByPath[file.path],
     })));
 }
 
-function buildChildren(files: Array<SkillFile & { displayPath: string }>, prefix = ''): FileTreeNode[] {
-    const directories = new Map<string, Array<SkillFile & { displayPath: string }>>();
-    const leafFiles: Array<SkillFile & { displayPath: string }> = [];
+type DisplayFile = SkillFile & { displayPath: string; changeKind?: FileTreeChangeKind };
+
+function buildChildren(files: DisplayFile[], prefix = ''): FileTreeNode[] {
+    const directories = new Map<string, DisplayFile[]>();
+    const leafFiles: DisplayFile[] = [];
 
     for (const file of files) {
         const relative = prefix ? file.displayPath.slice(prefix.length + 1) : file.displayPath;
@@ -123,6 +138,7 @@ function buildChildren(files: Array<SkillFile & { displayPath: string }>, prefix
         fullPath: file.path,
         type: 'file' as const,
         isEntrypoint: file.role === 'entrypoint' || file.path === 'SKILL.md' || file.displayPath === 'SKILL.md',
+        changeKind: file.changeKind,
     }));
 
     return [...directoryNodes, ...fileNodes].sort(sortTreeNodes);

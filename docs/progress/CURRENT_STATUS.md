@@ -2,9 +2,50 @@
 
 ## Current Date
 
-2026-08-12
+2026-09-02
 
 ## Project State
+
+The public skill detail now links directly to the protected admin workbench,
+including the latest published version in the URL so reviewers can switch
+versions and use existing lifecycle actions without reconstructing an admin
+route by hand. The route itself remains session- and role-protected.
+
+Asynchronous operation feedback no longer repeats an identical terminal state
+and worker phase. The proposal `finalize and publish` shortcut tracks its
+queued publish operation, so it shows progress and refreshes the actual final
+status rather than leaving a stale intermediate version state visible.
+
+Long-running proposal finalization, re-judgement, and publication now return a
+durable asynchronous operation rather than holding the browser request open.
+SQLite and MySQL catalog migrations persist operation phase, target, file
+progress, and safe terminal failure state; a leased worker resumes queued or
+expired work after an API restart. The admin workbench polls this operation and
+renders install-style progress for extraction and per-file judgement. File
+transfers alone use a scoped longer client timeout.
+
+When an admin skill is opened from a proposal-context URL, the workbench now
+also provides a direct link to the canonical skill-review route. This keeps
+proposal artifact inspection available while making the approval/publication
+workflow discoverable.
+
+Proposal review links use the immutable conversion version recorded in audit
+history. Submitter polling distinguishes a finalized upload from completed
+asynchronous finalization, so it does not stop before automatic judgements are
+available.
+
+The admin proposal overview polls all lifecycle counters independently of the
+currently selected filter. Its version history shows the immutable version
+recorded at conversion rather than a live next-version preview, which avoids
+misreporting an already-created `1.0.0` as a future `1.0.1`.
+Each grouped entry also shows the skill's current published version separately;
+the proposal-history rows are explicitly labelled with the version they created.
+
+The admin file comparison also shows a complete manifest-tree summary for the
+selected reference version: added, modified, and removed paths. New versions
+are materialized from the proposal file set only, so removed predecessor files
+are retained exclusively in their historical version and never leak into the
+new version's manifest or package.
 
 Judgements now use canonical, fingerprinted global and per-file inputs. During
 proposal conversion, unchanged real judgements are reused without a second
@@ -559,10 +600,9 @@ EPIC-005 is implemented:
   - admins can trigger proposal judgement from the proposal detail page,
   - proposal detail remains read-only for proposal lifecycle state and does not
     accept, reject, or convert proposals.
-- Draft skills are reachable through a dedicated `/admin/drafts` route linked
-  from the app shell and admin dashboard.
-- Skill versions submitted for review or approved for publishing are reachable
-  through `/admin/review`.
+- Draft, in-review, approved, and rejected skill versions are consolidated in
+  `/admin/review`; the queue replaces the former separate drafts route and
+  continuously shows per-filter and active-header counts.
 - Draft, in-review, and approved skill versions can be rejected from the skill
   workbench with a required reason.
 - Rejected skill versions are persisted as `rejected`, store rejection metadata

@@ -2,6 +2,12 @@
 
 ## Local Development Startup
 
+## Deferred: grounded artifact questions
+
+- [ ] Plan and explicitly prioritize the deferred grounded artifact question
+      assistant before implementation. The scoped feature request is recorded
+      in `docs/product/ARTIFACT_QUESTION_ASSISTANT_FEATURE_REQUEST.md`.
+
 ## Judgement reuse and migrations
 
 - [x] Persist canonical judgement fingerprints and reuse unchanged proposal
@@ -12,6 +18,17 @@
       legacy baseline, provider locks, and conditional pre-migration backups.
 - [x] Harden migration backup artifacts and audit error persistence so backup
       contents and provider/scanner diagnostics are not exposed unnecessarily.
+- [x] Move long-running proposal finalization, re-judgement, and publication
+      into durable asynchronous operations with visible phase and file progress.
+- [x] Consolidate draft and review skill-version work in one background-polled
+      review queue with tab and app-header counts.
+- [x] Keep the proposal overview's grouped `All` count current through
+      background polling and distinguish an already-created conversion version
+      from the live next-version preview.
+- [x] Link each public skill detail to its protected, version-selected admin
+      workbench and make asynchronous publication completion unambiguous.
+- [ ] Decide whether a future reversible per-version disable/enable lifecycle
+      is needed; current `deprecated` remains intentionally terminal.
 - [ ] Exercise the public staged installer against copies of an existing
       SQLite catalog and, when used, a MySQL catalog before a production rollout.
 

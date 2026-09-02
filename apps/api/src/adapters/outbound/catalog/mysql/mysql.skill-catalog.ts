@@ -16,6 +16,7 @@ import {
   CatalogSkillVersionRecord,
   SkillCatalogPort,
 } from '../../../../application/ports/outbound/skill-catalog.port';
+import { CreateOperationInput, OperationRecord } from '../../../../application/ports/outbound/operation-store.port';
 import { computeArtifactId, computeContentDigestForVersion, computeSkillUuid, computeVersionUuid, isExtractableArtifact } from '../../../../application/usecases/skill/public-metadata';
 import { deriveProposalReviewMetadata } from '../../../../application/usecases/proposal/review-metadata';
 import { MysqlClient, MysqlConnection } from '../../mysql/mysql.connection';
@@ -585,6 +586,77 @@ export class MysqlSkillCatalog implements SkillCatalogPort {
     return result;
   }
 
+  async createOperation(input: CreateOperationInput): Promise<OperationRecord> {
+    const now = new Date();
+    await this.execute(`INSERT INTO skill_catalog_operations (
+      id, kind, state, proposal_id, skill_id, skill_version, file_path, requested_by,
+      payload_json, dedupe_key, phase, message, completed, total, current_target, created_at, updated_at
+    ) VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      input.id, input.kind, input.proposalId ?? null, input.skillId ?? null, input.skillVersion ?? null,
+      input.filePath ?? null, input.requestedBy, JSON.stringify(input.payload ?? {}), input.dedupeKey, input.progress.phase,
+      input.progress.message, input.progress.completed, input.progress.total, input.progress.currentTarget,
+      toMysqlDateTime(now), toMysqlDateTime(now),
+    ]);
+    return this.requireOperation(input.id);
+  }
+
+  async getOperation(id: string): Promise<OperationRecord | null> {
+    const rows = await this.query<CatalogOperationRow>('SELECT * FROM skill_catalog_operations WHERE id = ?', [id]);
+    return rows[0] ? mapCatalogOperationRow(rows[0]) : null;
+  }
+
+  async findActiveOperation(dedupeKey: string): Promise<OperationRecord | null> {
+    const rows = await this.query<CatalogOperationRow>(`SELECT * FROM skill_catalog_operations WHERE dedupe_key = ? AND state IN ('queued', 'running')`, [dedupeKey]);
+    return rows[0] ? mapCatalogOperationRow(rows[0]) : null;
+  }
+
+  async listRunnableOperations(limit: number): Promise<OperationRecord[]> {
+    const rows = await this.query<CatalogOperationRow>(`SELECT * FROM skill_catalog_operations
+      WHERE state = 'queued' OR (state = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?)
+      ORDER BY created_at ASC LIMIT ?`, [toMysqlDateTime(new Date()), limit]);
+    return rows.map(mapCatalogOperationRow);
+  }
+
+  async claimOperation(id: string, workerId: string, leaseUntil: Date): Promise<OperationRecord | null> {
+    const now = new Date();
+    const affected = await this.dbClient.withConnection(async (connection) => {
+      const [result] = await connection.execute<unknown>(`UPDATE skill_catalog_operations
+        SET state = 'running', lease_owner = ?, lease_expires_at = ?, started_at = COALESCE(started_at, ?), updated_at = ?
+        WHERE id = ? AND (state = 'queued' OR (state = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?))`, [
+        workerId, toMysqlDateTime(leaseUntil), toMysqlDateTime(now), toMysqlDateTime(now), id, toMysqlDateTime(now),
+      ]);
+      return (result as unknown as { affectedRows?: number }).affectedRows ?? 0;
+    });
+    if (affected !== 1) return null;
+    return this.requireOperation(id);
+  }
+
+  async updateOperation(id: string, workerId: string, patch: Parameters<SkillCatalogPort['updateOperation']>[2]): Promise<OperationRecord | null> {
+    const current = await this.getOperation(id);
+    if (!current || current.state !== 'running') return null;
+    const now = new Date();
+    const state = patch.state ?? 'running';
+    const affected = await this.dbClient.withConnection(async (connection) => {
+      const [result] = await connection.execute<unknown>(`UPDATE skill_catalog_operations SET
+        state = ?, phase = ?, message = ?, completed = ?, total = ?, current_target = ?, error_code = ?,
+        lease_expires_at = ?, finished_at = ?, updated_at = ?, dedupe_key = ?
+        WHERE id = ? AND lease_owner = ? AND state = 'running'`, [
+        state, patch.phase ?? current.phase, patch.message ?? current.message,
+        patch.completed ?? current.completed, patch.total ?? current.total, patch.currentTarget === undefined ? current.currentTarget : patch.currentTarget,
+        patch.errorCode ?? null, state === 'running' ? toMysqlDateTime(new Date(now.getTime() + 5 * 60_000)) : null,
+        state === 'running' ? null : toMysqlDateTime(now), toMysqlDateTime(now), state === 'running' ? current.dedupeKey : null, id, workerId,
+      ]);
+      return (result as unknown as { affectedRows?: number }).affectedRows ?? 0;
+    });
+    return affected === 1 ? this.requireOperation(id) : null;
+  }
+
+  private async requireOperation(id: string): Promise<OperationRecord> {
+    const operation = await this.getOperation(id);
+    if (!operation) throw new StorageError(`Operation ${id} was not persisted.`);
+    return operation;
+  }
+
   async rebuild(skills: Skill[], options?: { clearProjections?: boolean }): Promise<void> {
     const clearProjections = options?.clearProjections ?? false;
     if (clearProjections) {
@@ -1047,6 +1119,54 @@ interface CatalogProposalFileRow {
   mime_type: string;
   size_bytes: number;
   sha256: string | null;
+}
+
+interface CatalogOperationRow {
+  id: string;
+  kind: OperationRecord['kind'];
+  state: OperationRecord['state'];
+  proposal_id: string | null;
+  skill_id: string | null;
+  skill_version: string | null;
+  file_path: string | null;
+  requested_by: string;
+  payload_json: unknown;
+  dedupe_key: string | null;
+  phase: string;
+  message: string;
+  completed: number;
+  total: number;
+  current_target: string | null;
+  error_code: string | null;
+  created_at: Date | string;
+  started_at: Date | string | null;
+  finished_at: Date | string | null;
+  updated_at: Date | string;
+}
+
+function mapCatalogOperationRow(row: CatalogOperationRow): OperationRecord {
+  return {
+    id: row.id,
+    kind: row.kind,
+    state: row.state,
+    proposalId: row.proposal_id,
+    skillId: row.skill_id,
+    skillVersion: row.skill_version,
+    filePath: row.file_path,
+    requestedBy: row.requested_by,
+    payload: parseJsonObject<Record<string, unknown>>(row.payload_json),
+    dedupeKey: row.dedupe_key,
+    phase: row.phase,
+    message: row.message,
+    completed: Number(row.completed),
+    total: Number(row.total),
+    currentTarget: row.current_target,
+    errorCode: row.error_code,
+    createdAt: requireMysqlDateTime(row.created_at, 'skill_catalog_operations.created_at'),
+    startedAt: parseMysqlDateTime(row.started_at),
+    finishedAt: parseMysqlDateTime(row.finished_at),
+    updatedAt: requireMysqlDateTime(row.updated_at, 'skill_catalog_operations.updated_at'),
+  };
 }
 
 interface CatalogFileRow {
