@@ -5,6 +5,7 @@ import { mapSkillToAdminDetail } from '../../../application/usecases/skill/mappe
 import { ProposalAdminUpdateRequestDto } from '../../../application/dtos/proposal.dto';
 import { sendApiError, sendMappedApiError } from './error-response';
 import { sendArtifactResponse } from './artifact-response';
+import { operationResponse } from './operation-response';
 
 export function registerAdminProposalRoutes(app: FastifyInstance, container: Container, auth: AdminAuth): void {
   const reviewGuard = { preHandler: adminGuard(auth, 'reviewer') };
@@ -85,6 +86,41 @@ export function registerAdminProposalRoutes(app: FastifyInstance, container: Con
       const body = (request.body as { comment?: string } | undefined) ?? {};
       const skill = await container.reviewProposal.convertProposal(proposalId, adminActor(request), body.comment);
       return reply.send(mapSkillToAdminDetail(skill));
+    } catch (error) {
+      return sendMappedApiError(reply, request, error, { admin: true });
+    }
+  });
+
+  app.post('/admin/proposals/:proposalId/finalize-and-publish', adminOnlyGuard, async (request, reply) => {
+    try {
+      const { proposalId } = request.params as { proposalId: string };
+      const body = (request.body as { comment?: string; judgementOverrideReason?: string } | undefined) ?? {};
+      const proposal = await container.proposalRead.getDetail(proposalId);
+      if (!proposal) {
+        return sendApiError(reply, request, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: 'Proposal not found',
+        });
+      }
+      if (!['submitted', 'judged', 'converted'].includes(proposal.status)) {
+        return sendApiError(reply, request, {
+          statusCode: 409,
+          code: 'CONFLICT',
+          message: `Proposal cannot be finalized and published from status ${proposal.status}`,
+        });
+      }
+      const operation = await container.operations.start({
+        kind: 'convert_proposal_and_publish',
+        proposalId,
+        requestedBy: adminActor(request),
+        payload: {
+          comment: body.comment,
+          judgementOverrideAllowed: true,
+          judgementOverrideReason: body.judgementOverrideReason,
+        },
+      });
+      return reply.code(202).send(operationResponse(operation));
     } catch (error) {
       return sendMappedApiError(reply, request, error, { admin: true });
     }

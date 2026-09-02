@@ -3,7 +3,8 @@ export type OperationKind =
   | 'rejudge_proposal'
   | 'rejudge_proposal_file'
   | 'rejudge_skill_version'
-  | 'publish_skill_version';
+  | 'publish_skill_version'
+  | 'convert_proposal_and_publish';
 
 export type OperationState = 'queued' | 'running' | 'completed' | 'failed';
 

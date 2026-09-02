@@ -1,4 +1,5 @@
 import { ProposalDetail } from '../../api/proposals';
+import type { AsyncOperation } from '../../api/admin';
 import { SkillDetail, SkillFile } from '../../api/skills';
 
 export interface DiffLine {
@@ -83,6 +84,17 @@ export function selectCreatedProposalVersion(skill: SkillDetail, proposal: Propo
 /** The canonical review link must target the version created by this proposal, not its reference version. */
 export function selectProposalReviewVersion(proposal: ProposalDetail | null, selectedVersion: string): string {
     return proposal?.convertedVersion ?? proposal?.conversion.nextVersion ?? selectedVersion;
+}
+
+/** A failed proposal shortcut resumes through its durable proposal operation, not a version-only action. */
+export function shouldRetryCombinedProposalPublication(
+    operation: Pick<AsyncOperation, 'kind' | 'state' | 'errorCode'> | null,
+    proposal: ProposalDetail | null
+): boolean {
+    return operation?.kind === 'convert_proposal_and_publish'
+        && operation.state === 'failed'
+        && operation.errorCode === 'JUDGEMENT_OVERRIDE_REQUIRED'
+        && proposal !== null;
 }
 
 export function selectDefaultSkillFilePath(files: SkillFile[], entrypoint: string | null): string | null {

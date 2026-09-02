@@ -20,6 +20,9 @@
       contents and provider/scanner diagnostics are not exposed unnecessarily.
 - [x] Move long-running proposal finalization, re-judgement, and publication
       into durable asynchronous operations with visible phase and file progress.
+- [x] Make the administrator proposal `finalize and publish` shortcut one
+      durable operation with visible conversion, review, approval, and
+      publication phases.
 - [x] Consolidate draft and review skill-version work in one background-polled
       review queue with tab and app-header counts.
 - [x] Keep the proposal overview's grouped `All` count current through

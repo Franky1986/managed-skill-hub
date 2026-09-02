@@ -19,8 +19,13 @@ The workbench renders the durable operation state and, while distinct, its
 current worker phase. A terminal operation whose state and phase are both
 `completed` is shown once rather than as duplicate completion text.
 
-The proposal shortcut that finalizes and publishes a proposal stores the
-returned publish operation in the page state. The workbench therefore polls
-the queued publication, refreshes the selected version after completion, and
-does not claim publication succeeded before the asynchronous operation has
-completed.
+The proposal shortcut that finalizes and publishes starts one durable workflow
+operation immediately, displays conversion, review-submission, approval, and
+publication phases while polling it, refreshes the selected version after
+completion, and does not claim publication succeeded before completion.
+
+If that operation stops because a judgement override reason is required, the
+override dialog retries the same proposal operation with the supplied reason.
+It must not route through a version-only publish action, because the proposal
+view may still hold the pre-conversion state while the durable operation has
+already created the target version.

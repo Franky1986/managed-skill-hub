@@ -19,6 +19,7 @@ import {
     selectAvailableComparisonVersions,
     selectCreatedProposalVersion,
     selectProposalReviewVersion,
+    shouldRetryCombinedProposalPublication,
     selectDefaultComparisonVersion,
     selectDefaultSkillFilePath,
     selectInitialSkillVersion,
@@ -2223,8 +2224,17 @@ export function AdminSkillPage() {
         setError(null);
         setNotice(null);
         const trimmedComment = proposalFinalizeComment.trim();
-        let publicationQueued = false;
         try {
+            if (target === 'publish') {
+                const response = await adminApi.finalizeAndPublishProposal(
+                    proposalDetail.id,
+                    trimmedComment.length > 0 ? trimmedComment : undefined
+                );
+                setActiveOperation(response.data);
+                setProposalFinalizeComment('');
+                window.dispatchEvent(new Event('skillHub:proposalDecision'));
+                return;
+            }
             const response = await adminApi.convertProposal(
                 proposalDetail.id,
                 trimmedComment.length > 0 ? trimmedComment : undefined
@@ -2235,24 +2245,16 @@ export function AdminSkillPage() {
             if (createdVersion && target !== 'draft') {
                 await adminApi.submitForReview(targetSkillId, createdVersion);
             }
-            if (createdVersion && target === 'publish') {
-                await adminApi.approve(targetSkillId, createdVersion);
-                const publishResponse = await adminApi.publish(targetSkillId, createdVersion);
-                setActiveOperation(publishResponse.data);
-                publicationQueued = true;
-            }
             await refreshSkill(createdVersion);
             if (createdVersion) {
                 setSelectedVersion(createdVersion);
             }
             setProposalFinalizeComment('');
-            if (!publicationQueued) {
-                setNotice(
-                    target === 'review'
-                        ? t('adminSkill.notice.proposalFinalizedAndReview')
-                        : t('adminSkill.notice.proposalFinalized')
-                );
-            }
+            setNotice(
+                target === 'review'
+                    ? t('adminSkill.notice.proposalFinalizedAndReview')
+                    : t('adminSkill.notice.proposalFinalized')
+            );
             window.dispatchEvent(new Event('skillHub:proposalDecision'));
         } catch (finalizeError) {
             setError(handleApiError(finalizeError, language));
@@ -2356,6 +2358,21 @@ export function AdminSkillPage() {
     async function handleConfirmPublishOverride() {
         const trimmed = publishOverrideReason.trim();
         if (!trimmed) {
+            return;
+        }
+        if (shouldRetryCombinedProposalPublication(activeOperation, proposalDetail) && proposalDetail) {
+            setActionLoading('finalize-publish-override');
+            setError(null);
+            try {
+                const response = await adminApi.finalizeAndPublishProposal(proposalDetail.id, undefined, trimmed);
+                setActiveOperation(response.data);
+                setShowPublishOverrideDialog(false);
+                setPublishOverrideReason('');
+            } catch (overrideError) {
+                setError(handleApiError(overrideError, language));
+            } finally {
+                setActionLoading(null);
+            }
             return;
         }
         await handleVersionAction('publish', trimmed);

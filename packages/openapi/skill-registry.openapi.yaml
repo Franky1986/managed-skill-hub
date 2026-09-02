@@ -1231,7 +1231,6 @@ paths:
         required: true
         schema:
           type: string
-          format: uuid
       requestBody:
         required: true
         content:
@@ -2360,6 +2359,48 @@ paths:
                 $ref: '#/components/schemas/SkillResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /admin/proposals/{proposalId}/finalize-and-publish:
+    post:
+      operationId: adminFinalizeAndPublishProposal
+      tags:
+      - Admin Proposals
+      summary: Convert, review, approve, and publish a proposal asynchronously
+      description: Starts one durable administrator-only operation. The operation reports conversion, review submission, approval, and publication phases and resumes from persisted proposal and version state after a worker restart.
+      security:
+      - adminSession: []
+      parameters:
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  description: Optional audited conversion comment.
+                judgementOverrideReason:
+                  type: string
+                  description: Required only when the configured publication policy requires an administrator override.
+      responses:
+        '202':
+          description: End-to-end publication workflow accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
         '409':
@@ -5320,6 +5361,7 @@ components:
           - rejudge_proposal_file
           - rejudge_skill_version
           - publish_skill_version
+          - convert_proposal_and_publish
         state:
           type: string
           enum:

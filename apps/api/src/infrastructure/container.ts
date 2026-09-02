@@ -235,7 +235,29 @@ export async function buildContainer(
     options.recordJudgementEvent,
     config.judgerReuseScope
   );
-  const operations = new AsyncOperationService(catalog, proposalCommand, judgeProposal, judgeSkillVersion, reviewSkill);
+  const proposalRead = new ProposalReadUseCase(
+    repo,
+    storage,
+    proposalExtractor,
+    audit,
+    catalog,
+    config.autoPublishOnGreen,
+    config.proposalMaxFiles,
+    config.proposalMaxFileSizeBytes,
+    config.proposalDisallowedPaths,
+    config.judgerProvider
+  );
+  const adminSkillRead = new AdminSkillReadUseCase(repo, storage, extractor, catalog);
+  const operations = new AsyncOperationService(
+    catalog,
+    proposalCommand,
+    judgeProposal,
+    judgeSkillVersion,
+    reviewSkill,
+    reviewProposal,
+    proposalRead,
+    adminSkillRead
+  );
   await operations.resume();
   operations.startWorker();
 
@@ -255,18 +277,7 @@ export async function buildContainer(
     reviewSkill,
     skillQuery: query,
     proposalCommand,
-    proposalRead: new ProposalReadUseCase(
-      repo,
-      storage,
-      proposalExtractor,
-      audit,
-      catalog,
-      config.autoPublishOnGreen,
-      config.proposalMaxFiles,
-      config.proposalMaxFileSizeBytes,
-      config.proposalDisallowedPaths,
-      config.judgerProvider
-    ),
+    proposalRead,
     proposalDuplicateCheck,
     reviewProposal,
     nameSuggestion: new SuggestSkillNameUseCase(repo),
@@ -278,7 +289,7 @@ export async function buildContainer(
     extractProposalFileContent: proposalExtractor,
     probeProposalFileContent: proposalProber,
     probeSkillFileContent: skillProber,
-    adminSkillRead: new AdminSkillReadUseCase(repo, storage, extractor, catalog),
+    adminSkillRead,
     reextractSkillFile: new ReextractSkillFileUseCase(extractor, audit),
     reextractProposalFile: new ReextractProposalFileUseCase(proposalExtractor, audit),
     reindexSkillSearch: new ReindexSkillSearchUseCase(repo, storage, scanner, search, audit, catalog),

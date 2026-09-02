@@ -14,6 +14,7 @@ import {
     selectInitialSkillVersion,
     selectLatestDraftVersion,
     selectProposalReviewVersion,
+    shouldRetryCombinedProposalPublication,
 } from './adminSkillPageSelectors';
 
 function file(path: string, role = 'attachment'): SkillFile {
@@ -121,6 +122,19 @@ describe('AdminSkillPage proposal context defaults', () => {
         } as ProposalDetail;
 
         expect(selectProposalReviewVersion(proposal, '1.0.0')).toBe('1.0.1');
+    });
+
+    it('retries a required override through the durable proposal workflow', () => {
+        const proposal = { id: 'prop-idem-1', status: 'judged' } as ProposalDetail;
+        const failedCombinedOperation = {
+            kind: 'convert_proposal_and_publish',
+            state: 'failed',
+            errorCode: 'JUDGEMENT_OVERRIDE_REQUIRED',
+        };
+
+        expect(shouldRetryCombinedProposalPublication(failedCombinedOperation, proposal)).toBe(true);
+        expect(shouldRetryCombinedProposalPublication({ ...failedCombinedOperation, kind: 'publish_skill_version' }, proposal)).toBe(false);
+        expect(shouldRetryCombinedProposalPublication(failedCombinedOperation, null)).toBe(false);
     });
 
     it('falls back to the latest version when the proposal target version does not exist', () => {

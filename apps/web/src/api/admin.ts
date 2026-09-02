@@ -108,7 +108,7 @@ export interface ProposalNotice {
 
 export interface AsyncOperation {
     id: string;
-    kind: 'finalize_proposal_upload' | 'rejudge_proposal' | 'rejudge_proposal_file' | 'rejudge_skill_version' | 'publish_skill_version';
+    kind: 'finalize_proposal_upload' | 'rejudge_proposal' | 'rejudge_proposal_file' | 'rejudge_skill_version' | 'publish_skill_version' | 'convert_proposal_and_publish';
     state: 'queued' | 'running' | 'completed' | 'failed';
     proposalId: string | null;
     skillId: string | null;
@@ -277,6 +277,11 @@ export const adminApi = {
         apiClient.delete(`/admin/proposals/${proposalId}`),
     convertProposal: (proposalId: string, comment?: string) =>
         apiClient.post<SkillDetail>(`/admin/proposals/${proposalId}/convert`, { comment }),
+    finalizeAndPublishProposal: (proposalId: string, comment?: string, judgementOverrideReason?: string) =>
+        apiClient.post<AsyncOperation>(`/admin/proposals/${proposalId}/finalize-and-publish`, {
+            ...(comment ? { comment } : {}),
+            ...(judgementOverrideReason ? { judgementOverrideReason } : {}),
+        }),
     rejectProposal: (proposalId: string, reason?: string, comment?: string) =>
         apiClient.post(`/admin/proposals/${proposalId}/reject`, { reason, comment }),
 };

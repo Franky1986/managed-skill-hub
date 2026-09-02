@@ -15,6 +15,7 @@ HTTP adapter for admin actions on proposals.
 - `DELETE /admin/proposals/:proposalId`
 - `POST /admin/proposals/:proposalId/reject`
 - `POST /admin/proposals/:proposalId/convert`
+- `POST /admin/proposals/:proposalId/finalize-and-publish`
 
 ## Non-Scope
 
@@ -40,14 +41,15 @@ HTTP adapter for admin actions on proposals.
   proposal/file metadata to extractor.
 - Pass request parameters, optional rejection reason, and optional review
   comment to use case.
-- Return proposal responses or admin skill detail responses. Proposal conversion
+- Return proposal responses, admin skill detail responses, or redacted durable
+  operation responses. Proposal conversion
   must include draft/in-review/rejected versions so the admin UI can continue
   review shortcuts against the version just created.
 
 ## Inputs / Outputs
 
 - Inputs: proposal ID, file ID, session actor, optional `reason`, optional
-  `comment`
+  `comment`, and optional publication override reason
 - Outputs: `ProposalResponse`, admin `SkillResponse`, raw file content, or
   `ExtractedContentResponse`
 
@@ -71,6 +73,12 @@ HTTP adapter for admin actions on proposals.
 - Reject updates status and reason.
 - Convert creates a skill or new draft version and marks proposal as
   `converted`.
+- Finalize-and-publish returns `202 Accepted` immediately and delegates the
+  complete conversion-to-publication workflow to a durable admin operation.
+- Finalize-and-publish preflights proposal existence and permits only
+  `submitted`, `judged`, or already `converted` proposals. Missing proposals
+  return `404`; non-convertible states return `409` without creating an
+  operation.
 - Admin can read proposal files both raw and as `Extracted Content`.
 - `re-extract` for proposal files does not change original file.
 - Endpoints match OpenAPI spec.

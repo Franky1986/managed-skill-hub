@@ -76,6 +76,88 @@ describe('AsyncOperationService', () => {
     expect(failed).toMatchObject({ state: 'failed', errorCode: 'JUDGEMENT_OVERRIDE_REQUIRED', message: 'A judgement override reason is required.' });
   });
 
+  it('runs convert, review, approval, and publication as one durable workflow', async () => {
+    const store = new MemoryOperationStore();
+    let converted = false;
+    let versionStatus = 'draft';
+    const proposalRead = {
+      getDetail: vi.fn(async () => ({
+        id: 'proposal-1',
+        status: converted ? 'converted' : 'judged',
+        convertedVersion: converted ? '1.0.0' : null,
+        conversion: { targetSkillId: 'skill-1' },
+      })),
+    };
+    const reviewProposal = { convertProposal: vi.fn(async () => { converted = true; }) };
+    const reviewSkill = {
+      submitForReview: vi.fn(async () => { versionStatus = 'in_review'; }),
+      approve: vi.fn(async () => { versionStatus = 'approved'; }),
+      publish: vi.fn(async () => { versionStatus = 'published'; }),
+    };
+    const adminSkillRead = {
+      getSkillDetail: vi.fn(async () => ({ versions: [{ version: '1.0.0', status: versionStatus }] })),
+    };
+    const service = new AsyncOperationService(
+      store,
+      {} as never,
+      {} as never,
+      {} as never,
+      reviewSkill as never,
+      reviewProposal as never,
+      proposalRead as never,
+      adminSkillRead as never
+    );
+
+    const accepted = await service.start({ kind: 'convert_proposal_and_publish', proposalId: 'proposal-1', requestedBy: 'admin' });
+    const completed = await settled(store, accepted.id);
+
+    expect(reviewProposal.convertProposal).toHaveBeenCalledWith('proposal-1', 'admin', undefined);
+    expect(reviewSkill.submitForReview).toHaveBeenCalledWith('skill-1', '1.0.0', 'admin');
+    expect(reviewSkill.approve).toHaveBeenCalledWith('skill-1', '1.0.0', 'admin');
+    expect(reviewSkill.publish).toHaveBeenCalledWith('skill-1', '1.0.0', 'admin', expect.objectContaining({ judgementOverrideAllowed: false }));
+    expect(completed).toMatchObject({ state: 'completed', completed: 4, total: 4 });
+  });
+
+  it('resumes a converted workflow with an override reason without repeating prior transitions', async () => {
+    const store = new MemoryOperationStore();
+    let converted = false;
+    let versionStatus = 'draft';
+    const proposalRead = {
+      getDetail: vi.fn(async () => ({
+        id: 'prop-idem-1',
+        status: converted ? 'converted' : 'judged',
+        convertedVersion: converted ? '1.0.0' : null,
+        conversion: { targetSkillId: 'skill-1' },
+      })),
+    };
+    const reviewProposal = { convertProposal: vi.fn(async () => { converted = true; }) };
+    const reviewSkill = {
+      submitForReview: vi.fn(async () => { versionStatus = 'in_review'; }),
+      approve: vi.fn(async () => { versionStatus = 'approved'; }),
+      publish: vi.fn(async (_skillId, _version, _actor, options) => {
+        if (!options.judgementOverrideReason) throw new JudgementOverrideReasonRequiredError();
+        versionStatus = 'published';
+      }),
+    };
+    const adminSkillRead = {
+      getSkillDetail: vi.fn(async () => ({ versions: [{ version: '1.0.0', status: versionStatus }] })),
+    };
+    const service = new AsyncOperationService(store, {} as never, {} as never, {} as never, reviewSkill as never, reviewProposal as never, proposalRead as never, adminSkillRead as never);
+
+    const initial = await service.start({ kind: 'convert_proposal_and_publish', proposalId: 'prop-idem-1', requestedBy: 'admin' });
+    expect(await settled(store, initial.id)).toMatchObject({ state: 'failed', errorCode: 'JUDGEMENT_OVERRIDE_REQUIRED' });
+
+    const retry = await service.start({
+      kind: 'convert_proposal_and_publish', proposalId: 'prop-idem-1', requestedBy: 'admin',
+      payload: { judgementOverrideAllowed: true, judgementOverrideReason: 'Manual review completed.' },
+    });
+    expect(await settled(store, retry.id)).toMatchObject({ state: 'completed' });
+    expect(reviewProposal.convertProposal).toHaveBeenCalledTimes(1);
+    expect(reviewSkill.submitForReview).toHaveBeenCalledTimes(1);
+    expect(reviewSkill.approve).toHaveBeenCalledTimes(1);
+    expect(reviewSkill.publish).toHaveBeenLastCalledWith('skill-1', '1.0.0', 'admin', expect.objectContaining({ judgementOverrideReason: 'Manual review completed.' }));
+  });
+
   it('returns one active operation when a caller retries the same intent', async () => {
     const store = new MemoryOperationStore();
     const service = new AsyncOperationService(store, {} as never, {} as never, {} as never, {} as never);

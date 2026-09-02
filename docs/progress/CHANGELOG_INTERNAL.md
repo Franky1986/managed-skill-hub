@@ -4,7 +4,9 @@
   workbench, so administrators can enter version management without manually
   constructing a route.
 - The proposal `finalize and publish` shortcut now retains the queued publish
-  operation for progress polling and final-state refresh.
+  operation for progress polling and final-state refresh. A required judgement
+  override retries that same durable proposal workflow rather than an
+  unavailable version-only action.
 - Removed redundant terminal operation wording when operation state and worker
   phase both report `completed`.
 - Documented that deprecation is currently terminal; reversible per-version
@@ -1729,3 +1731,13 @@ avoid sandbox background-process termination.
 - Added `jszip` as a direct `apps/api` dependency because the PPTX text scanner
   dynamically imports it during production compilation and runtime.
 - Verified the production build and full project check after updating the lockfile.
+# 2026-09-02: Make proposal finalization and publication visibly asynchronous
+
+- Replaced the browser-side chain of synchronous proposal conversion, review
+  submission, and approval calls with one administrator-only durable operation.
+- The workbench receives `202 Accepted` immediately and polls phase-aware
+  progress for conversion, review submission, approval, and publication.
+- Worker restart recovery derives the current proposal and version lifecycle
+  state before continuing, avoiding duplicate conversion or transition work.
+- Added API role coverage, workflow-operation regression coverage, OpenAPI
+  documentation, and localized operation-phase labels.

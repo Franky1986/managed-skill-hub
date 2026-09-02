@@ -54,7 +54,7 @@ function container() {
       rejectProposal: vi.fn().mockResolvedValue({ id: 'proposal-1' }),
     },
     proposalRead: {
-      getDetail: vi.fn().mockResolvedValue({ id: 'proposal-1', status: 'rejected' }),
+      getDetail: vi.fn().mockResolvedValue({ id: 'proposal-1', status: 'judged' }),
       getNotice: vi.fn().mockResolvedValue({ hasNewProposals: true, totalPending: 1, counts: { in_upload: 0, submitted: 1, judged: 0, converted: 0 } }),
     },
     adminSkillRead: {
@@ -85,12 +85,14 @@ describe('administrator role route wiring', () => {
     const notice = await app.inject({ method: 'GET', url: '/admin/proposals/notice' });
     const publish = await app.inject({ method: 'POST', url: '/admin/skills/skill-1/publish?version=1.0.0' });
     const convert = await app.inject({ method: 'POST', url: '/admin/proposals/proposal-1/convert', payload: {} });
+    const finalizeAndPublish = await app.inject({ method: 'POST', url: '/admin/proposals/proposal-1/finalize-and-publish', payload: {} });
 
     expect(approve.statusCode).toBe(200);
     expect(reject.statusCode).toBe(200);
     expect(notice.statusCode).toBe(200);
     expect(publish.statusCode).toBe(403);
     expect(convert.statusCode).toBe(403);
+    expect(finalizeAndPublish.statusCode).toBe(403);
     expect(testContainer.reviewSkill.publish).not.toHaveBeenCalled();
     expect(testContainer.reviewProposal.convertProposal).not.toHaveBeenCalled();
   });
@@ -124,9 +126,32 @@ describe('administrator role route wiring', () => {
       payload: { judgementOverrideReason: 'Manual security review completed' },
     })).statusCode).toBe(202);
     expect((await app.inject({ method: 'POST', url: '/admin/search/reindex' })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/admin/proposals/proposal-1/finalize-and-publish', payload: { comment: 'Approved for publication' } })).statusCode).toBe(202);
     expect(testContainer.operations.start).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'publish_skill_version',
       payload: expect.objectContaining({ judgementOverrideAllowed: true, judgementOverrideReason: 'Manual security review completed' }),
     }));
+    expect(testContainer.operations.start).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'convert_proposal_and_publish',
+      proposalId: 'proposal-1',
+      payload: expect.objectContaining({ comment: 'Approved for publication', judgementOverrideAllowed: true }),
+    }));
+  });
+
+  it('preflights the combined publication workflow before creating an operation', async () => {
+    const { app, testContainer } = await appFor(['admin']);
+    const getDetail = vi.mocked(testContainer.proposalRead.getDetail);
+
+    getDetail.mockResolvedValueOnce(null);
+    const missing = await app.inject({ method: 'POST', url: '/admin/proposals/prop-idem-missing/finalize-and-publish', payload: {} });
+
+    getDetail.mockResolvedValueOnce({ id: 'proposal-1', status: 'in_upload' } as never);
+    const notReady = await app.inject({ method: 'POST', url: '/admin/proposals/proposal-1/finalize-and-publish', payload: {} });
+
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toMatchObject({ code: 'NOT_FOUND' });
+    expect(notReady.statusCode).toBe(409);
+    expect(notReady.json()).toMatchObject({ code: 'CONFLICT' });
+    expect(testContainer.operations.start).not.toHaveBeenCalled();
   });
 });

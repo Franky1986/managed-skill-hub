@@ -12,9 +12,13 @@ versions and use existing lifecycle actions without reconstructing an admin
 route by hand. The route itself remains session- and role-protected.
 
 Asynchronous operation feedback no longer repeats an identical terminal state
-and worker phase. The proposal `finalize and publish` shortcut tracks its
-queued publish operation, so it shows progress and refreshes the actual final
-status rather than leaving a stale intermediate version state visible.
+and worker phase. The administrator-only proposal `finalize and publish`
+shortcut now starts one durable workflow immediately and reports conversion,
+review submission, approval, and publication phases. A worker restart derives
+the next step from persisted proposal and version state, avoiding duplicate
+conversion or transition work. If publication requires an override reason, the
+same durable workflow resumes from that persisted state after the administrator
+provides it; it does not repeat already-completed transitions.
 
 Long-running proposal finalization, re-judgement, and publication now return a
 durable asynchronous operation rather than holding the browser request open.

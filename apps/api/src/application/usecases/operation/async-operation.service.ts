@@ -5,6 +5,10 @@ import { OperationProgress, OperationRecord, OperationStorePort } from '../../po
 import { JudgeProposalUseCase } from '../judgement/judge-proposal.usecase';
 import { JudgeSkillVersionUseCase } from '../judgement/judge-skill-version.usecase';
 import { ReviewSkillUseCase } from '../skill/review-skill.usecase';
+import { ReviewProposalUseCase } from '../proposal/review-proposal.usecase';
+import { ProposalReadUseCase } from '../proposal/proposal-read.usecase';
+import { AdminSkillReadUseCase } from '../skill/admin-skill-read.usecase';
+import { SkillStatus } from '../../../domain/skill/SkillStatus';
 import { JudgementOverrideReasonRequiredError, JudgementRequiredError } from '../../../domain/errors';
 
 const LEASE_MS = 5 * 60_000;
@@ -36,7 +40,10 @@ export class AsyncOperationService implements OperationCommandPort {
     private readonly proposalCommand: ProposalCommandPort,
     private readonly judgeProposal: JudgeProposalUseCase,
     private readonly judgeSkillVersion: JudgeSkillVersionUseCase,
-    private readonly reviewSkill: ReviewSkillUseCase
+    private readonly reviewSkill: ReviewSkillUseCase,
+    private readonly reviewProposal?: ReviewProposalUseCase,
+    private readonly proposalRead?: ProposalReadUseCase,
+    private readonly adminSkillRead?: AdminSkillReadUseCase
   ) {}
 
   /** Starts a bounded durable worker loop; timers are unref'd for CLI/test shutdown. */
@@ -194,6 +201,64 @@ export class AsyncOperationService implements OperationCommandPort {
         });
         return;
       }
+      case 'convert_proposal_and_publish':
+        await this.convertProposalAndPublish(operation, report);
+        return;
+    }
+  }
+
+  /**
+   * Executes the admin shortcut as one recoverable operation. Each transition
+   * is derived from persisted proposal/version state so a worker retry never
+   * creates another version or repeats an already completed transition.
+   */
+  private async convertProposalAndPublish(
+    operation: OperationRecord,
+    report: (progress: OperationProgress) => Promise<void>
+  ): Promise<void> {
+    const proposalId = required(operation.proposalId, 'proposalId');
+    const reviewProposal = requiredDependency(this.reviewProposal, 'reviewProposal');
+    const proposalRead = requiredDependency(this.proposalRead, 'proposalRead');
+    const adminSkillRead = requiredDependency(this.adminSkillRead, 'adminSkillRead');
+    const comment = readOptionalString(operation.payload, 'comment');
+
+    await report({ phase: 'converting', message: 'Converting proposal into a draft version.', completed: 0, total: 4, currentTarget: proposalId });
+    let proposal = await proposalRead.getDetail(proposalId);
+    if (!proposal) throw new Error(`Proposal ${proposalId} not found.`);
+    if (proposal.status !== 'converted') {
+      await reviewProposal.convertProposal(proposalId, operation.requestedBy, comment);
+      proposal = await proposalRead.getDetail(proposalId);
+      if (!proposal) throw new Error(`Proposal ${proposalId} disappeared after conversion.`);
+    }
+    const skillId = proposal.conversion.targetSkillId;
+    const version = proposal.convertedVersion;
+    if (!skillId || !version) throw new Error(`Proposal ${proposalId} has no converted skill version.`);
+
+    await report({ phase: 'submitting_review', message: 'Submitting the converted version for review.', completed: 1, total: 4, currentTarget: `${skillId}@${version}` });
+    let status = await skillVersionStatus(adminSkillRead, skillId, version);
+    if (status === SkillStatus.DRAFT) {
+      await this.reviewSkill.submitForReview(skillId, version, operation.requestedBy);
+      status = await skillVersionStatus(adminSkillRead, skillId, version);
+    }
+    assertPublishFlowStatus(status, skillId, version);
+
+    await report({ phase: 'approving', message: 'Approving the reviewed version.', completed: 2, total: 4, currentTarget: `${skillId}@${version}` });
+    if (status === SkillStatus.IN_REVIEW) {
+      await this.reviewSkill.approve(skillId, version, operation.requestedBy);
+      status = await skillVersionStatus(adminSkillRead, skillId, version);
+    }
+    assertPublishFlowStatus(status, skillId, version);
+
+    await report({ phase: 'publishing', message: 'Verifying publication requirements and publishing the version.', completed: 3, total: 4, currentTarget: `${skillId}@${version}` });
+    if (status === SkillStatus.APPROVED) {
+      await this.reviewSkill.publish(skillId, version, operation.requestedBy, {
+        judgementOverrideAllowed: operation.payload.judgementOverrideAllowed === true,
+        judgementOverrideReason: readOptionalString(operation.payload, 'judgementOverrideReason'),
+      });
+      status = await skillVersionStatus(adminSkillRead, skillId, version);
+    }
+    if (status !== SkillStatus.PUBLISHED) {
+      throw new Error(`Skill version ${skillId}@${version} could not be published from ${status}.`);
     }
   }
 
@@ -227,8 +292,27 @@ function operationErrorMessage(error: unknown): string {
 }
 
 function initialProgress(kind: StartOperationInput['kind']): OperationProgress {
-  const message = kind === 'publish_skill_version' ? 'Publication queued.' : 'Judgement operation queued.';
+  const message = kind === 'publish_skill_version' || kind === 'convert_proposal_and_publish'
+    ? 'Publication workflow queued.'
+    : 'Judgement operation queued.';
   return { phase: 'queued', message, completed: 0, total: 0, currentTarget: null };
+}
+
+function requiredDependency<T>(value: T | undefined, name: string): T {
+  if (!value) throw new Error(`Missing ${name} dependency for operation.`);
+  return value;
+}
+
+async function skillVersionStatus(read: AdminSkillReadUseCase, skillId: string, version: string): Promise<SkillStatus> {
+  const skill = await read.getSkillDetail(skillId);
+  const candidate = skill.versions.find((item) => item.version === version);
+  if (!candidate) throw new Error(`Skill version ${skillId}@${version} not found.`);
+  return candidate.status;
+}
+
+function assertPublishFlowStatus(status: SkillStatus, skillId: string, version: string): void {
+  if ([SkillStatus.IN_REVIEW, SkillStatus.APPROVED, SkillStatus.PUBLISHED].includes(status)) return;
+  throw new Error(`Skill version ${skillId}@${version} cannot continue publication from ${status}.`);
 }
 
 function required(value: string | null, field: string): string {

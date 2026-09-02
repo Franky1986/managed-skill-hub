@@ -34,11 +34,18 @@ of the HTTP request while exposing durable, restart-safe progress.
   judgement, per-file judgement, and optional auto-publish.
 - Proposal, proposal-file, and skill-version re-judgement.
 - Skill-version publication.
+- Administrator shortcut for proposal conversion, review submission, approval,
+  and publication as one recoverable operation. When publication requires an
+  override reason, a later operation for the same converted proposal resumes
+  at publication and does not repeat conversion, review submission, or
+  approval.
 
 ## Tests
 
 - Persisted incremental proposal progress reaches the terminal record.
 - Publication override validation is represented as a safe terminal failure.
+- A retry with an override reason resumes the converted workflow without
+  repeating completed transitions.
 - Repeated active-operation requests resolve to the same operation record.
 - A failed owner-bound progress write stops the worker before it calls the
   corresponding judgement or publication use case.
