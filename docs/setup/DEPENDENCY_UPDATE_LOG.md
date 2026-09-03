@@ -1,5 +1,31 @@
 # Dependency Update Log
 
+## Security Remediation - 2026-09-03
+
+A new `npm audit` run reported three active findings in the root lockfile:
+
+| Package | Severity | Type | Old | New | Advisory |
+|---------|----------|------|-----|-----|----------|
+| `fast-uri` | high | transitive | `3.1.5` / `4.1.2` | `3.1.7` / `4.1.4` | GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp |
+| `fastify` | moderate | direct (`apps/api`) | `5.10.0` | `5.12.1` | GHSA-w2qp-rph6-63g4, GHSA-3m5p-2c4r-xxw2 |
+| `mysql2` | moderate | direct (`apps/api`) | `3.22.6` | `3.24.3` | GHSA-rgwj-5xj2-c3m3 |
+
+Remediation steps applied to `managed-skill-hub` and `trprcbt-skillhub`:
+
+1. Updated `apps/api/package.json` exact versions for `fastify` and `mysql2`.
+2. Ran `npm install` to re-resolve the lockfile.
+3. Ran `npm audit fix` to update the transitive `fast-uri` resolutions.
+4. Verified `npm audit` (full) and `npm audit --only=prod` both report zero findings.
+5. Verified `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build:prod` pass.
+6. Verified `./scripts/check.sh` passes, including all deterministic proof scripts.
+
+Additional transitive lockfile movements observed:
+
+- `process-warning` `5.0.0` → `5.1.0` (pulled in by `fastify`)
+- `denque` `2.1.0` removed (no longer required by `mysql2` `3.24.3`)
+
+No source code changes were required. No `--force` option was used.
+
 ## Current Status - 2026-07-13
 
 The security follow-up completed the previously deferred migrations:
