@@ -2,6 +2,14 @@
 
 All notable changes to ManagedSkillHub are documented here.
 
+## [0.2.1] - 2026-09-09
+
+### Fixed
+
+- Fixed nested artifact downloads in the retained registry bootstrap reference
+  client by encoding paths exactly once at the HTTP boundary.
+- Updated direct and transitive npm security dependencies.
+
 ## [0.2.0] - 2026-09-02
 
 ### Added

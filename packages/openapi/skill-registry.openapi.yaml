@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: ManagedSkillHub API
   description: Self-hosted skill registry for AI agents.
-  version: 0.2.0
+  version: 0.2.1
 servers:
 - url: http://localhost:3040
   description: Local API server

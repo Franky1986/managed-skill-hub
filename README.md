@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img alt="Managed Skill Hub" src="https://img.shields.io/badge/Managed%20Skill%20Hub-0.2.0-6f42c1">
+  <img alt="Managed Skill Hub" src="https://img.shields.io/badge/Managed%20Skill%20Hub-0.2.1-6f42c1">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.7.3-3178C6?logo=typescript&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">

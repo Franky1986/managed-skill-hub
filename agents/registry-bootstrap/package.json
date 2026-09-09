@@ -1,6 +1,6 @@
 {
   "name": "@managed-skill-hub/registry-bootstrap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Reference client for agents to discover, compare and pull skills from managed-skill-hub",
   "type": "module",

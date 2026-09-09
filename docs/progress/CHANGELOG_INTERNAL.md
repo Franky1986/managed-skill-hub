@@ -7,6 +7,12 @@
 - Rebuilt the exact-version workspace lockfile with npm 10 compatibility mode;
   full and production-only audits report zero vulnerabilities.
 
+# 2026-09-09: Release 0.2.1
+
+- Bumped the ManagedSkillHub workspace and API/OpenAPI release version from
+  `0.2.0` to `0.2.1` for the backward-compatible security and bootstrap-sync
+  fixes; the retained bootstrap reference package is now `0.1.1`.
+
 # 2026-09-09: Retain and repair the legacy registry bootstrap reference client
 
 - Documented that `agents/registry-bootstrap` is a deprecated consumer-side
