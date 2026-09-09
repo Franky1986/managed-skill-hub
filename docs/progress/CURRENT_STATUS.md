@@ -2,9 +2,14 @@
 
 ## Current Date
 
-2026-09-02
+2026-09-09
 
 ## Project State
+
+The dependency-security baseline is current: `js-yaml` resolves to `4.3.2`
+across direct and transitive paths, and Vitest is pinned at `4.1.11` in both
+test workspaces. Full and production-only npm audits report zero findings, and
+the exact-version manifest check remains green.
 
 The public skill detail now links directly to the protected admin workbench,
 including the latest published version in the URL so reviewers can switch

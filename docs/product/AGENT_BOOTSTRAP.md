@@ -115,6 +115,19 @@ does not create local metadata.
 
 Before any proposal upload, the agent must read `GET /howToPropose`. This is not optional.
 
+## Consumer implementation choice
+
+The supported consumer contract is the live API plus the published
+`use-skill-hub` bootstrap skill. The repository also retains
+`agents/registry-bootstrap`, a deprecated TypeScript reference CLI for local
+digest/checksum cache experiments. It is not used by the API server, proposal
+submission, version diffs, projection updates, or ZIP package downloads.
+
+Do not make new agent integrations depend on that CLI. If it remains useful
+for a local compatibility scenario, use its `discover`, `pull`, and `sync`
+commands only as a consumer-side reference and ensure nested artifact paths
+are URL-encoded exactly once at the HTTP boundary.
+
 ## Authenticated registries
 
 Deployments can protect read, proposal, or discovery endpoints with static
@@ -569,14 +582,12 @@ Configured auto-publish is neither an agent permission nor an admin endpoint. It
 an operator-controlled runtime policy that can publish eligible green proposals
 after real judgements.
 
-## Reference skill
+## Bootstrap skill
 
-A minimal reference skill is published under `data/skills/registry-bootstrap/1.0.0/`:
-
-- `README.md` – overview for agents
-- `WORKFLOW.md` – concrete step-by-step curl examples
-
-No standalone client is required. Agents use the API directly using the contract from `/discover` and the OpenAPI specification at `/openapi.yaml`.
+Use the `bootstrapSkill` advertised by `GET /discover`. The published
+`use-skill-hub` package provides the current agent workflow and concrete HTTP
+examples. No standalone client is required; agents use the live API contract
+from `/discover` and the OpenAPI specification at `/openapi.yaml`.
 
 
 ## What if a proposal needs to be corrected?
@@ -635,10 +646,6 @@ The public status endpoint exposes `duplicateOfProposalId` and
 `duplicateOfSkillId` for transparency after submission. Duplicates are therefore
 visible to agents and admins throughout the workflow.
 
-## Legacy standalone client
-
-The directory `agents/registry-bootstrap/` still contains an older TypeScript reference client. It is no longer the recommended integration path and is kept for reference only.
-
 ## OpenAPI
 
 The machine-readable contract is available at:
@@ -649,6 +656,5 @@ GET /api/openapi.yaml
 
 ## References
 
-- [`data/skills/registry-bootstrap/1.0.0/`](../../data/skills/registry-bootstrap/1.0.0/)
 - [`packages/openapi/skill-registry.openapi.yaml`](../../packages/openapi/skill-registry.openapi.yaml)
 - [`docs/roadmap/EPIC-002-agent-workbench-ui.md`](../../docs/roadmap/EPIC-002-agent-workbench-ui.md)

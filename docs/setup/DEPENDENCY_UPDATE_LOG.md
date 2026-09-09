@@ -1,5 +1,25 @@
 # Dependency Update Log
 
+## Security Remediation - 2026-09-09
+
+A current `npm audit` run reported four active findings in the shared workspace
+lockfile: high-severity `js-yaml` findings through the direct API dependency
+and `@redocly/openapi-core`, plus moderate Vitest and `@vitest/mocker`
+findings in both test workspaces.
+
+Applied consistently to the maintained repository variants:
+
+1. Pinned `js-yaml` to `4.3.2` in `apps/api` and enforced that resolution for
+   transitive consumers through root overrides.
+2. Pinned Vitest to `4.1.11` in API and web workspaces, updating the matching
+   `@vitest/*` graph.
+3. Rebuilt the lockfile using npm `10.9.2` with the repository's deployment
+   compatible legacy-peer mode, because local npm 11 workspace reification
+   produced an internal Arborist error.
+4. Verified full and production-only audits report zero vulnerabilities,
+   package declarations satisfy the exact-version policy, and workspace lint,
+   typecheck, test, and production-build commands pass.
+
 ## Security Remediation - 2026-09-03
 
 A new `npm audit` run reported three active findings in the root lockfile:
@@ -10,7 +30,7 @@ A new `npm audit` run reported three active findings in the root lockfile:
 | `fastify` | moderate | direct (`apps/api`) | `5.10.0` | `5.12.1` | GHSA-w2qp-rph6-63g4, GHSA-3m5p-2c4r-xxw2 |
 | `mysql2` | moderate | direct (`apps/api`) | `3.22.6` | `3.24.3` | GHSA-rgwj-5xj2-c3m3 |
 
-Remediation steps applied to `managed-skill-hub` and `trprcbt-skillhub`:
+Remediation steps applied consistently to the maintained repository variants:
 
 1. Updated `apps/api/package.json` exact versions for `fastify` and `mysql2`.
 2. Ran `npm install` to re-resolve the lockfile.

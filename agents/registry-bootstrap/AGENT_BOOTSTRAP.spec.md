@@ -11,6 +11,8 @@ Reference client and skill that demonstrate how an autonomous agent can consume 
 - Compare `skillUuid`, `versionUuid` and `contentDigest` per skill.
 - Compare `sha256` per artifact.
 - Download changed artifacts only.
+- Encode artifact path identifiers exactly once at the HTTP boundary, including
+  paths in nested package folders.
 - Maintain local sync state across runs.
 
 ## Non-Scope
@@ -47,6 +49,8 @@ Reference client and skill that demonstrate how an autonomous agent can consume 
 - `search` returns results for keyword/fulltext/regex queries.
 - `pull <skillId>` downloads all files of the latest published version.
 - `sync` skips skills and files whose metadata/checksums match the local state.
+- Pull and sync download nested paths such as `agents/openai.yaml` without
+  double URL encoding.
 - `./scripts/check.sh` remains successful (the client is not part of the workspace build, but TypeScript compiles via `npx tsc -p agents/registry-bootstrap/tsconfig.json --noEmit`).
 
 ## Tests / Checks

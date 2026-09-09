@@ -30,6 +30,6 @@
     "postcss": "8.5.26",
     "tailwindcss": "4.3.2",
     "vite": "6.4.3",
-    "vitest": "3.2.7"
+    "vitest": "4.1.11"
   }
 }

@@ -1,3 +1,22 @@
+# 2026-09-09: Remediate current npm audit findings
+
+- Updated direct and transitive `js-yaml` resolution to `4.3.2`, including the
+  Redocly dependency path through a root override.
+- Updated API and web Vitest to `4.1.11`, removing the vulnerable
+  `@vitest/mocker` 3.x chain.
+- Rebuilt the exact-version workspace lockfile with npm 10 compatibility mode;
+  full and production-only audits report zero vulnerabilities.
+
+# 2026-09-09: Retain and repair the legacy registry bootstrap reference client
+
+- Documented that `agents/registry-bootstrap` is a deprecated consumer-side
+  compatibility/reference CLI, not a server, proposal, diff, projection, or
+  package-download runtime path; it remains retained pending a downstream-use
+  audit.
+- Fixed its nested-file download path handling by encoding artifact paths only
+  once at the HTTP boundary. A full sync now pulls nested artifacts and a
+  second sync correctly skips unchanged files.
+
 # 2026-09-02: Clarify public-to-admin version management and publication status
 
 - Added a public skill-detail link to the protected, version-selected admin

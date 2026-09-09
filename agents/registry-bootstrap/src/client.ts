@@ -108,5 +108,6 @@ export class RegistryClient {
 export function fileIdFromInfo(info: SkillFileInfo): string {
   // The public API exposes both a stable artifactId and a path-based id.
   // Prefer the path-based id for downloads because it is deterministic and human-readable.
-  return encodeURIComponent(info.path);
+  // downloadFile performs the single required URL encoding at the HTTP boundary.
+  return info.path;
 }
