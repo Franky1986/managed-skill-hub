@@ -15,8 +15,7 @@ dependency chains.
 | `brace-expansion` | high | transitive | `1.1.18` / `2.1.4` / `5.0.9` | `1.1.21` / `2.1.7` / `5.0.12` | GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p |
 | `fast-uri` | moderate | transitive | `3.1.7` / `4.1.4` | `3.1.8` / `4.2.1` | GHSA-hrr3-gc8f-f4qj, GHSA-jvvf-x445-j334 |
 
-Remediation steps applied (mirrors the same-day remediation in the
-`trprcbt-skillhub` clone):
+Remediation steps applied:
 
 1. Updated exact `axios` versions in `apps/api/package.json` and
    `apps/web/package.json`, and the exact `fastify` version in
