@@ -2,14 +2,16 @@
 
 ## Current Date
 
-2026-09-09
+2026-10-01
 
 ## Project State
 
-The dependency-security baseline is current: `js-yaml` resolves to `4.3.2`
-across direct and transitive paths, and Vitest is pinned at `4.1.11` in both
-test workspaces. Full and production-only npm audits report zero findings, and
-the exact-version manifest check remains green.
+The dependency-security baseline is current: `axios` is pinned at `1.20.0` and
+`fastify` at `5.12.5` in `apps/api` (and `axios` at `1.20.0` in `apps/web`),
+`js-yaml` resolves to `4.3.2` across direct and transitive paths, and Vitest is
+pinned at `4.1.11` in both test workspaces. Full and production-only npm
+audits report zero findings, and the exact-version manifest check remains
+green.
 
 The public skill detail now links directly to the protected admin workbench,
 including the latest published version in the URL so reviewers can switch

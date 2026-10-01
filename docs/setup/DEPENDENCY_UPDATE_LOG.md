@@ -1,5 +1,37 @@
 # Dependency Update Log
 
+## Security Remediation - 2026-10-01
+
+A current `npm audit` run reported four active findings in the shared workspace
+lockfile: high-severity `axios` and `fastify` findings through direct
+dependencies in `apps/api` (and `apps/web` for `axios`), plus a high-severity
+`brace-expansion` and a moderate `fast-uri` finding through transitive
+dependency chains.
+
+| Package | Severity | Type | Old | New | Advisory |
+|---------|----------|------|-----|-----|----------|
+| `axios` | high | direct (`apps/api`, `apps/web`) | `1.18.1` | `1.20.0` | GHSA-vh66-26gq-q6x8, GHSA-9fr6-4gfg-395g, GHSA-c29m-xwm3-cm6r, GHSA-mghh-pgcx-3jjj, GHSA-x97p-jq2g-jp4f, GHSA-3pq3-5fj3-cg6v, GHSA-542g-h47m-68v8, GHSA-j8rh-479h-cp32, GHSA-4hqw-qxg8-jxx2, GHSA-m8m8-qj5v-23w3, GHSA-44g4-m2mj-wpvx, GHSA-r4gj-5m52-g5wh |
+| `fastify` | high | direct (`apps/api`) | `5.12.1` | `5.12.5` | GHSA-4mh8-r7rc-xpvc, GHSA-667r-xxjv-c9mm, GHSA-p68q-wchp-6fh7, GHSA-hwr6-493r-vm6h, GHSA-9q9j-q6p8-xq58 |
+| `brace-expansion` | high | transitive | `1.1.18` / `2.1.4` / `5.0.9` | `1.1.21` / `2.1.7` / `5.0.12` | GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p |
+| `fast-uri` | moderate | transitive | `3.1.7` / `4.1.4` | `3.1.8` / `4.2.1` | GHSA-hrr3-gc8f-f4qj, GHSA-jvvf-x445-j334 |
+
+Remediation steps applied:
+
+1. Updated exact `axios` versions in `apps/api/package.json` and
+   `apps/web/package.json`, and the exact `fastify` version in
+   `apps/api/package.json`.
+2. Ran `npm install --legacy-peer-deps` to re-resolve the lockfile, which
+   dropped the findings from four to two.
+3. Ran `npm audit fix` (no `--force`) to update the remaining transitive
+   `brace-expansion` and `fast-uri` resolutions.
+4. Verified `npm audit` (full) and `npm audit --omit=dev` both report zero
+   findings, and the exact-version manifest check passes.
+5. Verified `./scripts/check.sh` (lint, typecheck, tests, all deterministic
+   proof scripts including the public release hygiene gate) and
+   `npm run build:prod` across all workspaces pass.
+
+No source code changes were required. No `--force` option was used.
+
 ## Security Remediation - 2026-09-09
 
 A current `npm audit` run reported four active findings in the shared workspace

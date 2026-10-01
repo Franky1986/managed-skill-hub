@@ -1,3 +1,17 @@
+# 2026-10-01: npm audit remediation (axios, fastify, brace-expansion, fast-uri)
+
+- Bumped direct `axios` (`apps/api`, `apps/web`) from `1.18.1` to `1.20.0` and
+  direct `fastify` (`apps/api`) from `5.12.1` to `5.12.5`, closing four
+  active `npm audit` findings (two high-severity direct, one high-severity
+  and one moderate transitive via `brace-expansion`/`fast-uri`).
+- Resolved the remaining transitive `brace-expansion` and `fast-uri` findings
+  with `npm audit fix` (no `--force`).
+- Verified full and production-only `npm audit` report zero vulnerabilities,
+  the exact-version manifest check passes, `./scripts/check.sh` passes, and
+  `npm run build:prod` succeeds across all workspaces. See
+  [`docs/setup/DEPENDENCY_UPDATE_LOG.md`](../setup/DEPENDENCY_UPDATE_LOG.md)
+  for the full before/after table.
+
 # 2026-09-09: Remediate current npm audit findings
 
 - Updated direct and transitive `js-yaml` resolution to `4.3.2`, including the
