@@ -626,6 +626,11 @@ EPIC-005 is implemented:
 
 Recently verified:
 
+- `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` re-run after the
+  2026-10-07 dependency remediation: baseline check, backup/restore proof,
+  MySQL stack startup, provider matrix, provider cutover, and database
+  content-storage matrix all pass with the updated `@typescript-eslint`
+  toolchain and lockfile.
 - Semantic duplicate gate hardening: public preflight cannot select stored
   proposals; internal finalized-proposal assessment excludes itself, compares
   content only with published skills, invokes at most three candidates in one
