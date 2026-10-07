@@ -5,6 +5,9 @@ import { Proposal, ProposalFile } from '../../../domain/proposal/Proposal';
 import { ProposalStatus } from '../../../domain/proposal/ProposalStatus';
 import { JudgementRisk } from '../../../domain/judgement/Judgement';
 import { Skill } from '../../../domain/skill/Skill';
+import type { SkillFileStoragePort } from '../../ports/outbound/file-storage.port';
+import type { FileScannerPort } from '../../ports/outbound/file-scanner.port';
+import type { SkillJudgerPort } from '../../ports/outbound/judger.port';
 
 class FakeCatalog implements SkillCatalogPort {
   proposals: CatalogProposalRecord[] = [];
@@ -256,7 +259,7 @@ interface StoredFile {
   mimeType: string;
 }
 
-class FakeStorage implements import('../../ports/outbound/file-storage.port').SkillFileStoragePort {
+class FakeStorage implements SkillFileStoragePort {
   private proposalFiles = new Map<string, StoredFile[]>();
   private skillFiles = new Map<string, StoredFile[]>();
 
@@ -293,7 +296,7 @@ class FakeStorage implements import('../../ports/outbound/file-storage.port').Sk
   async readProposalFileExtract() { return null; }
 }
 
-class FakeScanner implements import('../../ports/outbound/file-scanner.port').FileScannerPort {
+class FakeScanner implements FileScannerPort {
   supports() { return true; }
   async scan(content: Buffer, _mimeType: string, fileName?: string) {
     return {
@@ -303,7 +306,7 @@ class FakeScanner implements import('../../ports/outbound/file-scanner.port').Fi
   }
 }
 
-class FakeDuplicateJudger implements import('../../ports/outbound/judger.port').SkillJudgerPort {
+class FakeDuplicateJudger implements SkillJudgerPort {
   calls = 0;
 
   constructor(private readonly score: number, private readonly reason: string) {}
