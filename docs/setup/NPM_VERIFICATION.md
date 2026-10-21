@@ -46,10 +46,10 @@ npm install @llamaindex/liteparse
 
 ## Vulnerabilities In The Project
 
-State after the July 2026 security hardening pass:
+State after the October 21, 2026 security remediation:
 
 ```text
-npm audit --audit-level=moderate --package-lock-only
+npm audit --audit-level=moderate
 found 0 vulnerabilities
 ```
 
@@ -59,7 +59,8 @@ Resolved groups:
 |---------------|------------|
 | `@ai-sdk/provider-utils` / `ai` / `@ai-sdk/openai` / `jsondiffpatch` | Migrated the built-in judger to AI SDK 6 and OpenAI provider 3 using the stable structured `output` contract. |
 | `fast-uri` / Fastify serializer/compiler chain | Migrated Fastify and all coupled plugins to Fastify 5-compatible versions. |
-| `esbuild` / `vite` | Migrated the web workspace to Vite 6.4.3. |
+| `esbuild` / `vite` | Migrated the web workspace to Vite 6.4.5 and fixed current Vite advisories. |
+| `follow-redirects` | Updated the transitive Axios resolution from 1.16.0 to 1.16.1 for current credential forwarding advisories. |
 | `tar` via `@mapbox/node-pre-gyp` | Replaced native `bcrypt` with `bcryptjs` and pruned the old install chain. |
 | uuid < 11.1.1 | Updated to `^11.1.1`. |
 | xlsx | Removed from the project. |
@@ -103,21 +104,21 @@ without checking compatibility.
    `npm run typecheck`.
 5. Use `npm audit fix` only when no very new packages are affected.
 
-### Current State After Stabilization
+### Previous Stabilization Snapshot - 2026-07-13
 
 - TypeScript: ^5.7.3
 - eslint: ^8.57.0 with @typescript-eslint ^7.18.0
 - Fastify: ^5.10.0
 - AI SDK: ^6.0.224 with @ai-sdk/openai ^3.0.84
-- Vite: ^6.4.3
+- Vite: ^6.4.3 at that time; now pinned to 6.4.5
 - Zod: ^3.24.2
 - UUID: ^11.1.0 without @types/uuid
 - Vitest: ^3.2.7
 
-### Remaining Vulnerabilities
+### Current Vulnerability Status - 2026-10-21
 
-`npm audit --audit-level=moderate --package-lock-only` currently reports the
-project as vulnerability-free.
+Both `npm audit` and `npm audit --omit=dev` report zero vulnerabilities after
+the October 21 remediation.
 
 Do not run `npm audit fix --force` blindly. It upgrades multiple major versions
 at once and can change Fastify, Vite, and AI SDK APIs. Upgrade each workspace

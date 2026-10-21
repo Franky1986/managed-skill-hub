@@ -1,5 +1,79 @@
 # Dependency Update Log
 
+## Security Remediation - 2026-10-21
+
+The current `npm audit` reported two high-severity dependency groups: Vite
+`6.4.3` (through `launch-editor`) and transitive `follow-redirects` `1.16.0`
+(through Axios). The Vite advisories were GHSA-698v-4r3x-3vcv,
+GHSA-r825-w8mm-5pxw, and GHSA-587h-7wmj-h5pm. The `follow-redirects`
+advisories were GHSA-q3jh-wrc6-jgq8 and GHSA-8r9p-f939-6h3c.
+
+| Package | Severity | Type | Old | New | Advisory |
+|---------|----------|------|-----|-----|----------|
+| `vite` | high | direct devDependency (`apps/web`) | `6.4.3` | `6.4.5` | GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm |
+| `follow-redirects` | high | transitive via Axios | `1.16.0` | `1.16.1` | GHSA-q3jh-wrc6-jgq8, GHSA-8r9p-f939-6h3c |
+
+Remediation steps applied:
+
+1. Updated the exact Vite pin in `apps/web/package.json` to `6.4.5`, the patched
+   release in the current Vite 6 line. Vite is only used by the frontend build
+   and preview tooling.
+2. Updated the lockfile's transitive `follow-redirects` resolution to `1.16.1`,
+   which is allowed by Axios's existing dependency range.
+3. Corrected the pinned-package check's repository root so it actually checks
+   all six package manifests instead of returning success after scanning only
+   `scripts/`.
+4. Verified full and production-only `npm audit` report zero vulnerabilities,
+   `npm ls vite follow-redirects --all` resolves the patched versions, the
+   pinned-package check passes, and `npm run build:prod` succeeds.
+
+No `--force` option was used. No application source behavior changed. The
+frontend build also reports a bundle chunk larger than 500 kB.
+
+## Security Remediation - 2026-10-07
+
+A current `npm audit` run reported active findings: a high-severity
+`@fastify/busboy` finding (transitive via `@fastify/multipart`), a
+high-severity `source-map-js` finding (transitive via `postcss` /
+`@tailwindcss/node`), and a high-severity `braces` finding reachable only
+through the root `@typescript-eslint/parser` 7.x -> `typescript-estree` ->
+`globby` -> `fast-glob` -> `micromatch` -> `braces` dev-tooling chain (lint
+tooling only, not part of any runtime/business code path).
+
+| Package | Severity | Type | Old | New | Advisory |
+|---------|----------|------|-----|-----|----------|
+| `@fastify/busboy` | high | transitive | `3.2.0` | `3.2.2` | GHSA-xjh9-v7x6-24jw, GHSA-x8mw-p69m-v3mx, GHSA-gxm5-99cw-xjw9 |
+| `source-map-js` | high | transitive | `1.2.1` | `1.2.2` | (event-loop DoS via indexed source-map section offsets) |
+| `braces` (via `@typescript-eslint/parser`/`@typescript-eslint/eslint-plugin`) | high | direct devDependency major bump | `7.18.0` | `8.71.1` | GHSA-vfj7-8cjw-p6xm |
+
+Remediation steps applied:
+
+1. Ran `npm audit fix` (no `--force`), which resolved `@fastify/busboy` and
+   `source-map-js` purely through lockfile re-resolution (no `package.json`
+   changes needed; both direct dependency ranges already allowed the fixed
+   versions).
+2. The remaining `braces` finding has no fixed release upstream (`braces`
+   itself tops out at `3.0.3`); the only remediation path is removing the
+   vulnerable chain entirely. Bumped the exact root devDependency pins for
+   `@typescript-eslint/eslint-plugin` and `@typescript-eslint/parser` from
+   `7.18.0` to `8.71.1`, which no longer depends on `globby`/`fast-glob` and
+   drops the `braces` chain completely.
+3. The `@typescript-eslint` major bump surfaced one lint issue not present
+   under v7, fixed in source (lint tooling only, no behavior change): three
+   `implements import('...').Port` inline-import-type `implements` clauses in
+   `apps/api/src/application/usecases/proposal/duplicate-check.usecase.test.ts`
+   no longer parse under the new parser grammar; replaced with top-level
+   `import type { ... }` statements and plain identifiers in the `implements`
+   clause.
+4. Verified `npm audit` (full) and `npm audit --omit=dev` both report zero
+   findings, the exact-version manifest check passes, `npm run lint` passes
+   across all workspaces under the new parser/plugin major version,
+   `./scripts/check.sh` passes, and `npm run build:prod` succeeds across all
+   workspaces.
+
+No `--force` option was used. No runtime/business-code behavior changed; the
+`@typescript-eslint` bump and its follow-up fix are lint-tooling-only.
+
 ## Security Remediation - 2026-10-01
 
 A current `npm audit` run reported four active findings in the shared workspace

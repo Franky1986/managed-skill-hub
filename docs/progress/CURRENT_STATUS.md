@@ -2,16 +2,18 @@
 
 ## Current Date
 
-2026-10-01
+2026-10-21
 
 ## Project State
 
 The dependency-security baseline is current: `axios` is pinned at `1.20.0` and
 `fastify` at `5.12.5` in `apps/api` (and `axios` at `1.20.0` in `apps/web`),
-`js-yaml` resolves to `4.3.2` across direct and transitive paths, and Vitest is
-pinned at `4.1.11` in both test workspaces. Full and production-only npm
-audits report zero findings, and the exact-version manifest check remains
-green.
+`js-yaml` resolves to `4.3.2` across direct and transitive paths, Vitest is
+pinned at `4.1.11` in both test workspaces, and the root
+`@typescript-eslint/eslint-plugin`/`@typescript-eslint/parser` devDependency
+pair is at `8.71.1`. Frontend Vite is pinned at `6.4.5`, and Axios resolves
+`follow-redirects` to `1.16.1`. Full and production-only npm audits report zero
+findings. The pinned-package check now inspects all six package manifests.
 
 The public skill detail now links directly to the protected admin workbench,
 including the latest published version in the URL so reviewers can switch
@@ -625,6 +627,11 @@ EPIC-005 is implemented:
 
 Recently verified:
 
+- `RUN_MYSQL_FULL_CHECK=true ./scripts/full-check.sh` re-run after the
+  2026-10-07 dependency remediation: baseline check, backup/restore proof,
+  MySQL stack startup, provider matrix, provider cutover, and database
+  content-storage matrix all pass with the updated `@typescript-eslint`
+  toolchain and lockfile.
 - Semantic duplicate gate hardening: public preflight cannot select stored
   proposals; internal finalized-proposal assessment excludes itself, compares
   content only with published skills, invokes at most three candidates in one

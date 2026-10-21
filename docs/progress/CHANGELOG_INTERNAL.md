@@ -1,3 +1,32 @@
+# 2026-10-21: Remediate Vite and follow-redirects audit findings
+
+- Updated frontend Vite from `6.4.3` to patched `6.4.5` and the transitive
+  Axios dependency `follow-redirects` from `1.16.0` to `1.16.1`.
+- Fixed the pinned-package checker root path; it now checks all six repository
+  manifests instead of succeeding with zero manifests.
+- Verified both full and production-only npm audits report zero vulnerabilities,
+  the pinned version check passes, and the production build succeeds.
+- Recorded advisory details and outcomes in
+  [`docs/setup/DEPENDENCY_UPDATE_LOG.md`](../setup/DEPENDENCY_UPDATE_LOG.md).
+
+# 2026-10-07: npm audit remediation (fastify/busboy, source-map-js, typescript-eslint major bump)
+
+- Resolved `@fastify/busboy` and `source-map-js` high-severity findings
+  purely through `npm audit fix` lockfile re-resolution (no `package.json`
+  changes).
+- Bumped `@typescript-eslint/eslint-plugin`/`@typescript-eslint/parser` from
+  `7.18.0` to `8.71.1` to remove the only remaining finding: a `braces`
+  advisory with no upstream fix, reachable solely through the old parser's
+  `globby`/`fast-glob`/`micromatch` dev-tooling chain.
+- Fixed one lint-only issue surfaced by the major bump: replaced three
+  inline `implements import('...').Port` clauses with top-level type imports
+  in `duplicate-check.usecase.test.ts`. No runtime behavior changed.
+- Verified full and production-only `npm audit` report zero vulnerabilities,
+  exact-version manifest check, `npm run lint`, `./scripts/check.sh`, and
+  `npm run build:prod` all pass. See
+  [`docs/setup/DEPENDENCY_UPDATE_LOG.md`](../setup/DEPENDENCY_UPDATE_LOG.md)
+  for the full before/after table.
+
 # 2026-10-01: npm audit remediation (axios, fastify, brace-expansion, fast-uri)
 
 - Bumped direct `axios` (`apps/api`, `apps/web`) from `1.18.1` to `1.20.0` and
