@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
+const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const dependencySections = [
   'dependencies',
   'devDependencies',

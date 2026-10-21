@@ -1,5 +1,35 @@
 # Dependency Update Log
 
+## Security Remediation - 2026-10-21
+
+The current `npm audit` reported two high-severity dependency groups: Vite
+`6.4.3` (through `launch-editor`) and transitive `follow-redirects` `1.16.0`
+(through Axios). The Vite advisories were GHSA-698v-4r3x-3vcv,
+GHSA-r825-w8mm-5pxw, and GHSA-587h-7wmj-h5pm. The `follow-redirects`
+advisories were GHSA-q3jh-wrc6-jgq8 and GHSA-8r9p-f939-6h3c.
+
+| Package | Severity | Type | Old | New | Advisory |
+|---------|----------|------|-----|-----|----------|
+| `vite` | high | direct devDependency (`apps/web`) | `6.4.3` | `6.4.5` | GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm |
+| `follow-redirects` | high | transitive via Axios | `1.16.0` | `1.16.1` | GHSA-q3jh-wrc6-jgq8, GHSA-8r9p-f939-6h3c |
+
+Remediation steps applied:
+
+1. Updated the exact Vite pin in `apps/web/package.json` to `6.4.5`, the patched
+   release in the current Vite 6 line. Vite is only used by the frontend build
+   and preview tooling.
+2. Updated the lockfile's transitive `follow-redirects` resolution to `1.16.1`,
+   which is allowed by Axios's existing dependency range.
+3. Corrected the pinned-package check's repository root so it actually checks
+   all six package manifests instead of returning success after scanning only
+   `scripts/`.
+4. Verified full and production-only `npm audit` report zero vulnerabilities,
+   `npm ls vite follow-redirects --all` resolves the patched versions, the
+   pinned-package check passes, and `npm run build:prod` succeeds.
+
+No `--force` option was used. No application source behavior changed. The
+frontend build also reports a bundle chunk larger than 500 kB.
+
 ## Security Remediation - 2026-10-07
 
 A current `npm audit` run reported active findings: a high-severity

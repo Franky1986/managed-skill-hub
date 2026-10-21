@@ -2,7 +2,7 @@
 
 ## Current Date
 
-2026-10-07
+2026-10-21
 
 ## Project State
 
@@ -11,8 +11,9 @@ The dependency-security baseline is current: `axios` is pinned at `1.20.0` and
 `js-yaml` resolves to `4.3.2` across direct and transitive paths, Vitest is
 pinned at `4.1.11` in both test workspaces, and the root
 `@typescript-eslint/eslint-plugin`/`@typescript-eslint/parser` devDependency
-pair is at `8.71.1`. Full and production-only npm audits report zero
-findings, and the exact-version manifest check remains green.
+pair is at `8.71.1`. Frontend Vite is pinned at `6.4.5`, and Axios resolves
+`follow-redirects` to `1.16.1`. Full and production-only npm audits report zero
+findings. The pinned-package check now inspects all six package manifests.
 
 The public skill detail now links directly to the protected admin workbench,
 including the latest published version in the URL so reviewers can switch

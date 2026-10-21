@@ -1,3 +1,14 @@
+# 2026-10-21: Remediate Vite and follow-redirects audit findings
+
+- Updated frontend Vite from `6.4.3` to patched `6.4.5` and the transitive
+  Axios dependency `follow-redirects` from `1.16.0` to `1.16.1`.
+- Fixed the pinned-package checker root path; it now checks all six repository
+  manifests instead of succeeding with zero manifests.
+- Verified both full and production-only npm audits report zero vulnerabilities,
+  the pinned version check passes, and the production build succeeds.
+- Recorded advisory details and outcomes in
+  [`docs/setup/DEPENDENCY_UPDATE_LOG.md`](../setup/DEPENDENCY_UPDATE_LOG.md).
+
 # 2026-10-07: npm audit remediation (fastify/busboy, source-map-js, typescript-eslint major bump)
 
 - Resolved `@fastify/busboy` and `source-map-js` high-severity findings
