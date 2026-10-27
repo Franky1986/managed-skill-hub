@@ -1,5 +1,32 @@
 # Dependency Update Log
 
+## Security Remediation - 2026-10-27
+
+The current audit reported a high-severity Zod resource-exhaustion finding, a
+moderate Fastify header-validation finding, moderate Vitest findings, and
+moderate transitive `fast-uri` findings.
+
+| Package | Severity | Type | Old | New | Advisory |
+|---------|----------|------|-----|-----|----------|
+| `zod` | high | direct (root and API) | `3.25.76` | `4.6.7` | GHSA-mrhx-c7xc-m3w5 |
+| `fastify` | moderate | direct (`apps/api`) | `5.12.5` | `5.12.7` | GHSA-389g-gv7q-r4x8 |
+| `vitest` / `@vitest/mocker` | moderate | direct devDependency (`apps/api`, `apps/web`) | `4.1.11` | `4.1.12` | GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp |
+| `fast-uri` | moderate | transitive | `3.1.8` / `4.2.2` | `3.1.9` / `4.2.3` | GHSA-w74x-v6f9-j3xg, GHSA-xhq7-xmqj-769h, GHSA-wjr9-j795-jxcr, GHSA-333x-w4r6-6crp |
+
+Remediation steps applied:
+
+1. Updated exact Fastify and Vitest pins and moved root/API Zod to `4.6.7`,
+   the patched release line. The API's current Zod schemas typecheck against
+   the new major version.
+2. Ran `npm audit fix --legacy-peer-deps` without `--force` to update the
+   vulnerable transitive `fast-uri` resolutions.
+3. Verified full and production-only `npm audit` report zero vulnerabilities,
+   the resolved package tree contains the patched versions, `npm run typecheck`
+   passes, and `npm run build:prod` succeeds.
+
+No application behavior changes were required. The frontend production build
+continues to emit its existing large-chunk advisory.
+
 ## Security Remediation - 2026-10-21
 
 The current `npm audit` reported two high-severity dependency groups: Vite

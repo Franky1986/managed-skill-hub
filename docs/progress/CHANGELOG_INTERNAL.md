@@ -1,3 +1,14 @@
+# 2026-10-27: Remediate Fastify, Vitest, Zod, and fast-uri audit findings
+
+- Updated exact Fastify and Vitest pins to `5.12.7` and `4.1.12` respectively.
+- Migrated the root and API Zod pins from `3.25.76` to patched `4.6.7`.
+- Re-resolved the lockfile so transitive `fast-uri` paths use patched `3.1.9`
+  and `4.2.3` releases.
+- Verified full and production-only npm audits report zero vulnerabilities,
+  workspace and script typechecking passes, and production builds succeed.
+- Recorded the findings and package changes in
+  [`docs/setup/DEPENDENCY_UPDATE_LOG.md`](../setup/DEPENDENCY_UPDATE_LOG.md).
+
 # 2026-10-21: Remediate Vite and follow-redirects audit findings
 
 - Updated frontend Vite from `6.4.3` to patched `6.4.5` and the transitive

@@ -31,7 +31,7 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "zod": "3.25.76"
+    "zod": "4.6.7"
   },
   "overrides": {
     "js-yaml": "4.3.2",
