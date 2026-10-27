@@ -1,3 +1,16 @@
+# 2026-10-27: Use a Node 24 compatible SQLite prebuild for deployments
+
+- Updated the exact `better-sqlite3` pin from `11.10.0` to `12.9.0` after the
+  Node 24 deployment attempted a native source build and failed because the
+  host has no `make`.
+- Version `12.9.0` supports both the project's Node 20 baseline and Node 24,
+  and publishes the matching Linux x64 ABI 137 prebuild. The deployment host
+  does not need a package or configuration change.
+- Removed `--legacy-peer-deps` from deployment, development setup, and active
+  setup guidance; a clean `npm ci` resolves the current lockfile normally.
+- Recorded the compatibility rationale in
+  [`docs/setup/DEPENDENCY_UPDATE_LOG.md`](../setup/DEPENDENCY_UPDATE_LOG.md).
+
 # 2026-10-27: Remediate Fastify, Vitest, Zod, and fast-uri audit findings
 
 - Updated exact Fastify and Vitest pins to `5.12.7` and `4.1.12` respectively.

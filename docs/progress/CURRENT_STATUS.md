@@ -15,7 +15,9 @@ pair is at `8.71.1`. Frontend Vite is pinned at `6.4.5`, and Axios resolves
 `follow-redirects` to `1.16.1`. Zod is pinned at patched `4.6.7`, and audited
 `fast-uri` paths resolve to `3.1.9` and `4.2.3`. Full and production-only npm
 audits report zero findings. The pinned-package check inspects all six package
-manifests.
+manifests. `better-sqlite3` is pinned at `12.9.0`, which provides a Node 24
+Linux x64 prebuild while retaining Node 20 support; clean deployment installs
+therefore do not need a server-side C++ toolchain for the supported runtime.
 
 The public skill detail now links directly to the protected admin workbench,
 including the latest published version in the URL so reviewers can switch

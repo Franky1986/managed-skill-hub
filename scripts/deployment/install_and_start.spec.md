@@ -11,7 +11,7 @@ release archive.
 - Secrets may come from `.env.secrets`, an external
   `MANAGED_SKILL_HUB_SECRETS_FILE`, or the exported deployment environment.
 - Dependencies are installed with
-  `npm ci --include=dev --legacy-peer-deps`; build-time development
+  `npm ci --include=dev`; build-time development
   dependencies remain available even though startup uses production mode.
 - Production artifacts are built before startup.
 - `start` launches the built API and frontend preview through

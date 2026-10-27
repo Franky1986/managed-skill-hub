@@ -183,7 +183,7 @@ What the installer does:
 
 - copies `.env.example.simple` to `.env` when missing
 - copies `.env.secrets.example` to `.env.secrets` when missing
-- installs dependencies with `npm ci --legacy-peer-deps` when `node_modules` is absent
+- installs dependencies with `npm ci` when `node_modules` is absent
 - sets local safe defaults (`API_PREFIX=/api`, `VITE_API_BASE_URL=http://localhost:3040`, etc.)
 - prompts for `ADMIN_PASSWORD` (or `ADMIN_PASSWORD_HASH`) and writes `ADMIN_PASSWORD_HASH` to `.env.secrets`
 - optionally sets local judger defaults:

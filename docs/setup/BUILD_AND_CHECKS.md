@@ -9,7 +9,7 @@
 
 ```bash
 cd /path/to/managed-skill-hub
-npm ci --legacy-peer-deps
+npm ci
 ```
 
 ## Structure
@@ -123,7 +123,7 @@ The build creates:
    npm rebuild better-sqlite3 --workspace=apps/api
    ```
 
-   A complete `npm ci --legacy-peer-deps` under the active runtime is the
+   A complete `npm ci` under the active runtime is the
    reproducible alternative.
 
 3. Or after a production build:

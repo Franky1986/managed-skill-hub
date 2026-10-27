@@ -7,7 +7,7 @@ Thanks for your interest in ManagedSkillHub.
 From repository root:
 
 ```bash
-npm install --legacy-peer-deps
+npm ci
 npm run check
 ```
 

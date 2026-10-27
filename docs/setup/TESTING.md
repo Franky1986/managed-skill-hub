@@ -14,7 +14,7 @@ This guide explains how a new agent or developer can try the
 
 ```bash
 cd /path/to/managed-skill-hub
-npm ci --legacy-peer-deps
+npm ci
 ```
 
 ## 2. Verify Build And Checks

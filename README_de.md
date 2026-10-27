@@ -176,7 +176,7 @@ Was das Skript macht:
 
 - legt bei Bedarf `.env` und `.env.secrets` an (`.env.example.simple` und
   `.env.secrets.example`)
-- installiert Abhängigkeiten mit `npm ci --legacy-peer-deps` (falls `node_modules`
+- installiert Abhängigkeiten mit `npm ci` (falls `node_modules`
   fehlt)
 - setzt lokale Defaults (`API_PREFIX=/api`, `VITE_API_BASE_URL=http://localhost:3040`)
 - fragt bei fehlendem lokalen Passwort für `ADMIN_AUTH_MODE=simple` nach und

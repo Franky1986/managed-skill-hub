@@ -198,8 +198,8 @@ main() {
   set_runtime_file_permissions
 
   if [ ! -d "${PROJECT_ROOT}/node_modules" ] || [ -z "$(ls -A "${PROJECT_ROOT}/node_modules" 2>/dev/null || true)" ]; then
-    log "Installing dependencies with npm ci --legacy-peer-deps ..."
-    (cd "$PROJECT_ROOT" && npm ci --legacy-peer-deps)
+    log "Installing dependencies with npm ci ..."
+    (cd "$PROJECT_ROOT" && npm ci)
   fi
 
   load_current_env

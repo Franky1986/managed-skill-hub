@@ -1,5 +1,22 @@
 # Dependency Update Log
 
+## Node 24 Native SQLite Install Compatibility - 2026-10-27
+
+The staged deployment on Node.js `24.22.1` attempted to compile
+`better-sqlite3@11.10.0` because that release does not publish a Node 24 ABI
+137 prebuild. The server has no `make`, and the project must continue to support
+its Node 20 development/runtime baseline.
+
+Updated the exact API dependency pin to `better-sqlite3@12.9.0`. This release
+supports Node 20 and Node 24 and publishes the Linux x64 Node 24 prebuild, so a
+clean install on the existing deployment host can use the binary instead of
+falling back to `node-gyp`. No host packages or server configuration need to
+change. The package lock records the exact dependency and integrity hash.
+
+The project's standard peer-dependency resolver accepts the current lockfile:
+`npm ci` succeeds without `--legacy-peer-deps`. Removed that obsolete flag from
+the deployment installer, local installer, and active setup instructions.
+
 ## Security Remediation - 2026-10-27
 
 The current audit reported a high-severity Zod resource-exhaustion finding, a

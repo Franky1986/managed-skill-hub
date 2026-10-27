@@ -180,7 +180,7 @@ health-check the previous release.
 
 - validates Node.js 20+, npm 10+, `.env`, and `package-lock.json`
 - accepts secrets from `.env.secrets` or the exported deployment environment
-- `npm ci --include=dev --legacy-peer-deps --no-audit --no-fund`
+- `npm ci --include=dev --no-audit --no-fund`
 - `npm run build:prod`
 - quiesces recorded application processes before backup and catalog migration
 - starts the compiled API and built frontend preview with production mode

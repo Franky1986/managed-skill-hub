@@ -78,7 +78,7 @@ verify_runtime_dependencies() {
   fi
 
   if [[ ! -d "${PROJECT_ROOT}/node_modules" ]]; then
-    echo "ERROR: node_modules is missing. Run npm ci --legacy-peer-deps first." >&2
+    echo "ERROR: node_modules is missing. Run npm ci first." >&2
     return 1
   fi
 
@@ -98,11 +98,11 @@ verify_runtime_dependencies() {
       echo "Rebuild it for the active runtime with:" >&2
       echo "  npm rebuild better-sqlite3 --workspace=apps/api" >&2
       if [[ "$expected_node_major" =~ ^[0-9]+$ ]]; then
-        echo "Alternatively, activate Node ${expected_node_major} from .nvmrc and run npm ci --legacy-peer-deps." >&2
+        echo "Alternatively, activate Node ${expected_node_major} from .nvmrc and run npm ci." >&2
       fi
     else
       echo "$native_error" >&2
-      echo "Run npm ci --legacy-peer-deps before retrying." >&2
+      echo "Run npm ci before retrying." >&2
     fi
     return 1
   fi

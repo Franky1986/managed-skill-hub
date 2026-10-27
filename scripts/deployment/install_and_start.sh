@@ -78,7 +78,7 @@ prepare_release() {
   log_step "2/4" "Installing the locked dependency graph ..."
   (
     cd "$PROJECT_ROOT"
-    npm ci --include=dev --legacy-peer-deps --no-audit --no-fund
+    npm ci --include=dev --no-audit --no-fund
   )
   log_step "2/4" "Locked dependencies installed."
   echo ""
