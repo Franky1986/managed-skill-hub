@@ -1,5 +1,13 @@
 # Dependency Update Log
 
+## Node.js Runtime Minimum - 2026-11-11
+
+The npm audit remediation updated the Swagger UI static-serving chain to
+`@fastify/static@10.1.10`, which depends on `content-disposition@3.0.0`. That
+release requires Node.js 22 or newer. Raised the project's declared and
+validated Node.js minimum from 20 to 22, aligned `.nvmrc` and deployment checks,
+and updated the setup documentation. Node 24 deployments remain supported.
+
 ## Security Remediation - 2026-11-11
 
 The full audit reported one high-severity `follow-redirects` advisory and

@@ -1,3 +1,10 @@
+# 2026-11-11: Align the Node.js minimum with patched runtime dependencies
+
+- Raised the declared runtime floor from Node.js 20 to 22 to match
+  `content-disposition@3`, pulled in by the patched `@fastify/static` chain.
+- Aligned `.nvmrc`, staged deployment validation, and setup documentation with
+  the new minimum. Node 24 remains supported.
+
 # 2026-11-11: Remediate follow-redirects, glob, and minimatch advisories
 
 - Updated the lockfile to `follow-redirects@1.16.3`,
