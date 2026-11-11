@@ -1,3 +1,22 @@
+# 2026-11-11: Align the Node.js minimum with patched runtime dependencies
+
+- Raised the declared runtime floor from Node.js 20 to 22 to match
+  `content-disposition@3`, pulled in by the patched `@fastify/static` chain.
+- Aligned `.nvmrc`, staged deployment validation, and setup documentation with
+  the new minimum. Node 24 remains supported.
+
+# 2026-11-11: Remediate follow-redirects, glob, and minimatch advisories
+
+- Updated the lockfile to `follow-redirects@1.16.3`,
+  `@fastify/static@10.1.10`, `glob@14.0.4`, and `minimatch@11.0.8`.
+- Added a scoped npm override for `@typescript-eslint/typescript-estree` so its
+  vulnerable minimatch path resolves to the fixed v11 release without
+  downgrading the ESLint parser/plugin or affecting unrelated minimatch users.
+- Verified clean `npm ci`, full and production-only audits, `./scripts/check.sh`,
+  and `npm run build:prod`.
+- Recorded advisory IDs and package paths in
+  [`docs/setup/DEPENDENCY_UPDATE_LOG.md`](../setup/DEPENDENCY_UPDATE_LOG.md).
+
 # 2026-10-27: Use a Node 24 compatible SQLite prebuild for deployments
 
 - Updated the exact `better-sqlite3` pin from `11.10.0` to `12.9.0` after the

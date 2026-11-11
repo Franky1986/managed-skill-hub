@@ -1,5 +1,41 @@
 # Dependency Update Log
 
+## Node.js Runtime Minimum - 2026-11-11
+
+The npm audit remediation updated the Swagger UI static-serving chain to
+`@fastify/static@10.1.10`, which depends on `content-disposition@3.0.0`. That
+release requires Node.js 22 or newer. Raised the project's declared and
+validated Node.js minimum from 20 to 22, aligned `.nvmrc` and deployment checks,
+and updated the setup documentation. Node 24 deployments remain supported.
+
+## Security Remediation - 2026-11-11
+
+The full audit reported one high-severity `follow-redirects` advisory and
+moderate `glob` and `minimatch` advisories. The production-only audit reported
+four findings; the additional `@typescript-eslint` path is development-only.
+
+| Package | Severity | Type | Old | New | Advisory |
+|---------|----------|------|-----|-----|----------|
+| `follow-redirects` | high | transitive via Axios | `1.16.1` | `1.16.3` | GHSA-mrwp-f3q8-3g9p |
+| `@fastify/static` | moderate | transitive via Swagger UI | `10.1.3` | `10.1.10` | GHSA-3g3m-2fjr-6pw4 (through `glob`) |
+| `glob` | moderate | transitive | `13.0.6` | `14.0.4` | GHSA-3g3m-2fjr-6pw4 |
+| `minimatch` | moderate | transitive via `glob` and `typescript-estree` | `10.2.6` | `11.0.8` | GHSA-g3hv-75wg-m249 |
+
+Remediation steps applied:
+
+1. Added an exact npm override scoped to
+   `@typescript-eslint/typescript-estree` so that parser's `minimatch` range
+   resolves to fixed `11.0.8`; this avoids npm's proposed breaking downgrade
+   of `@typescript-eslint/parser` to `6.15.0`.
+2. Ran `npm audit fix` without `--force` to update compatible transitive
+   dependencies, including Axios's `follow-redirects` and Fastify's static
+   serving chain.
+3. Verified a clean `npm ci`, full and production-only `npm audit` with zero
+   findings, the complete `./scripts/check.sh`, and `npm run build:prod`.
+
+No application behavior changes were required. The frontend production build
+continues to emit its existing large-chunk advisory.
+
 ## Node 24 Native SQLite Install Compatibility - 2026-10-27
 
 The staged deployment on Node.js `24.22.1` attempted to compile

@@ -76,7 +76,7 @@ wrapper around these public artifacts.
 
 ## Server Prerequisites
 
-- Node.js >= 20
+- Node.js >= 22
 - npm >= 10
 - nginx; see `docs/setup/NGINX.md` for an example configuration
 - SSH access with `REMOTE_HOST` / `REMOTE_USER` from your deployment environment.
@@ -91,7 +91,7 @@ wrapper around these public artifacts.
    # For local/dev-like setups, ADMIN_PASSWORD can be set in .env.secrets.
    # For server-like setups, prefer:
    ./scripts/security/generate-admin-password-hash.sh
-   # Generate JWT_SECRET with Node.js 20+:
+   # Generate JWT_SECRET with Node.js 22+:
    node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
    # For single-host deploys, set API_PREFIX=/api and VITE_API_BASE_URL=/api in .env.
    # Keep FRONTEND_HOST=127.0.0.1 so nginx is the only external entry point.
@@ -178,7 +178,7 @@ health-check the previous release.
 
 `install_and_start.sh` runs on the server:
 
-- validates Node.js 20+, npm 10+, `.env`, and `package-lock.json`
+- validates Node.js 22+, npm 10+, `.env`, and `package-lock.json`
 - accepts secrets from `.env.secrets` or the exported deployment environment
 - `npm ci --include=dev --no-audit --no-fund`
 - `npm run build:prod`

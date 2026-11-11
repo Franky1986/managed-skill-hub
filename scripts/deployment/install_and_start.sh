@@ -50,7 +50,7 @@ prepare_release() {
   log_step "1/4" "Checking runtime prerequisites and layered environment ..."
   require_command node
   require_command npm
-  require_minimum_major node 20
+  require_minimum_major node 22
   require_minimum_major npm 10
 
   if [[ ! -f "${PROJECT_ROOT}/package-lock.json" ]]; then

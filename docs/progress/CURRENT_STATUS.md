@@ -2,7 +2,7 @@
 
 ## Current Date
 
-2026-10-27
+2026-11-11
 
 ## Project State
 
@@ -12,12 +12,16 @@ The dependency-security baseline is current: `axios` is pinned at `1.20.0` and
 pinned at `4.1.12` in both test workspaces, and the root
 `@typescript-eslint/eslint-plugin`/`@typescript-eslint/parser` devDependency
 pair is at `8.71.1`. Frontend Vite is pinned at `6.4.5`, and Axios resolves
-`follow-redirects` to `1.16.1`. Zod is pinned at patched `4.6.7`, and audited
-`fast-uri` paths resolve to `3.1.9` and `4.2.3`. Full and production-only npm
-audits report zero findings. The pinned-package check inspects all six package
-manifests. `better-sqlite3` is pinned at `12.9.0`, which provides a Node 24
-Linux x64 prebuild while retaining Node 20 support; clean deployment installs
-therefore do not need a server-side C++ toolchain for the supported runtime.
+`follow-redirects` to patched `1.16.3`. `@fastify/static` resolves to `10.1.10`
+with `glob@14.0.4`; a scoped override pins the vulnerable
+`typescript-estree` minimatch path to `11.0.8`. Zod is pinned at patched
+`4.6.7`, and audited `fast-uri` paths resolve to `3.1.9` and `4.2.3`. Full
+and production-only npm audits report zero findings. The pinned-package check
+inspects all six package manifests. The supported Node.js baseline is now 22+
+because the patched Swagger UI static-serving dependency requires Node 22 or
+newer. `better-sqlite3` is pinned at `12.9.0`, which provides a Node 24 Linux
+x64 prebuild; clean deployment installs therefore do not need a server-side
+C++ toolchain for the supported runtime.
 
 The public skill detail now links directly to the protected admin workbench,
 including the latest published version in the URL so reviewers can switch

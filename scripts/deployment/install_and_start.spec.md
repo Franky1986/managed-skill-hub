@@ -7,7 +7,7 @@ release archive.
 
 ## Scope
 
-- `prepare` validates Node.js 20+, npm 10+, `package-lock.json`, and `.env`.
+- `prepare` validates Node.js 22+, npm 10+, `package-lock.json`, and `.env`.
 - Secrets may come from `.env.secrets`, an external
   `MANAGED_SKILL_HUB_SECRETS_FILE`, or the exported deployment environment.
 - Dependencies are installed with

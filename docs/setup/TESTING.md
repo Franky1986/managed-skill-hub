@@ -5,7 +5,7 @@ This guide explains how a new agent or developer can try the
 
 ## Prerequisites
 
-- Node.js >= 20
+- Node.js >= 22
 - npm >= 10
 - curl for API tests
 - Optional: jq for readable JSON output
